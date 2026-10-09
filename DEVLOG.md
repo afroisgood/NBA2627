@@ -1,7 +1,7 @@
 # 杰西卡的AI實驗室 戰力表：開發紀錄
 
 > 這份文件給接手的人（或 Claude Code）看，記錄專案目的、檔案結構、資料來源、演算法、開發歷程和待辦事項。
-> 最後更新：2026-10-09（Artifact 第 7 版）
+> 最後更新：2026-10-09（第 8 版：網頁內一鍵更新資料）
 
 ---
 
@@ -29,10 +29,12 @@ fantasy-power-table/
 │   ├── layout.html      ← <title>、字型、CSS、頁面骨架（沒有 <html>/<head>/<body>）
 │   ├── data.js          ← ME（自己隊名）＋ DATA（16 隊名單與每位球員數據）
 │   ├── market.js        ← MKT（每位被持有球員的季前排名、持有率）
+│   ├── import.js        ← 讀取匯入的資料（localStorage lp-data）蓋過內建 DATA/MKT/ME；「資料更新」面板
 │   ├── app.js           ← 主程式：計算、排名、VS、聯盟表、各隊表、開機畫面
 │   └── trade.js         ← 交易分析器＋自動找交易，最後呼叫 initTrade() 和 render()
 ├── tools/
-│   └── fetch-snippets.js← 在已登入 Yahoo 的瀏覽器 console 抓資料用的程式片段
+│   ├── fetch-snippets.js← 在已登入 Yahoo 的瀏覽器 console 抓資料用的程式片段（舊，手動整理用）
+│   └── yahoo-update.js  ← 一鍵更新程式（書籤／console），build 時嵌進網頁
 └── dist/
     ├── league-power.html          ← 完整獨立網頁，直接用瀏覽器打開
     └── league-power.artifact.html ← 發布到 claude.ai Artifact 用
@@ -40,7 +42,7 @@ fantasy-power-table/
 
 建置：`python3 build.py`
 
-**JS 載入順序很重要**：data.js → market.js → app.js → trade.js。trade.js 裡有 `const`（tm、FA 等），所以 `initTrade(); render();` 必須放在 trade.js 最後，不能放在 app.js，否則會遇到 TDZ 錯誤。
+**JS 載入順序很重要**：data.js → market.js → import.js → app.js → trade.js。import.js 必須在 app.js 前面（app.js 一載入就會用到 ME、IMP、hasCur）；`initImport()` 放在 trade.js 最後、`render()` 之後。trade.js 裡有 `const`（tm、FA 等），所以 `initTrade(); render();` 必須放在 trade.js 最後，不能放在 app.js，否則會遇到 TDZ 錯誤。
 
 ---
 
@@ -49,10 +51,10 @@ fantasy-power-table/
 ### DATA（src/data.js）
 
 ```js
-const ME = "石";
+let ME = "石";          // let：匯入的資料可能改隊名
 const DATA = [
   ["隊名", [
-    ["球員名", "名單位置", "NBA球隊 - 位置", "狀態", proj陣列, last陣列],
+    ["球員名", "名單位置", "NBA球隊 - 位置", "狀態", proj陣列, last陣列, cur陣列],
     ...
   ]],
   ...16 隊
@@ -64,6 +66,7 @@ const DATA = [
 - 數據陣列（都是**場均**）：`[gp, fgm, fga, ftm, fta, tpm, pts, reb, ast, stl, blk, to]`
   - `proj`：2026-27 三家預測平均
   - `last`：2025-26 上季實際；新秀或上季沒出賽的是 `null`
+  - `cur`：2026-27 本季實際（只有匯入的資料才有）；還沒出賽的是 `null`
 
 ### MKT（src/market.js）
 
@@ -73,11 +76,39 @@ const MKT = { "球員名": [季前排名, 持有率%], ... };
 
 沒有資料的球員預設 `[260, 3]` 或 `[260, 5]`。
 
+### 匯入資料（localStorage `lp-data`）
+
+`tools/yahoo-update.js` 產生、`src/import.js` 讀取：
+
+```js
+{ v: 1, at: "ISO 時間", ME: "自己隊名", DATA: [...同上...], MKT: {...同上...},
+  PREV: { pr: {隊名: [9項名次, 不算AST名次]}, ls: {...}, cur: {...} } }   // PREV 是套用時網頁自己算的
+```
+
+- 有效的匯入資料會在載入時**原地取代** `DATA`、`MKT`（splice／delete＋assign），`ME` 換成匯入的隊名，`PREV` 換成套用前的名次
+- `checkImport()` 會檢查格式：數據必須是 12 個數字、MKT 必須是 2 個數字（避免奇怪的內容被塞進畫面）
+- 只存在使用者自己的瀏覽器；「還原內建資料」會刪掉 `lp-data`
+
 ---
 
 ## 4. 資料來源與抓取方法
 
 Yahoo 聯盟頁面需要登入，所以資料是在**已登入 Yahoo 的瀏覽器**裡用 `fetch()` 抓的（Claude 的內建瀏覽器或 Claude in Chrome）。程式片段放在 `tools/fetch-snippets.js`。
+
+### 4.0 一鍵更新（v8，`tools/yahoo-update.js`）
+
+使用者在網頁按「↻ 更新資料」，用書籤或 console 在 Yahoo 聯盟頁面執行這支程式：
+
+1. 抓 16 隊名單（`/nba/1031/{1..16}`）；IL／IL+ 都記成 `IL`；狀態 GTD／DTD／Q → `Q`，O／INJ／NA／SUSP → `O`
+2. 依季前排名分頁抓 `S_PSR`（預測）、`S_S_2025`（上季總計）、`S_S_2026`（本季總計），一次 4 頁平行，直到所有被持有的球員都找到（最多 32 頁）；總計 ÷ GP 換成場均
+3. 抓 ESPN 預測（失敗就只用 Yahoo）
+4. 預測＝Yahoo 和 ESPN 場均平均（**沒有 FantasyPros**，因為它不能從 Yahoo 頁面跨站抓）
+5. 自己的隊伍用 team id 13 找（`MY_TEAM_ID`），所以改隊名也沒關係
+6. 右下角視窗按「▶ 打開戰力表」→ 開 `league-power.html#import=<JSON>`，網頁確認後套用；或「複製結果」貼到網頁的框框
+
+書籤是網頁把 `#yahoo-script`（build 時嵌入的 tools/yahoo-update.js）去掉整行註解後做成 `javascript:` 網址。**程式裡不能有行尾 `//` 註解**，也不能有 `</script`（build.py 會檢查後者）。
+
+測試方式：用 Playwright 攔截 `basketball.fantasysports.yahoo.com`、ESPN、`afroisgood.github.io` 的請求回傳假資料，跑完整流程（v8 開發時這樣測過，還沒在真的 Yahoo 上跑過）。
 
 ### 4.1 Yahoo（名單、預測、上季數據、排名、持有率）
 
@@ -175,16 +206,17 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 | 區塊 | 功能 |
 |---|---|
 | 開機畫面 | 「PRESS START」約 1.4 秒，點擊或按鍵跳過；每個瀏覽器工作階段只出現一次；減少動態效果設定下不顯示 |
-| 控制列 | 數據來源（三家預測／上季實際）、模式（9 項全算／放棄助攻） |
+| 資料更新 | 標題下方顯示資料日期；「↻ 更新資料」打開說明面板：書籤、複製更新程式、貼上套用、還原內建資料 |
+| 控制列 | 數據來源（三家預測／上季實際／本季實際，本季實際只在匯入的資料有本季數據時出現）、模式（9 項全算／放棄助攻） |
 | VS MODE | 選對手，9 項雙向血條比較，♛ 標贏家，預測比分 |
 | TRADE MACHINE | 手動交易分析：最多 3 換 3、補 FA、公平度量表、成交機率、雙方各項名次變化 |
 | AUTO SCOUT | 自動找交易 |
 | 聯盟排名表 | 可排序；♛ 前 3、☠ 後 3；四階熱度色塊；▲▼ 名次變化；8×8 像素隊徽 |
 | 各隊球員 | 選單一次顯示一隊（預設石）；球員價值血條；IL 劃線；球隊加總與排名 |
 
-- localStorage 鍵：`lp-state2`（數據來源、模式、選的球隊、VS 對手）；sessionStorage 鍵：`lp-splash`
+- localStorage 鍵：`lp-state2`（數據來源、模式、選的球隊、VS 對手）、`lp-data`（匯入的資料）；sessionStorage 鍵：`lp-splash`
 - `PREV`（app.js）存的是**上一次更新的名次**，用來畫 ▲▼。目前的基準是 10/9 waiver 後、交易前
-- 隊徽在 app.js 的 `EMB`，每隊 8 行 8 字元的 0/1 字串；新隊名要記得加
+- 隊徽在 app.js 的 `EMB`，每隊 8 行 8 字元的 0/1 字串；新隊名要記得加（匯入的資料如果有隊伍改名，那隊會沒有隊徽）
 
 ---
 
@@ -199,6 +231,7 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 | v5 | 顏色調柔和：螢幕從亮螢光綠 `#9bbc0f` 改成抹茶綠 `#c9d2a8`，外殼改淺暖灰 |
 | v6 | 一次加入 10 項優化：VS 對戰預測、放棄助攻模式、選單選隊、球員價值血條、字體放大到 16px、名次熱度、▲▼、像素隊徽、LCD 格紋、開機畫面 |
 | v7 | 交易分析器＋自動找交易；修正 IL 球員佔名單位的誤判、2 換 1 比較基準 |
+| v8 | 網頁內一鍵更新資料：書籤／console 在 Yahoo 頁面抓名單和數據，自動帶回網頁套用；新增「2026-27 本季實際」數據來源 |
 
 Artifact 網址：https://claude.ai/artifact/S6yNHmWyFfDDAvJ3guEij2
 
@@ -215,20 +248,21 @@ Artifact 網址：https://claude.ai/artifact/S6yNHmWyFfDDAvJ3guEij2
 
 ## 9. 已知限制
 
-1. **資料是靜態快照**，名單、預測都不會自動更新
+1. **內建資料是靜態快照**。網頁內更新的資料只存在使用者自己的瀏覽器，要讓網站本身更新，得把結果寫進 `src/data.js`、`src/market.js` 再 build
 2. 聯盟表的名次算法不考慮出賽場次（Embiid 預測只打 54 場也照算）
 3. 季前排名開季後會失效，要換成 Yahoo「目前排名」（`c[7]`）
 4. 成交機率只是參考，沒辦法算到對方的個人喜好
 5. 上季實際數據模式下，新秀和上季缺賽的球員沒有數據（例如 Kyrie），會低估這些隊伍
-6. FA 補位只有 Thybulle、Isaiah Joe 兩人
+6. FA 補位只有 Thybulle、Isaiah Joe 兩人，數據是寫死的；如果他們被撿走，匯入後名單裡會和 FA 重複
+7. 網頁內更新的預測只有 Yahoo＋ESPN 兩家；開季後 Yahoo 的 `S_PSR` 是「剩餘賽季」預測，GP 會變少，交易分析器的出賽場次打折會跟著變大
 
 ---
 
 ## 10. 給 Claude Code 的建議待辦
 
-1. **資料更新腳本**：寫一個腳本，自動抓 Yahoo 名單、三家預測，產生新的 `data.js`、`market.js`，並把目前名次寫進 `PREV`。Yahoo 需要登入，可以用 Playwright 開瀏覽器讓使用者手動登入，再沿用登入狀態
+1. ~~資料更新腳本~~（v8 改成網頁內更新）；還可以做：把匯入的 JSON 轉回 `data.js`、`market.js` 的小工具，讓網站本身的內建資料也能更新
 2. **把資料改成 JSON 檔**（例如 `data/rosters.json`），build 時再嵌入，比較好維護
-3. **開季後加入「本季實際」數據來源**：Yahoo `stat1=S_AS_2026`（本季場均）或 `S_S_2026`（本季總計）
+3. ~~開季後加入「本季實際」數據來源~~（v8 完成，用 `S_S_2026` 本季總計 ÷ GP）
 4. **FA 清單動態化**：抓可撿球員（`status=A`）前 30 名，讓交易分析器和自動找交易可以選任何 FA 補位
 5. **名次算法加權出賽場次**（可做成選項）
 6. **加測試**：用固定資料驗證 `compute()`、`rankAll()`、`judge()` 的結果

@@ -4,6 +4,8 @@ const CATS=[
  {k:"ast",l:"AST"},{k:"stl",l:"STL"},{k:"blk",l:"BLK"},{k:"to",l:"TO",low:true}];
 const IDX={gp:0,fgm:1,fga:2,ftm:3,fta:4,tpm:5,pts:6,reb:7,ast:8,stl:9,blk:10,to:11};
 const PREV={"pr":{"諸葛衛冕村夫":[3,2],"乂唯一珍❤️杰西卡乂":[10,10],"大小小丑與他的歡樂同伴們":[14,12],"南方勇者北伐🧔‍♂️七崩賢":[8,9],"天母羅斯":[4,4],"CrocoCroco":[5,7],"拿了就起，起了就～駿🏀":[11,13],"新中國王":[13,14],"想你的林":[12,8],"欸我姆斯拉":[2,1],"永保安康":[15,16],"高移肉 想念booker 的第一天":[1,3],"石":[6,5],"老蔡水煎包":[16,15],"金采源老公":[7,6],"坂木老大：賣全身球員求合成":[9,11]},"ls":{"諸葛衛冕村夫":[13,9],"乂唯一珍❤️杰西卡乂":[7,10],"大小小丑與他的歡樂同伴們":[12,13],"南方勇者北伐🧔‍♂️七崩賢":[5,6],"天母羅斯":[6,4],"CrocoCroco":[9,8],"拿了就起，起了就～駿🏀":[14,15],"新中國王":[16,16],"想你的林":[11,11],"欸我姆斯拉":[1,2],"永保安康":[10,12],"高移肉 想念booker 的第一天":[3,3],"石":[2,1],"老蔡水煎包":[15,14],"金采源老公":[8,5],"坂木老大：賣全身球員求合成":[4,7]}};
+if(IMP&&IMP.PREV)Object.assign(PREV,IMP.PREV);
+PREV.cur=PREV.cur||{};
 // 8x8 pixel emblems
 const EMB={
 "石":["00111100","01111110","11101111","11111101","11011111","11111111","01111110","00000000"],
@@ -26,10 +28,11 @@ function emblem(name,size=20){const b=EMB[name];if(!b)return "";let r="";b.forEa
 
 let state={src:"pr",punt:false,sort:{k:"ovr",dir:1},team:ME,opp:null};
 try{const s=JSON.parse(localStorage.getItem("lp-state2")||"null");if(s)state={...state,...s};}catch(e){}
+if(!["pr","ls","cur"].includes(state.src)||(state.src==="cur"&&!hasCur()))state.src="pr";
 function save(){try{localStorage.setItem("lp-state2",JSON.stringify({src:state.src,punt:state.punt,team:state.team,opp:state.opp}))}catch(e){}}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
 const f1=x=>x.toFixed(1), f3=x=>x.toFixed(3).replace(/^0/,"");
-const SI=()=>state.src==="pr"?4:5;
+const SI=()=>({pr:4,ls:5,cur:6})[state.src];
 const active=p=>p[1]!=="IL";
 
 function compute(data=DATA){
@@ -81,7 +84,7 @@ function renderLeague(rows){
   const missT=rows.reduce((a,r)=>a+r.miss,0);
   document.getElementById("league-note").textContent=
     "數字是全隊（不含 IL）每場數據加總。♛ 前 3 名、☠ 第 14–16 名；格子越深名次越前（1–4、5–8、9–12、13–16 四階）。點欄位標題可排序。"
-    +(state.src==="ls"?` 上季版有 ${missT} 位球員沒有上季數據，不計入加總。`:"");
+    +(state.src!=="pr"&&missT?` ${state.src==="ls"?"上季":"本季"}版有 ${missT} 位球員沒有${state.src==="ls"?"上季":"本季"}數據，不計入加總。`:"");
   document.querySelectorAll("#league th.sortable").forEach(el=>{
     const go=()=>{const k=el.dataset.k;state.sort=state.sort.k===k?{k,dir:-state.sort.dir}:{k,dir:1};render();};
     el.onclick=go;el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};
@@ -144,10 +147,12 @@ function renderTeams(rows){
 function render(){
   const rows=compute();rankAll(rows);renderVS(rows);renderTrade(rows);renderLeague(rows);renderTeams(rows);
   const set=(id,on)=>document.getElementById(id).setAttribute("aria-pressed",on);
-  set("src-pr",state.src==="pr");set("src-ls",state.src==="ls");set("mode-9",!state.punt);set("mode-p",state.punt);
+  set("src-pr",state.src==="pr");set("src-ls",state.src==="ls");set("src-cur",state.src==="cur");set("mode-9",!state.punt);set("mode-p",state.punt);
 }
 document.getElementById("src-pr").onclick=()=>{state.src="pr";save();render()};
 document.getElementById("src-ls").onclick=()=>{state.src="ls";save();render()};
+document.getElementById("src-cur").onclick=()=>{state.src="cur";save();render()};
+document.getElementById("src-cur").hidden=!hasCur();
 document.getElementById("mode-9").onclick=()=>{state.punt=false;save();render()};
 document.getElementById("mode-p").onclick=()=>{state.punt=true;save();render()};
 

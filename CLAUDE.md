@@ -9,7 +9,8 @@
 
 ## 開發
 - 原始碼在 `src/`，建置：`python3 build.py` → `dist/league-power.html`（直接用瀏覽器打開），同時更新根目錄的 `league-power.html`（GitHub Pages 顯示這個）
-- JS 順序：data.js → market.js → app.js → trade.js；`initTrade(); render();` 必須留在 trade.js 最後
+- JS 順序：data.js → market.js → import.js → app.js → trade.js；`initTrade(); render(); initImport();` 必須留在 trade.js 最後
+- 網頁內一鍵更新：`tools/yahoo-update.js`（build 時嵌進網頁當書籤用，不能有行尾 `//` 註解）→ 匯入資料存在 localStorage `lp-data`，由 `src/import.js` 讀取
 - 數據陣列格式：`[gp, fgm, fga, ftm, fta, tpm, pts, reb, ast, stl, blk, to]`（場均）
 - IL 球員不計入球隊數據、不佔名單位
 - 保持 90 年代掌機風格：顏色只用 layout.html `:root` 裡的 token

@@ -119,3 +119,4 @@ async function autoScout(){
 
 initTrade();
 render();
+initImport();

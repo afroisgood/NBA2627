@@ -8,8 +8,11 @@ import pathlib
 root = pathlib.Path(__file__).parent
 src = root / "src"
 body = (src / "layout.html").read_text(encoding="utf-8")
-js = "".join((src / f).read_text(encoding="utf-8") for f in ["data.js", "market.js", "app.js", "trade.js"])
-artifact = f"{body}\n<script>\n{js}</script>\n"
+js = "".join((src / f).read_text(encoding="utf-8") for f in ["data.js", "market.js", "import.js", "app.js", "trade.js"])
+# 更新程式（tools/yahoo-update.js）原樣放進網頁，給「複製更新程式」和書籤用
+upd = (root / "tools" / "yahoo-update.js").read_text(encoding="utf-8")
+assert "</script" not in upd.lower()
+artifact = f"{body}\n<script type=\"text/plain\" id=\"yahoo-script\">\n{upd}</script>\n<script>\n{js}</script>\n"
 standalone = f"""<!doctype html>
 <html lang="zh-Hant">
 <head>

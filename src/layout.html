@@ -164,6 +164,15 @@ select{font-family:var(--f-dot);font-size:16px;background:var(--lcd);color:var(-
 #splash.gone{opacity:0;pointer-events:none}
 #splash .logo{font-family:var(--f-pix);font-size:clamp(14px,3.5vw,22px);line-height:1.7}
 #splash .press{font-family:var(--f-pix);font-size:12px;animation:blink 1s steps(1) infinite}
+/* data update panel */
+.upd-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-top:6px}
+.upd-bar #upd-status{font-size:14px;color:var(--mid)}
+.upd ol{margin:0;padding-left:1.6em;display:flex;flex-direction:column;gap:10px;max-width:84ch}
+.upd li::marker{font-family:var(--f-pix);font-size:10px}
+.upd a{color:var(--ink)}
+.upd kbd{font-family:var(--f-dot);border:2px solid var(--mid);padding:0 4px}
+.upd textarea{font-family:var(--f-dot);font-size:14px;width:100%;background:var(--lcd);color:var(--ink);border:3px solid var(--ink);padding:6px 8px;resize:vertical}
+a.pxbtn{display:inline-block;text-decoration:none}
 @media (max-width:560px){
   .vs-row{grid-template-columns:44px 1fr 40px 1fr 44px;font-size:13px;gap:5px}
   .hp-track{width:64px}
@@ -181,6 +190,7 @@ select{font-family:var(--f-dot);font-size:16px;background:var(--lcd);color:var(-
     <span class="eyebrow">YAHOO H2H 9-CAT · 16 TEAMS · 2026-27</span>
     <h1>杰西卡的AI實驗室 戰力表</h1>
     <p class="sub">每位球員的九項場均數據，加總成球隊每場數據，再排出 16 隊各項名次。FG% 和 FT% 用總命中 ÷ 總出手計算；失誤越少名次越前。IL 球員不計入球隊數據。</p>
+    <div class="upd-bar"><span id="upd-status"></span><button class="pxbtn" id="upd-open" type="button">↻ 更新資料</button></div>
   </header>
 
   <div class="controls" role="group" aria-label="顯示設定">
@@ -189,6 +199,7 @@ select{font-family:var(--f-dot);font-size:16px;background:var(--lcd);color:var(-
       <div class="seg" aria-labelledby="lbl-src">
         <button class="menu-btn" id="src-pr" type="button" aria-pressed="true">2026-27 三家預測</button>
         <button class="menu-btn" id="src-ls" type="button" aria-pressed="false">2025-26 上季實際</button>
+        <button class="menu-btn" id="src-cur" type="button" aria-pressed="false" hidden>2026-27 本季實際</button>
       </div>
     </div>
     <div class="ctl">
@@ -200,6 +211,28 @@ select{font-family:var(--f-dot);font-size:16px;background:var(--lcd);color:var(-
     </div>
   </div>
 
+  <section aria-labelledby="h-upd" class="upd" id="upd" hidden>
+    <h2 id="h-upd">DATA UPDATE 資料更新</h2>
+    <div class="tm">
+      <p class="note">從 Yahoo 抓聯盟目前的名單、預測、本季數據、排名和持有率，重新計算戰力。要用電腦版 Chrome、Edge 或 Firefox，並且先登入 Yahoo。</p>
+      <div class="tm-label">方法一：書籤（第一次設定好，以後點一下就更新）</div>
+      <ol>
+        <li>第一次使用：用滑鼠把這個按鈕<b>拖到瀏覽器的書籤列</b>（看不到書籤列請按 <kbd>Ctrl</kbd>＋<kbd>Shift</kbd>＋<kbd>B</kbd>，Mac 是 <kbd>⌘</kbd>＋<kbd>Shift</kbd>＋<kbd>B</kbd>）：<br><a class="pxbtn" id="upd-bm" href="#">戰力表更新</a></li>
+        <li>打開 <a href="https://basketball.fantasysports.yahoo.com/nba/1031" target="_blank" rel="noopener">Yahoo 聯盟頁面</a>，點書籤列上的「戰力表更新」。</li>
+        <li>右下角會出現進度視窗，大約 30 秒後出現「✅ 完成」，按「▶ 打開戰力表」，再按「確定」就更新好了。</li>
+      </ol>
+      <div class="tm-label">方法二：貼程式碼（書籤不能用時）</div>
+      <ol>
+        <li><button class="pxbtn" id="upd-copy" type="button">複製更新程式</button></li>
+        <li>在 Yahoo 聯盟頁面按 <kbd>F12</kbd>（Mac：<kbd>⌥</kbd>＋<kbd>⌘</kbd>＋<kbd>J</kbd>），切到 Console，貼上後按 <kbd>Enter</kbd>。Chrome 第一次貼上會被擋，先輸入 <code>allow pasting</code> 按 Enter，再貼一次。</li>
+        <li>跑完按「▶ 打開戰力表」；或按「複製結果」，貼到下面的框框，再按「套用」。</li>
+      </ol>
+      <textarea id="upd-text" rows="3" placeholder="把「複製結果」的內容貼在這裡" aria-label="更新結果"></textarea>
+      <div class="tm-opts"><button class="pxbtn" id="upd-apply" type="button">▶ 套用</button><button class="pxbtn" id="upd-reset" type="button">還原內建資料</button></div>
+      <p class="note" id="upd-msg" role="status"></p>
+      <p class="note">更新後的資料只存在你這台電腦的這個瀏覽器，別人打開網站看到的還是內建資料。想讓網站本身也更新，按「複製結果」後把內容交給 Claude 寫進專案。</p>
+    </div>
+  </section>
   <section aria-labelledby="h-vs">
     <h2 id="h-vs">VS MODE 對戰預測</h2>
     <div class="vs">
@@ -260,7 +293,7 @@ select{font-family:var(--f-dot);font-size:16px;background:var(--lcd);color:var(-
     <p class="note">價值血條：球員九項場均換算成 z 分數加總（放棄助攻模式不算助攻），跟全聯盟被持有的球員比較。實心向右是正貢獻，虛線向左是拖累球隊。</p>
   </section>
 
-  <p class="note">預測來源：Yahoo（Rotowire）、ESPN、FantasyPros 共識預測，三家場均取平均；FantasyPros 只提供命中率，出手數沿用另外兩家。上季數據取自 Yahoo 2025-26 場均，新秀及上季未出賽者無數據，以「—」表示且不計入。▲▼ 是跟上次更新（交易前，10/9 waiver 後）相比的名次變化。名單更新於 2026/10/9（含石與大小小丑的交易）。</p>
+  <p class="note" id="foot-note">預測來源：Yahoo（Rotowire）、ESPN、FantasyPros 共識預測，三家場均取平均；FantasyPros 只提供命中率，出手數沿用另外兩家。上季數據取自 Yahoo 2025-26 場均，新秀及上季未出賽者無數據，以「—」表示且不計入。▲▼ 是跟上次更新（交易前，10/9 waiver 後）相比的名次變化。名單更新於 2026/10/9（含石與大小小丑的交易）。</p>
   </div>
   <div class="foot"><span class="sel">SELECT  START</span><div class="ab"><i>B</i><i>A</i></div></div>
  </div>

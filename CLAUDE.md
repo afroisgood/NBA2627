@@ -14,7 +14,7 @@
 - 網頁內一鍵更新：`tools/yahoo-update.js`（build 時嵌進網頁當書籤用，不能有行尾 `//` 註解）→ 匯入資料存在 localStorage `lp-data`，由 `src/import.js` 讀取
 - 數據陣列格式：`[gp, fgm, fga, ftm, fta, tpm, pts, reb, ast, stl, blk, to]`（場均）
 - IL 球員不計入球隊數據、不佔名單位
-- 保持 90 年代掌機風格：顏色只用 layout.html `:root` 裡的 token
+- 保持 90 年代掌機風格（掌機 Pro 版）：顏色只用 layout.html `:root` 裡的 token；像素字 `--f-pix` 只能用在英文標籤（沒有中文字），中文標籤和按鈕用 `--f-txt`，數字用 `--f-dot`
 
 ## 驗證
 - 改完跑 `python3 build.py`，再用瀏覽器打開 `dist/league-power.html`，確認 console 沒有錯誤、手機寬度（400px）沒有橫向捲動

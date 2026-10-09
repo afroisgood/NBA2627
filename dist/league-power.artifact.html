@@ -260,7 +260,7 @@ a.pxbtn{display:inline-block;text-decoration:none}
       </div>
       <div class="tm-opts">
         <label for="tm-fill" class="tm-label">名單空位補 FA</label>
-        <select id="tm-fill"><option value="">不補</option><option value="Matisse Thybulle">Matisse Thybulle（抄截）</option><option value="Isaiah Joe">Isaiah Joe（三分）</option></select>
+        <select id="tm-fill"><option value="">不補</option></select>
         <button class="pxbtn" id="tm-clear" type="button">清除</button>
       </div>
       <div id="tm-result" class="tm-result"></div>
@@ -271,10 +271,10 @@ a.pxbtn{display:inline-block;text-decoration:none}
         <label class="tm-label" for="as-sell">要賣的球員</label>
         <select id="as-sell"></select>
         <label class="tm-label" for="as-type">類型</label>
-        <select id="as-type"><option value="1">1 換 1</option><option value="2">2 換 1（空位補 Thybulle）</option><option value="all">兩種都找</option></select>
+        <select id="as-type"><option value="1">1 換 1</option><option value="2">2 換 1（空位補 FA）</option><option value="all">兩種都找</option></select>
         <button class="pxbtn" id="as-go" type="button">▶ 搜尋</button>
       </div>
-      <p class="note" id="as-status">條件：對方以排名＋持有率看不吃虧（≥ 95%），且交易後對方名次不會掉超過 1 名；依你的名次提升排序。</p>
+      <p class="note" id="as-status">條件：對方以排名＋持有率看不吃虧（≥ 95%），且交易後對方名次不會掉超過 1 名；依你的名次提升排序。2 換 1 會用上方「名單空位補 FA」選的球員補位，沒選就補價值最高的 FA。</p>
       <div id="as-out" class="as-out"></div>
     </div>
     <p class="note">市場價值 = 季前排名分數 × 70% ＋ Yahoo 持有率 × 30%；多人打包時，單一好球員權重較高（避免 2 個普通球員就換到明星）。數據價值會依預測出賽場次打折。名次模擬沿用聯盟表的算法（各項名次平均）。</p>
@@ -302,10 +302,11 @@ a.pxbtn{display:inline-block;text-decoration:none}
 <script type="text/plain" id="yahoo-script">
 // 一鍵更新程式：在「已登入 Yahoo」的聯盟頁面（https://basketball.fantasysports.yahoo.com/nba/1031）執行。
 // 用法一：戰力表網頁的「更新資料」書籤（建議）。用法二：F12 → Console，整段貼上後按 Enter。
-// 抓的內容：16 隊名單、Yahoo 本季剩餘預測、ESPN 預測、2025-26 上季數據、2026-27 本季數據、季前排名、持有率。
+// 抓的內容：16 隊名單、Yahoo 本季剩餘預測、ESPN 預測、2025-26 上季數據、2026-27 本季數據、季前排名、持有率，
+// 以及季前排名前 400 名裡所有沒被持有的球員（FA／waiver）。
 // 跑完會出現視窗，按「打開戰力表」就會帶著新資料打開網頁。
 (async () => {
-  const LEAGUE = 1031, TEAMS = 16, MY_TEAM_ID = 13, MAX_PAGES = 32;
+  const LEAGUE = 1031, TEAMS = 16, MY_TEAM_ID = 13, MAX_PAGES = 32, FA_PAGES = 16;
   const SEASON_LAST = 'S_S_2025', SEASON_CUR = 'S_S_2026', ESPN_YEAR = 2027;
   const SITE = 'https://afroisgood.github.io/NBA2627/league-power.html';
   if (!/fantasysports\.yahoo\.com$/.test(location.host)) {
@@ -337,6 +338,12 @@ a.pxbtn{display:inline-block;text-decoration:none}
   };
 
   try {
+    const rowInfo = tr => ({
+      tp: [...tr.querySelectorAll('.Fz-xxs')].map(x => x.textContent.trim()).find(x => / - /.test(x)) || '',
+      st: [...tr.querySelectorAll('.F-injury, abbr')].map(x => x.textContent.trim()).filter(x => x.length <= 4).join('')
+    });
+    const status = st => /^(Q|GTD|DTD)$/.test(st) ? 'Q' : /^(O|INJ|NA|SUSP)$/.test(st) ? 'O' : '';
+
     // 1) 16 隊名單
     say('抓 16 隊名單…');
     const rosters = await Promise.all(Array.from({ length: TEAMS }, async (_, k) => {
@@ -347,16 +354,15 @@ a.pxbtn{display:inline-block;text-decoration:none}
         const a = tr.querySelector('a.name'); if (!a) return;
         let slot = (tr.querySelector('td')?.textContent || '').trim();
         if (/^IL/.test(slot)) slot = 'IL';
-        const tp = [...tr.querySelectorAll('.Fz-xxs')].map(x => x.textContent.trim()).find(x => / - /.test(x)) || '';
-        const st = [...tr.querySelectorAll('.F-injury, abbr')].map(x => x.textContent.trim()).filter(x => x.length <= 4).join('');
-        ps.push({ n: a.textContent.trim(), slot, tp, st: /^(Q|GTD|DTD)$/.test(st) ? 'Q' : /^(O|INJ|NA|SUSP)$/.test(st) ? 'O' : '' });
+        const { tp, st } = rowInfo(tr);
+        ps.push({ n: a.textContent.trim(), slot, tp, st: status(st) });
       });
       if (!ps.length) throw new Error(`第 ${id} 隊（${name}）抓不到球員，可能沒有登入，或 Yahoo 頁面格式改了`);
       return { id, name, ps };
     }));
     const want = new Set(rosters.flatMap(t => t.ps.map(p => p.n)));
 
-    // 2) Yahoo 球員列表：依季前排名一頁一頁抓，直到所有被持有的球員都找到
+    // 2) Yahoo 球員列表：依季前排名一頁一頁抓，直到所有被持有的球員都找到，而且至少抓到前 FA_PAGES 頁（FA 用）
     const fetchYahoo = async stat => {
       const out = {};
       for (let page = 0; page < MAX_PAGES; page += 4) {
@@ -368,7 +374,7 @@ a.pxbtn{display:inline-block;text-decoration:none}
           rows++;
           const c = [...tr.querySelectorAll('td')].map(td => td.textContent.replace(/\s+/g, ' ').trim());
           const gp = num(c[5]);
-          const rec = { pre: num(c[6]) || 260, ros: parseFloat(c[8]) || 0, s: null };
+          const rec = { pre: num(c[6]) || 260, ros: parseFloat(c[8]) || 0, own: c[4] || '', ...rowInfo(tr), s: null };
           if (gp && c[10] && c[10].includes('/') && c[12] && c[12].includes('/')) {
             const [fgm, fga] = c[10].split('/').map(num), [ftm, fta] = c[12].split('/').map(num);
             const g = x => r2(x / gp);
@@ -376,7 +382,7 @@ a.pxbtn{display:inline-block;text-decoration:none}
           }
           out[a.textContent.trim()] = rec;
         }));
-        if (!rows || [...want].every(n => out[n])) break;
+        if (!rows || (page + 4 >= FA_PAGES && [...want].every(n => out[n]))) break;
       }
       return out;
     };
@@ -415,11 +421,19 @@ a.pxbtn{display:inline-block;text-decoration:none}
       if (m) MKT[p.n] = [m.pre, m.ros];
       return [p.n, p.slot, p.tp, p.st, proj, yLast[p.n]?.s || null, yCur[p.n]?.s || null];
     })]);
+    // FA：沒被持有、而且至少有一種數據的球員，依季前排名排序；waiver 上的名單位置記成 W
+    const FA = [];
+    for (const n of Object.keys(yProj)) {
+      if (want.has(n)) continue;
+      const r = yProj[n], proj = avg(r.s, espn[key(n)]), last = yLast[n]?.s || null, cur = yCur[n]?.s || null;
+      if (!proj && !last && !cur) continue;
+      FA.push([n, /^W/.test(r.own) ? 'W' : 'FA', r.tp, status(r.st), proj, last, cur]);
+    }
     const me = rosters.find(t => t.id === MY_TEAM_ID);
-    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT });
+    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA });
     window._LP_UPDATE = json;
     const curN = DATA.reduce((a, t) => a + t[1].filter(p => p[6]).length, 0);
-    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到。`);
+    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到。`);
     btns.innerHTML = '';
     button('▶ 打開戰力表', () => window.open(SITE + '#import=' + encodeURIComponent(json), '_blank'));
     button('複製結果', async () => {
@@ -460,13 +474,15 @@ let IMP=null;
 function checkImport(o){
   const isStr=x=>typeof x==="string",isNum=x=>typeof x==="number"&&Number.isFinite(x);
   const isStats=s=>s==null||(Array.isArray(s)&&s.length===12&&s.every(isNum));
+  const okP=p=>Array.isArray(p)&&[0,1,2,3].every(i=>isStr(p[i]))&&[4,5,6].every(i=>isStats(p[i]));
   if(!o||o.v!==1||!isStr(o.ME)||!Array.isArray(o.DATA)||!o.MKT||typeof o.MKT!=="object")return "格式不對，這不是更新程式產生的資料。";
   if(o.DATA.length<2)return "球隊數量不對。";
   for(const t of o.DATA){
     if(!Array.isArray(t)||!isStr(t[0])||!Array.isArray(t[1])||!t[1].length)return "球隊資料格式不對。";
-    for(const p of t[1])if(!Array.isArray(p)||![0,1,2,3].every(i=>isStr(p[i]))||![4,5,6].every(i=>isStats(p[i])))return `球員資料格式不對（${t[0]}）。`;
+    if(!t[1].every(okP))return `球員資料格式不對（${t[0]}）。`;
   }
   if(!o.DATA.some(t=>t[0]===o.ME))return "名單裡找不到你的隊伍。";
+  if(o.FA!=null&&(!Array.isArray(o.FA)||!o.FA.every(okP)))return "FA 資料格式不對。";
   for(const k in o.MKT){const m=o.MKT[k];if(!Array.isArray(m)||m.length!==2||!m.every(isNum))return "排名／持有率資料格式不對。";}
   return "";
 }
@@ -702,12 +718,16 @@ document.getElementById("mode-p").onclick=()=>{state.punt=true;save();render()};
 // ---------- TRADE MACHINE ----------
 const FA={"Matisse Thybulle":["Matisse Thybulle","BN","LAL - SG,SF","",[55,2.06,4.82,0.54,0.71,1.26,5.91,2.23,1.21,1.92,0.61,0.81],null],
 "Isaiah Joe":["Isaiah Joe","BN","DET - SG,SF","",[73,3.49,7.75,1.23,1.4,2.49,10.57,2.55,1.44,0.69,0.19,0.62],[71,3.55,7.79,1.18,1.34,2.53,11.08,2.48,1.34,0.68,0.2,0.6]]};
+if(IMP&&IMP.FA){for(const k in FA)delete FA[k];IMP.FA.forEach(p=>FA[p[0]]=p.slice(0,7));}
 const tm={give:[],get:[],opp:null,fill:""};
 const mval=n=>{const m=MKT[n]||[260,3];return .7*100*Math.exp(-(m[0]-1)/70)+.3*m[1]};
 const pkg=list=>list.reduce((a,n)=>a+Math.pow(mval(n),1.4),0);
 const actCount=(team,names)=>names.filter(n=>{const p=DATA.find(t=>t[0]===team)[1].find(p=>p[0]===n);return p&&p[1]!=="IL"}).length;
 const findP=(team,n)=>DATA.find(t=>t[0]===team)[1].find(p=>p[0]===n);
 function vfunc(){const v=playerValues(),si=SI();return p=>{const s=p&&p[si];const x=v(s);return x==null?null:x*Math.min(s[0],72)/72}}
+// FA 依目前數據來源的價值排序（沒有數據的不列）
+function faList(){const val=vfunc();return Object.values(FA).map(p=>({p,v:val(p)})).filter(x=>x.v!=null).sort((a,b)=>b.v-a.v)}
+const scoutFill=()=>tm.fill&&FA[tm.fill]?tm.fill:(faList()[0]||{p:[""]}).p[0];
 
 function simulate(give,get,opp,fill){
   const data=DATA.map(t=>[t[0],t[1].slice()]);
@@ -763,7 +783,10 @@ function renderTrade(rows){
   if(!tm.opp||!others.includes(tm.opp))tm.opp=others[0];
   const so=document.getElementById("tm-opp");
   so.innerHTML=others.map(n=>`<option value="${esc(n)}" ${n===tm.opp?"selected":""}>${esc(n)}</option>`).join("");
-  document.getElementById("tm-fill").value=tm.fill;
+  const fas=faList(),sf=document.getElementById("tm-fill");
+  if(tm.fill&&!fas.some(x=>x.p[0]===tm.fill))tm.fill="";
+  sf.innerHTML=`<option value="">不補（共 ${fas.length} 位 FA，依價值排序）</option>`+fas.map(x=>`<option value="${esc(x.p[0])}">${esc(x.p[0])}（${sgn(x.v)}${x.p[1]==="W"?" · waiver":""}${x.p[3]?" · "+esc(x.p[3]):""}）</option>`).join("");
+  sf.value=tm.fill;
   itemList(ME,tm.give,"tm-give");itemList(tm.opp,tm.get,"tm-get");
   const ss=document.getElementById("as-sell");const cur=ss.value;
   ss.innerHTML='<option value="">任何球員</option>'+DATA.find(t=>t[0]===ME)[1].map(p=>`<option value="${esc(p[0])}">${esc(p[0])}</option>`).join("");ss.value=cur;
@@ -786,24 +809,26 @@ function renderTrade(rows){
     <div class="tm-card"><span class="k">公平度（對方角度）</span><span class="v">${Math.round(J.fair*100)}% · ${paper}</span><div class="meter"><i style="left:calc(${pos}% - 2px)"></i></div><div class="meter-l"><span>對方虧</span><span>公平</span><span>對方賺</span></div></div>
     <div class="tm-card"><span class="k">成交機率</span><span class="v">${J.acc}</span><span class="s">帳面公平度＋對方名次變化</span></div>
   </div>${extra}
-  <div class="scroll"><table><thead><tr><th class="name">各項名次</th>${cats.map(c=>`<th>${c.l}</th>`).join("")}</tr></thead><tbody>${cRow("石（交易後）",J.b0,J.b1)}${cRow(esc(tm.opp)+"（交易後）",J.o0,J.o1)}</tbody></table></div>`;
+  <div class="scroll"><table><thead><tr><th class="name">各項名次</th>${cats.map(c=>`<th>${c.l}</th>`).join("")}</tr></thead><tbody>${cRow(esc(ME)+"（交易後）",J.b0,J.b1)}${cRow(esc(tm.opp)+"（交易後）",J.o0,J.o1)}</tbody></table></div>`;
 }
 
 async function autoScout(){
   const sell=document.getElementById("as-sell").value,type=document.getElementById("as-type").value;
   const st=document.getElementById("as-status"),out=document.getElementById("as-out");
-  const base=compute();rankAll(base);const base2=baseWithFill("Matisse Thybulle").rows;
+  const fa=scoutFill();
+  if(type==="2"&&!fa){st.textContent="沒有可以補位的 FA，沒辦法找 2 換 1。";return;}
+  const base=compute();rankAll(base);const base2=fa?baseWithFill(fa).rows:base;
   const mine=DATA.find(t=>t[0]===ME)[1].map(p=>p[0]);
   const gives=[];
   if(type!=="2")(sell?[sell]:mine).forEach(n=>gives.push([n]));
-  if(type!=="1")for(let i=0;i<mine.length;i++)for(let j=i+1;j<mine.length;j++){const g=[mine[i],mine[j]];if(!sell||g.includes(sell))gives.push(g);}
+  if(type!=="1"&&fa)for(let i=0;i<mine.length;i++)for(let j=i+1;j<mine.length;j++){const g=[mine[i],mine[j]];if(!sell||g.includes(sell))gives.push(g);}
   const targets=[];DATA.forEach(t=>{if(t[0]!==ME)t[1].forEach(p=>{if(p[1]!=="IL")targets.push([t[0],p[0]])})});
   const res=[];let done=0;const total=gives.length*targets.length;
   for(const g of gives){
     for(const [team,n] of targets){
       const fair=pkg(g)/Math.max(pkg([n]),1);done++;
       if(fair<0.95||fair>1.6)continue;
-      const sp=actCount(ME,g)-actCount(team,[n])>0;const J=judge(g,[n],team,sp?"Matisse Thybulle":"",sp?base2:base);
+      const sp=actCount(ME,g)-actCount(team,[n])>0;const J=judge(g,[n],team,sp?fa:"",sp?base2:base);
       if(J.o0.ovr-J.o1.ovr<-1)continue;
       if(J.myAvg<=0.05)continue;
       res.push({g,team,n,J});
@@ -812,9 +837,9 @@ async function autoScout(){
   }
   res.sort((a,b)=>b.J.myAvg-a.J.myAvg||b.J.vGain-a.J.vGain);
   const top=res.slice(0,8);
-  st.textContent=top.length?`找到 ${res.length} 個可行方案，顯示前 ${top.length} 個（依你的平均名次提升排序；2 換 1 是跟「不交易、只撿 Thybulle」比較）。`:"找不到符合條件的交易。可以換一位要賣的球員，或改成「兩種都找」。";
+  st.textContent=top.length?`找到 ${res.length} 個可行方案，顯示前 ${top.length} 個（依你的平均名次提升排序；2 換 1 空位補 ${esc(fa)}，是跟「不交易、只撿 ${esc(fa)}」比較）。`:"找不到符合條件的交易。可以換一位要賣的球員，或改成「兩種都找」。";
   out.innerHTML=top.map((x,i)=>`<div class="as-row"><span class="n">${i+1}</span><span class="d">${x.g.map(esc).join(" ＋ ")} → ${esc(x.n)}<small>${esc(x.team)} · 你的名次 ${x.J.b0.ovr}→${x.J.b1.ovr}（平均 ${sgn(x.J.myAvg)}）· 價值 ${sgn(x.J.vGain)} · 公平度 ${Math.round(x.J.fair*100)}% · 成交 ${x.J.acc}</small></span><button class="pxbtn" type="button" data-i="${i}">套用</button></div>`).join("");
-  out.querySelectorAll("button").forEach(b=>b.onclick=()=>{const x=top[+b.dataset.i];tm.give=[...x.g];tm.get=[x.n];tm.opp=x.team;tm.fill=actCount(ME,x.g)-actCount(x.team,[x.n])>0?"Matisse Thybulle":"";render();document.getElementById("h-trade").scrollIntoView({behavior:"smooth"});});
+  out.querySelectorAll("button").forEach(b=>b.onclick=()=>{const x=top[+b.dataset.i];tm.give=[...x.g];tm.get=[x.n];tm.opp=x.team;tm.fill=actCount(ME,x.g)-actCount(x.team,[x.n])>0?fa:"";render();document.getElementById("h-trade").scrollIntoView({behavior:"smooth"});});
 }
 
 initTrade();

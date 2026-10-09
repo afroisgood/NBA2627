@@ -144,8 +144,20 @@ function renderTeams(rows){
     <div class="scroll"><table><thead><tr><th class="name" scope="col">PLAYER</th><th scope="col">價值</th><th scope="col">GP</th>${cats.map(c=>`<th scope="col">${c.l}</th>`).join("")}</tr></thead><tbody>${body}${tot}</tbody></table></div></article>`;
 }
 
+// my team summary: 9-cat / punt-AST overall rank with change, best and worst categories
+function renderMe(rows){
+  const r=rows.find(x=>x.name===ME),prev=PREV[state.src][ME]||[];
+  const dl=(now,before)=>{const d=before?before-now:0;return d>0?`▲${d}`:d<0?`▼${-d}`:"–"};
+  const cats=visCats().map(c=>({l:c.l,n:r.r[c.k]})).sort((a,b)=>a.n-b.n);
+  const list=a=>a.map(c=>`${c.l} ${c.n}`).join(" · ");
+  document.getElementById("me-sum").innerHTML=`
+    <div class="ms-card"><span class="k">${esc(ME)} 1P · 9 CAT</span><div class="v"><b>第 ${r.ovr9} 名</b><span>${dl(r.ovr9,prev[0])}</span></div></div>
+    <div class="ms-card"><span class="k">${esc(ME)} 1P · PUNT AST</span><div class="v"><b>第 ${r.ovrNA} 名</b><span>${dl(r.ovrNA,prev[1])}${r.ovrNA===1?" ♛":""}</span></div></div>
+    <div class="ms-card line"><span class="k">強項 ／ 弱項</span><p>♛ ${list(cats.slice(0,3))}</p><p>☠ ${list(cats.slice(-2).reverse())}</p></div>`;
+}
+
 function render(){
-  const rows=compute();rankAll(rows);renderVS(rows);renderTrade(rows);renderFA(rows);renderLeague(rows);renderTeams(rows);
+  const rows=compute();rankAll(rows);renderMe(rows);renderVS(rows);renderTrade(rows);renderFA(rows);renderLeague(rows);renderTeams(rows);
   const set=(id,on)=>document.getElementById(id).setAttribute("aria-pressed",on);
   set("src-pr",state.src==="pr");set("src-ls",state.src==="ls");set("src-cur",state.src==="cur");set("mode-9",!state.punt);set("mode-p",state.punt);
 }

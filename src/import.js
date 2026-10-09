@@ -4,13 +4,15 @@ let IMP=null;
 function checkImport(o){
   const isStr=x=>typeof x==="string",isNum=x=>typeof x==="number"&&Number.isFinite(x);
   const isStats=s=>s==null||(Array.isArray(s)&&s.length===12&&s.every(isNum));
+  const okP=p=>Array.isArray(p)&&[0,1,2,3].every(i=>isStr(p[i]))&&[4,5,6].every(i=>isStats(p[i]));
   if(!o||o.v!==1||!isStr(o.ME)||!Array.isArray(o.DATA)||!o.MKT||typeof o.MKT!=="object")return "格式不對，這不是更新程式產生的資料。";
   if(o.DATA.length<2)return "球隊數量不對。";
   for(const t of o.DATA){
     if(!Array.isArray(t)||!isStr(t[0])||!Array.isArray(t[1])||!t[1].length)return "球隊資料格式不對。";
-    for(const p of t[1])if(!Array.isArray(p)||![0,1,2,3].every(i=>isStr(p[i]))||![4,5,6].every(i=>isStats(p[i])))return `球員資料格式不對（${t[0]}）。`;
+    if(!t[1].every(okP))return `球員資料格式不對（${t[0]}）。`;
   }
   if(!o.DATA.some(t=>t[0]===o.ME))return "名單裡找不到你的隊伍。";
+  if(o.FA!=null&&(!Array.isArray(o.FA)||!o.FA.every(okP)))return "FA 資料格式不對。";
   for(const k in o.MKT){const m=o.MKT[k];if(!Array.isArray(m)||m.length!==2||!m.every(isNum))return "排名／持有率資料格式不對。";}
   return "";
 }

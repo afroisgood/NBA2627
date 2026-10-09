@@ -1,9 +1,10 @@
 // 一鍵更新程式：在「已登入 Yahoo」的聯盟頁面（https://basketball.fantasysports.yahoo.com/nba/1031）執行。
 // 用法一：戰力表網頁的「更新資料」書籤（建議）。用法二：F12 → Console，整段貼上後按 Enter。
-// 抓的內容：16 隊名單、Yahoo 本季剩餘預測、ESPN 預測、2025-26 上季數據、2026-27 本季數據、季前排名、持有率。
+// 抓的內容：16 隊名單、Yahoo 本季剩餘預測、ESPN 預測、2025-26 上季數據、2026-27 本季數據、季前排名、持有率，
+// 以及季前排名前 400 名裡所有沒被持有的球員（FA／waiver）。
 // 跑完會出現視窗，按「打開戰力表」就會帶著新資料打開網頁。
 (async () => {
-  const LEAGUE = 1031, TEAMS = 16, MY_TEAM_ID = 13, MAX_PAGES = 32;
+  const LEAGUE = 1031, TEAMS = 16, MY_TEAM_ID = 13, MAX_PAGES = 32, FA_PAGES = 16;
   const SEASON_LAST = 'S_S_2025', SEASON_CUR = 'S_S_2026', ESPN_YEAR = 2027;
   const SITE = 'https://afroisgood.github.io/NBA2627/league-power.html';
   if (!/fantasysports\.yahoo\.com$/.test(location.host)) {
@@ -35,6 +36,12 @@
   };
 
   try {
+    const rowInfo = tr => ({
+      tp: [...tr.querySelectorAll('.Fz-xxs')].map(x => x.textContent.trim()).find(x => / - /.test(x)) || '',
+      st: [...tr.querySelectorAll('.F-injury, abbr')].map(x => x.textContent.trim()).filter(x => x.length <= 4).join('')
+    });
+    const status = st => /^(Q|GTD|DTD)$/.test(st) ? 'Q' : /^(O|INJ|NA|SUSP)$/.test(st) ? 'O' : '';
+
     // 1) 16 隊名單
     say('抓 16 隊名單…');
     const rosters = await Promise.all(Array.from({ length: TEAMS }, async (_, k) => {
@@ -45,16 +52,15 @@
         const a = tr.querySelector('a.name'); if (!a) return;
         let slot = (tr.querySelector('td')?.textContent || '').trim();
         if (/^IL/.test(slot)) slot = 'IL';
-        const tp = [...tr.querySelectorAll('.Fz-xxs')].map(x => x.textContent.trim()).find(x => / - /.test(x)) || '';
-        const st = [...tr.querySelectorAll('.F-injury, abbr')].map(x => x.textContent.trim()).filter(x => x.length <= 4).join('');
-        ps.push({ n: a.textContent.trim(), slot, tp, st: /^(Q|GTD|DTD)$/.test(st) ? 'Q' : /^(O|INJ|NA|SUSP)$/.test(st) ? 'O' : '' });
+        const { tp, st } = rowInfo(tr);
+        ps.push({ n: a.textContent.trim(), slot, tp, st: status(st) });
       });
       if (!ps.length) throw new Error(`第 ${id} 隊（${name}）抓不到球員，可能沒有登入，或 Yahoo 頁面格式改了`);
       return { id, name, ps };
     }));
     const want = new Set(rosters.flatMap(t => t.ps.map(p => p.n)));
 
-    // 2) Yahoo 球員列表：依季前排名一頁一頁抓，直到所有被持有的球員都找到
+    // 2) Yahoo 球員列表：依季前排名一頁一頁抓，直到所有被持有的球員都找到，而且至少抓到前 FA_PAGES 頁（FA 用）
     const fetchYahoo = async stat => {
       const out = {};
       for (let page = 0; page < MAX_PAGES; page += 4) {
@@ -66,7 +72,7 @@
           rows++;
           const c = [...tr.querySelectorAll('td')].map(td => td.textContent.replace(/\s+/g, ' ').trim());
           const gp = num(c[5]);
-          const rec = { pre: num(c[6]) || 260, ros: parseFloat(c[8]) || 0, s: null };
+          const rec = { pre: num(c[6]) || 260, ros: parseFloat(c[8]) || 0, own: c[4] || '', ...rowInfo(tr), s: null };
           if (gp && c[10] && c[10].includes('/') && c[12] && c[12].includes('/')) {
             const [fgm, fga] = c[10].split('/').map(num), [ftm, fta] = c[12].split('/').map(num);
             const g = x => r2(x / gp);
@@ -74,7 +80,7 @@
           }
           out[a.textContent.trim()] = rec;
         }));
-        if (!rows || [...want].every(n => out[n])) break;
+        if (!rows || (page + 4 >= FA_PAGES && [...want].every(n => out[n]))) break;
       }
       return out;
     };
@@ -113,11 +119,19 @@
       if (m) MKT[p.n] = [m.pre, m.ros];
       return [p.n, p.slot, p.tp, p.st, proj, yLast[p.n]?.s || null, yCur[p.n]?.s || null];
     })]);
+    // FA：沒被持有、而且至少有一種數據的球員，依季前排名排序；waiver 上的名單位置記成 W
+    const FA = [];
+    for (const n of Object.keys(yProj)) {
+      if (want.has(n)) continue;
+      const r = yProj[n], proj = avg(r.s, espn[key(n)]), last = yLast[n]?.s || null, cur = yCur[n]?.s || null;
+      if (!proj && !last && !cur) continue;
+      FA.push([n, /^W/.test(r.own) ? 'W' : 'FA', r.tp, status(r.st), proj, last, cur]);
+    }
     const me = rosters.find(t => t.id === MY_TEAM_ID);
-    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT });
+    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA });
     window._LP_UPDATE = json;
     const curN = DATA.reduce((a, t) => a + t[1].filter(p => p[6]).length, 0);
-    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到。`);
+    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到。`);
     btns.innerHTML = '';
     button('▶ 打開戰力表', () => window.open(SITE + '#import=' + encodeURIComponent(json), '_blank'));
     button('複製結果', async () => {

@@ -260,7 +260,7 @@ a.pxbtn{display:inline-block;text-decoration:none}
       </div>
       <div class="tm-opts">
         <label for="tm-fill" class="tm-label">名單空位補 FA</label>
-        <select id="tm-fill"><option value="">不補</option><option value="Matisse Thybulle">Matisse Thybulle（抄截）</option><option value="Isaiah Joe">Isaiah Joe（三分）</option></select>
+        <select id="tm-fill"><option value="">不補</option></select>
         <button class="pxbtn" id="tm-clear" type="button">清除</button>
       </div>
       <div id="tm-result" class="tm-result"></div>
@@ -271,10 +271,10 @@ a.pxbtn{display:inline-block;text-decoration:none}
         <label class="tm-label" for="as-sell">要賣的球員</label>
         <select id="as-sell"></select>
         <label class="tm-label" for="as-type">類型</label>
-        <select id="as-type"><option value="1">1 換 1</option><option value="2">2 換 1（空位補 Thybulle）</option><option value="all">兩種都找</option></select>
+        <select id="as-type"><option value="1">1 換 1</option><option value="2">2 換 1（空位補 FA）</option><option value="all">兩種都找</option></select>
         <button class="pxbtn" id="as-go" type="button">▶ 搜尋</button>
       </div>
-      <p class="note" id="as-status">條件：對方以排名＋持有率看不吃虧（≥ 95%），且交易後對方名次不會掉超過 1 名；依你的名次提升排序。</p>
+      <p class="note" id="as-status">條件：對方以排名＋持有率看不吃虧（≥ 95%），且交易後對方名次不會掉超過 1 名；依你的名次提升排序。2 換 1 會用上方「名單空位補 FA」選的球員補位，沒選就補價值最高的 FA。</p>
       <div id="as-out" class="as-out"></div>
     </div>
     <p class="note">市場價值 = 季前排名分數 × 70% ＋ Yahoo 持有率 × 30%；多人打包時，單一好球員權重較高（避免 2 個普通球員就換到明星）。數據價值會依預測出賽場次打折。名次模擬沿用聯盟表的算法（各項名次平均）。</p>

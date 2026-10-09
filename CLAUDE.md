@@ -8,7 +8,7 @@
 - 隊伍是「石」，打法是放棄助攻（Punt AST）
 
 ## 開發
-- 原始碼在 `src/`，建置：`python3 build.py` → `dist/league-power.html`（直接用瀏覽器打開）
+- 原始碼在 `src/`，建置：`python3 build.py` → `dist/league-power.html`（直接用瀏覽器打開），同時更新根目錄的 `league-power.html`（GitHub Pages 顯示這個）
 - JS 順序：data.js → market.js → app.js → trade.js；`initTrade(); render();` 必須留在 trade.js 最後
 - 數據陣列格式：`[gp, fgm, fga, ftm, fta, tpm, pts, reb, ast, stl, blk, to]`（場均）
 - IL 球員不計入球隊數據、不佔名單位

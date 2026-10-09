@@ -1,7 +1,7 @@
 # 杰西卡的AI實驗室 戰力表：開發紀錄
 
 > 這份文件給接手的人（或 Claude Code）看，記錄專案目的、檔案結構、資料來源、演算法、開發歷程和待辦事項。
-> 最後更新：2026-10-09（第 8 版：網頁內一鍵更新資料）
+> 最後更新：2026-10-09（第 9 版：FA 分析器）
 
 ---
 
@@ -31,7 +31,8 @@ fantasy-power-table/
 │   ├── market.js        ← MKT（每位被持有球員的季前排名、持有率）
 │   ├── import.js        ← 讀取匯入的資料（localStorage lp-data）蓋過內建 DATA/MKT/ME；「資料更新」面板
 │   ├── app.js           ← 主程式：計算、排名、VS、聯盟表、各隊表、開機畫面
-│   └── trade.js         ← 交易分析器＋自動找交易，最後呼叫 initTrade() 和 render()
+│   ├── trade.js         ← 交易分析器＋自動找交易
+│   └── fa.js            ← FA 分析器＋自動推薦，最後呼叫 initTrade()、initFA()、render()、initImport()
 ├── tools/
 │   ├── fetch-snippets.js← 在已登入 Yahoo 的瀏覽器 console 抓資料用的程式片段（舊，手動整理用）
 │   └── yahoo-update.js  ← 一鍵更新程式（書籤／console），build 時嵌進網頁
@@ -42,7 +43,7 @@ fantasy-power-table/
 
 建置：`python3 build.py`
 
-**JS 載入順序很重要**：data.js → market.js → import.js → app.js → trade.js。import.js 必須在 app.js 前面（app.js 一載入就會用到 ME、IMP、hasCur）；`initImport()` 放在 trade.js 最後、`render()` 之後。trade.js 裡有 `const`（tm、FA 等），所以 `initTrade(); render();` 必須放在 trade.js 最後，不能放在 app.js，否則會遇到 TDZ 錯誤。
+**JS 載入順序很重要**：data.js → market.js → import.js → app.js → trade.js → fa.js。import.js 必須在 app.js 前面（app.js 一載入就會用到 ME、IMP、hasCur）。trade.js、fa.js 裡有 `const`（tm、FA、fam 等），所以 `initTrade(); initFA(); render(); initImport();` 必須放在 fa.js 最後，不能放在前面的檔案，否則會遇到 TDZ 錯誤。
 
 ---
 
@@ -198,9 +199,20 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 - 排序：你的平均名次提升，相同時比數據價值淨增；顯示前 8 名，可「套用」到分析器
 - 用 `await setTimeout(0)` 分段跑，避免畫面卡住，全部掃完約 3 秒
 
+### 5.7 FA 分析器（FA MACHINE）
+
+- 正式名單上限 `ROSTER = 13`（不含 IL）。正式名單未滿才能選「不丟人，直接撿」；滿了這個選項會停用
+- 手動模擬：選要撿的 FA（`faList()`，依價值排序）和要丟的人（預設是隊上價值最低的非 IL 球員；有空位時預設不丟人）
+- `simulatePickup(add, drop)`：只改自己隊伍，其他 15 隊不變，再用 `compute()`／`rankAll()` 算名次
+- 結論：平均名次進步 > 0.05 → 建議撿；−0.05～0.05 → 差不多；其他 → 不建議；列出進步、退步的項目
+- 自動推薦（AUTO PICKUP）：每位 FA × 每個可丟的人（有空位時加上不丟人），只保留平均名次進步 > 0.05 的組合；**每位 FA 只留最好的丟人選擇**，依平均名次進步、綜合名次、價值淨增排序，顯示前 10 名，可「套用」到手動模擬
+- 篩選：排除 waiver、排除缺陣（O，預設勾選）、位置（看 NBA 位置欄 `p[2]` 的「 - 」後面）
+- 不檢查先發位置、不考慮出賽場次（跟聯盟表一樣）
+- 約 400 位 FA × 14 個選擇，實測不到 1 秒
+
 ---
 
-## 6. 介面功能（第 7 版）
+## 6. 介面功能（第 9 版）
 
 風格：**90 年代掌機運動遊戲**，四階柔和抹茶綠螢幕、像素字、掌機外框、A/B 鍵。字型 Press Start 2P（英文標題）＋ DotGothic16（中文和數字），都從 Google Fonts 載入。
 
@@ -212,6 +224,8 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 | VS MODE | 選對手，9 項雙向血條比較，♛ 標贏家，預測比分 |
 | TRADE MACHINE | 手動交易分析：最多 3 換 3、補 FA、公平度量表、成交機率、雙方各項名次變化 |
 | AUTO SCOUT | 自動找交易 |
+| FA MACHINE | 撿人模擬：選 FA＋丟掉的人（或直接撿），顯示名次、各項名次和每場數據的變化 |
+| AUTO PICKUP | 自動推薦撿人組合：可排除 waiver、缺陣，篩位置 |
 | 聯盟排名表 | 可排序；♛ 前 3、☠ 後 3；四階熱度色塊；▲▼ 名次變化；8×8 像素隊徽 |
 | 各隊球員 | 選單一次顯示一隊（預設石）；球員價值血條；IL 劃線；球隊加總與排名 |
 
@@ -233,6 +247,7 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 | v6 | 一次加入 10 項優化：VS 對戰預測、放棄助攻模式、選單選隊、球員價值血條、字體放大到 16px、名次熱度、▲▼、像素隊徽、LCD 格紋、開機畫面 |
 | v7 | 交易分析器＋自動找交易；修正 IL 球員佔名單位的誤判、2 換 1 比較基準 |
 | v8 | 網頁內一鍵更新資料：書籤／console 在 Yahoo 頁面抓名單和數據，自動帶回網頁套用；新增「2026-27 本季實際」數據來源；FA 補位改成完整 FA 清單，自動找交易的 2 換 1 不再固定補 Thybulle |
+| v9 | FA 分析器：撿人／丟人後撿人的名次模擬，加上自動推薦 |
 
 Artifact 網址：https://claude.ai/artifact/S6yNHmWyFfDDAvJ3guEij2
 

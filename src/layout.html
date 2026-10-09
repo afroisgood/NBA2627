@@ -1,0 +1,267 @@
+<title>杰西卡的AI實驗室 戰力表</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap">
+<style>
+/* Layout: one handheld console — shell frame around a 4-shade LCD; menu, VS screen, league standings, one team box score at a time */
+:root{
+  --shell:#b9b6a8; --shell-dark:#8e8b7d; --bezel:#4a4a42; --page:#d9d6cc;
+  --lcd:#c9d2a8; --lcd-2:#b7c193; --lcd-3:#a3ae7c; --mid:#5f6d48; --ink:#2f3a25;
+  --btn:#8a5a6c; --btn-dark:#5e3a48; --btn-ink:#ecd7df; --power:#b8574e;
+  --f-pix:"Press Start 2P","DotGothic16",monospace;
+  --f-dot:"DotGothic16","Noto Sans TC","PingFang TC",monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+body{background:var(--page);color:var(--ink);font-family:var(--f-dot);font-size:16px;line-height:1.55}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:20px 40px}
+.shell{background:var(--shell);border-radius:14px 14px 56px 14px;padding:20px 18px 26px;box-shadow:inset 0 0 0 6px var(--shell-dark),0 8px 0 #9d9a8c}
+.brand{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:0 6px 12px;font-family:var(--f-pix);font-size:10px;color:var(--bezel);letter-spacing:.06em}
+.brand .led{display:inline-flex;align-items:center;gap:6px}
+.brand .led::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--power);box-shadow:0 0 4px var(--power)}
+.lcd{position:relative;background:var(--lcd);border:4px solid var(--ink);box-shadow:inset 0 0 0 3px var(--lcd-2);padding:18px 16px;display:flex;flex-direction:column;gap:30px;min-width:0}
+.lcd::after{content:"";position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(rgba(47,58,37,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(47,58,37,.04) 1px,transparent 1px);background-size:3px 3px}
+h1,h2,h3{margin:0;font-weight:400;text-wrap:balance}
+h1{font-family:var(--f-dot);font-size:clamp(22px,4vw,30px);line-height:1.25}
+h2{font-family:var(--f-pix);font-size:13px;line-height:1.6;padding-bottom:6px;border-bottom:4px solid var(--ink)}
+h3{font-family:var(--f-dot);font-size:20px;display:flex;align-items:center;gap:8px}
+.eyebrow{font-family:var(--f-pix);font-size:10px;color:var(--mid);line-height:1.8}
+header{display:flex;flex-direction:column;gap:6px}
+.sub{color:var(--mid);margin:0;max-width:72ch;font-size:15px}
+.controls{display:flex;flex-wrap:wrap;gap:8px 32px;align-items:center;position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--lcd);padding-block:8px;border-bottom:3px dotted var(--mid)}
+.ctl{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px}
+.ctl-label{font-family:var(--f-pix);font-size:9px;color:var(--mid)}
+.seg{display:flex;flex-wrap:wrap;gap:4px 16px}
+.menu-btn{font-family:var(--f-dot);font-size:16px;border:0;background:transparent;color:var(--mid);padding:2px 0;cursor:pointer;text-align:left}
+.menu-btn::before{content:"▶";display:inline-block;width:1.1em;visibility:hidden}
+.menu-btn[aria-pressed="true"]{color:var(--ink)}
+.menu-btn[aria-pressed="true"]::before{visibility:visible;animation:blink 1s steps(1) infinite}
+.menu-btn:hover{color:var(--ink)}
+@keyframes blink{50%{opacity:0}}
+button:focus-visible,th:focus-visible,select:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.note{font-size:14px;color:var(--mid);max-width:84ch;margin:0}
+section{display:flex;flex-direction:column;gap:12px;min-width:0}
+.scroll{overflow-x:auto;border:3px solid var(--ink);background:var(--lcd)}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:7px 9px;text-align:right;white-space:nowrap;border-bottom:2px dotted var(--lcd-2)}
+th{font-family:var(--f-pix);font-size:10px;font-weight:400;color:var(--mid);background:var(--lcd);border-bottom:3px solid var(--mid);position:sticky;top:0;z-index:1}
+th.sortable{cursor:pointer;user-select:none}
+th.sortable:hover,th.sorted{color:var(--ink)}
+th.sorted::after{content:"▼";margin-left:2px}
+th.sorted[aria-sort="descending"]::after{content:"▲"}
+td.name,th.name{text-align:left}
+tbody tr:last-child td{border-bottom:0}
+td{font-family:var(--f-dot);font-size:16px;line-height:1.45}
+td.name{font-size:16px}
+.cell{display:flex;flex-direction:column;align-items:flex-end;gap:0}
+.rk{display:inline-block;min-width:26px;text-align:center;font-size:13px;color:var(--mid)}
+.rk.top::before{content:"♛"}
+.rk.low::before{content:"☠"}
+.rk.top,.rk.low{color:var(--ink)}
+/* heat tiers: ranks 1-4 / 5-8 / 9-12 / 13-16 */
+td.h1{background:var(--lcd-3)}
+td.h2{background:var(--lcd-2)}
+td.h4{background-image:repeating-linear-gradient(45deg,rgba(47,58,37,.10) 0 2px,transparent 2px 6px)}
+.delta{display:block;font-size:12px;color:var(--mid)}
+.delta.up{color:var(--ink)}
+.delta.up::before{content:"▲"}
+.delta.dn::before{content:"▼"}
+.ovr{font-family:var(--f-pix);font-size:12px}
+tr.me td{background:var(--ink)!important;color:var(--lcd)}
+tr.me td .rk,tr.me td .delta,tr.me td .pos{color:var(--lcd-2)}
+tr.me svg rect{fill:var(--lcd)}
+.tn{display:inline-flex;align-items:center;gap:8px}
+.emb{flex:none;image-rendering:pixelated}
+.emb rect{fill:var(--ink)}
+.tag{font-family:var(--f-pix);font-size:8px;margin-left:6px;padding:1px 3px;border:2px solid currentColor;vertical-align:2px}
+.pos{display:block;font-size:12.5px;color:var(--mid)}
+.slot{display:inline-block;font-family:var(--f-pix);font-size:8px;color:var(--mid);min-width:36px}
+tr.out td{color:var(--mid)}
+tr.out td.name .pname{text-decoration:line-through;text-decoration-thickness:1px}
+.badge{font-family:var(--f-pix);font-size:7px;padding:1px 3px;margin-left:6px;vertical-align:2px;border:2px solid var(--ink)}
+.b-il{background:var(--ink);color:var(--lcd)}
+tr.total td{background:var(--lcd-2);border-top:3px solid var(--ink)}
+tr.ranks td{background:var(--lcd-2);padding-top:0}
+/* HP bar */
+.hp{display:inline-flex;align-items:center;gap:6px}
+.hp-track{position:relative;width:96px;height:10px;border:2px solid var(--ink);background:var(--lcd)}
+.hp-fill{position:absolute;top:0;bottom:0;background:var(--ink)}
+.hp-fill.neg{background:repeating-linear-gradient(90deg,var(--mid) 0 3px,transparent 3px 5px)}
+.hp-mid{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--mid)}
+.hp-num{font-size:13px;min-width:38px;text-align:right}
+/* team picker */
+.picker{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:2px 14px}
+.picker .menu-btn{display:flex;align-items:center;gap:6px;font-size:15px;min-width:0}
+.picker .menu-btn span.t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.team-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px}
+.team-head .summary{font-size:14px;color:var(--mid)}
+/* VS */
+.vs{border:3px solid var(--ink);padding:14px;display:flex;flex-direction:column;gap:14px}
+.vs-top{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px}
+.vs-side{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;min-width:0}
+.vs-side .nm{font-size:16px;overflow-wrap:anywhere}
+.vs-score{font-family:var(--f-pix);font-size:clamp(20px,5vw,34px);text-align:center;line-height:1.3}
+.vs-score small{display:block;font-family:var(--f-dot);font-size:13px;color:var(--mid)}
+.vs-pick{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.vs-pick label{font-family:var(--f-pix);font-size:9px;color:var(--mid)}
+select{font-family:var(--f-dot);font-size:16px;background:var(--lcd);color:var(--ink);border:3px solid var(--ink);padding:4px 8px;max-width:100%}
+.vs-rows{display:grid;gap:6px}
+.vs-row{display:grid;grid-template-columns:minmax(52px,auto) 1fr 52px 1fr minmax(52px,auto);align-items:center;gap:8px;font-size:15px}
+.vs-row .val{text-align:center}
+.vs-row .cat{font-family:var(--f-pix);font-size:9px;text-align:center}
+.vs-bar{height:12px;border:2px solid var(--ink);position:relative;background:var(--lcd)}
+.vs-bar i{position:absolute;top:0;bottom:0;background:var(--mid)}
+.vs-bar.l i{right:0}.vs-bar.r i{left:0}
+.vs-row.win-l .vs-bar.l i,.vs-row.win-r .vs-bar.r i{background:var(--ink)}
+.vs-row.win-l .val.l,.vs-row.win-r .val.r{font-weight:700}
+.vs-row.win-l .val.l::before{content:"♛"}
+.vs-row.win-r .val.r::after{content:"♛"}
+.vs-row.punted{opacity:.5}
+.dash{color:var(--mid)}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:18px 10px 0}
+.foot .sel{font-family:var(--f-pix);font-size:9px;color:var(--bezel);letter-spacing:.1em}
+.foot .ab{display:flex;gap:14px}
+.foot .ab i{width:34px;height:34px;border-radius:50%;background:var(--btn);box-shadow:0 4px 0 var(--btn-dark);display:grid;place-items:center;font-style:normal;font-family:var(--f-pix);font-size:10px;color:var(--btn-ink)}
+/* trade machine */
+.tm{border:3px solid var(--ink);padding:14px;display:flex;flex-direction:column;gap:14px}
+.tm-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.tm-col{display:flex;flex-direction:column;gap:8px;min-width:0}
+.tm-label{font-family:var(--f-pix);font-size:9px;color:var(--mid);line-height:1.8}
+.tm-list{display:flex;flex-direction:column;border:2px solid var(--mid);max-height:340px;overflow-y:auto}
+.tm-item{display:grid;grid-template-columns:18px 1fr auto;gap:8px;align-items:center;padding:5px 8px;border:0;border-bottom:2px dotted var(--lcd-2);background:transparent;color:var(--ink);font-family:var(--f-dot);font-size:15px;text-align:left;cursor:pointer}
+.tm-item:hover{background:var(--lcd-2)}
+.tm-item .bx{width:14px;height:14px;border:2px solid var(--ink)}
+.tm-item[aria-pressed="true"]{background:var(--ink);color:var(--lcd)}
+.tm-item[aria-pressed="true"] .bx{background:var(--lcd);border-color:var(--lcd)}
+.tm-item .meta{font-size:12px;color:var(--mid);text-align:right;line-height:1.3}
+.tm-item[aria-pressed="true"] .meta{color:var(--lcd-2)}
+.tm-item.il .nm{text-decoration:line-through}
+.tm-opts{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+.pxbtn{font-family:var(--f-pix);font-size:10px;background:var(--lcd);color:var(--ink);border:3px solid var(--ink);padding:7px 12px;cursor:pointer;box-shadow:3px 3px 0 var(--ink)}
+.pxbtn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.tm-result{display:flex;flex-direction:column;gap:14px}
+.tm-empty{color:var(--mid);font-size:15px}
+.tm-verdict{font-size:18px;border:3px solid var(--ink);padding:10px 12px;background:var(--lcd-2)}
+.tm-verdict b{font-family:var(--f-pix);font-size:11px;margin-right:8px}
+.tm-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.tm-card{border:2px solid var(--ink);padding:10px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.tm-card .k{font-family:var(--f-pix);font-size:9px;color:var(--mid)}
+.tm-card .v{font-size:22px}
+.tm-card .s{font-size:13px;color:var(--mid)}
+.meter{position:relative;height:14px;border:2px solid var(--ink);background:linear-gradient(90deg,var(--lcd) 0 40%,var(--lcd-2) 40% 60%,var(--lcd-3) 60%)}
+.meter i{position:absolute;top:-5px;bottom:-5px;width:4px;background:var(--ink)}
+.meter-l{display:flex;justify-content:space-between;font-size:11px;color:var(--mid)}
+.pos-up{color:var(--ink)}.pos-up::before{content:"▲"}
+.pos-dn{color:var(--mid)}.pos-dn::before{content:"▼"}
+.tm-h3{font-family:var(--f-pix);font-size:11px;margin-top:6px}
+.as-out{display:flex;flex-direction:column;gap:8px}
+.as-row{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;border:2px solid var(--ink);padding:8px 10px}
+.as-row .n{font-family:var(--f-pix);font-size:11px}
+.as-row .d{font-size:15px;min-width:0}
+.as-row .d small{display:block;font-size:13px;color:var(--mid)}
+/* splash */
+#splash{position:fixed;inset:0;z-index:50;background:var(--lcd);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;text-align:center;padding:16px;cursor:pointer;transition:opacity .35s}
+#splash.gone{opacity:0;pointer-events:none}
+#splash .logo{font-family:var(--f-pix);font-size:clamp(14px,3.5vw,22px);line-height:1.7}
+#splash .press{font-family:var(--f-pix);font-size:12px;animation:blink 1s steps(1) infinite}
+@media (max-width:560px){
+  .vs-row{grid-template-columns:44px 1fr 40px 1fr 44px;font-size:13px;gap:5px}
+  .hp-track{width:64px}
+}
+@media (prefers-reduced-motion: reduce){.menu-btn[aria-pressed="true"]::before,#splash .press{animation:none}#splash{transition:none}}
+</style>
+
+<div id="splash" hidden><div class="logo">JESSICA-AI<br>LEAGUE</div><div class="press">▶ PRESS START</div></div>
+
+<div class="wrap">
+ <div class="shell">
+  <div class="brand"><span class="led">POWER</span><span>JESSICA-AI LEAGUE · H2H 9-CAT</span></div>
+  <div class="lcd">
+  <header>
+    <span class="eyebrow">YAHOO H2H 9-CAT · 16 TEAMS · 2026-27</span>
+    <h1>杰西卡的AI實驗室 戰力表</h1>
+    <p class="sub">每位球員的九項場均數據，加總成球隊每場數據，再排出 16 隊各項名次。FG% 和 FT% 用總命中 ÷ 總出手計算；失誤越少名次越前。IL 球員不計入球隊數據。</p>
+  </header>
+
+  <div class="controls" role="group" aria-label="顯示設定">
+    <div class="ctl">
+      <span class="ctl-label" id="lbl-src">DATA</span>
+      <div class="seg" aria-labelledby="lbl-src">
+        <button class="menu-btn" id="src-pr" type="button" aria-pressed="true">2026-27 三家預測</button>
+        <button class="menu-btn" id="src-ls" type="button" aria-pressed="false">2025-26 上季實際</button>
+      </div>
+    </div>
+    <div class="ctl">
+      <span class="ctl-label" id="lbl-mode">MODE</span>
+      <div class="seg" aria-labelledby="lbl-mode">
+        <button class="menu-btn" id="mode-9" type="button" aria-pressed="true">9 項全算</button>
+        <button class="menu-btn" id="mode-p" type="button" aria-pressed="false">放棄助攻</button>
+      </div>
+    </div>
+  </div>
+
+  <section aria-labelledby="h-vs">
+    <h2 id="h-vs">VS MODE 對戰預測</h2>
+    <div class="vs">
+      <div class="vs-pick"><label for="opp">對手</label><select id="opp"></select></div>
+      <div class="vs-top" id="vs-top"></div>
+      <div class="vs-rows" id="vs-rows"></div>
+    </div>
+    <p class="note">用雙方每場數據加總比較九項，多者勝；FG%、FT% 比命中率，失誤少者勝。H2H 一週的實際結果還會受出賽場次影響。</p>
+  </section>
+
+  <section aria-labelledby="h-trade">
+    <h2 id="h-trade">TRADE MACHINE 交易分析器</h2>
+    <div class="tm">
+      <div class="tm-cols">
+        <div class="tm-col">
+          <div class="tm-label">你送出（最多 3 人）</div>
+          <div class="tm-list" id="tm-give"></div>
+        </div>
+        <div class="tm-col">
+          <div class="tm-label"><label for="tm-opp">交易對象</label></div>
+          <select id="tm-opp"></select>
+          <div class="tm-label">你換回（最多 3 人）</div>
+          <div class="tm-list" id="tm-get"></div>
+        </div>
+      </div>
+      <div class="tm-opts">
+        <label for="tm-fill" class="tm-label">名單空位補 FA</label>
+        <select id="tm-fill"><option value="">不補</option><option value="Matisse Thybulle">Matisse Thybulle（抄截）</option><option value="Isaiah Joe">Isaiah Joe（三分）</option></select>
+        <button class="pxbtn" id="tm-clear" type="button">清除</button>
+      </div>
+      <div id="tm-result" class="tm-result"></div>
+    </div>
+    <h3 class="tm-h3">AUTO SCOUT 自動找交易</h3>
+    <div class="tm">
+      <div class="tm-opts">
+        <label class="tm-label" for="as-sell">要賣的球員</label>
+        <select id="as-sell"></select>
+        <label class="tm-label" for="as-type">類型</label>
+        <select id="as-type"><option value="1">1 換 1</option><option value="2">2 換 1（空位補 Thybulle）</option><option value="all">兩種都找</option></select>
+        <button class="pxbtn" id="as-go" type="button">▶ 搜尋</button>
+      </div>
+      <p class="note" id="as-status">條件：對方以排名＋持有率看不吃虧（≥ 95%），且交易後對方名次不會掉超過 1 名；依你的名次提升排序。</p>
+      <div id="as-out" class="as-out"></div>
+    </div>
+    <p class="note">市場價值 = 季前排名分數 × 70% ＋ Yahoo 持有率 × 30%；多人打包時，單一好球員權重較高（避免 2 個普通球員就換到明星）。數據價值會依預測出賽場次打折。名次模擬沿用聯盟表的算法（各項名次平均）。</p>
+  </section>
+
+  <section aria-labelledby="h-league">
+    <h2 id="h-league">LEAGUE STANDINGS 聯盟排名</h2>
+    <p class="note" id="league-note"></p>
+    <div class="scroll"><table class="league" id="league"></table></div>
+  </section>
+
+  <section aria-labelledby="h-teams">
+    <h2 id="h-teams">SELECT TEAM 各隊球員</h2>
+    <nav class="picker" id="picker" aria-label="選擇球隊"></nav>
+    <div id="team"></div>
+    <p class="note">價值血條：球員九項場均換算成 z 分數加總（放棄助攻模式不算助攻），跟全聯盟被持有的球員比較。實心向右是正貢獻，虛線向左是拖累球隊。</p>
+  </section>
+
+  <p class="note">預測來源：Yahoo（Rotowire）、ESPN、FantasyPros 共識預測，三家場均取平均；FantasyPros 只提供命中率，出手數沿用另外兩家。上季數據取自 Yahoo 2025-26 場均，新秀及上季未出賽者無數據，以「—」表示且不計入。▲▼ 是跟上次更新（交易前，10/9 waiver 後）相比的名次變化。名單更新於 2026/10/9（含石與大小小丑的交易）。</p>
+  </div>
+  <div class="foot"><span class="sel">SELECT  START</span><div class="ab"><i>B</i><i>A</i></div></div>
+ </div>
+</div>

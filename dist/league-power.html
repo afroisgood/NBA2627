@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+</head>
+<body>
+<title>杰西卡的AI實驗室 戰力表</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap">
+<style>
+/* Layout: one handheld console — shell frame around a 4-shade LCD; menu, VS screen, league standings, one team box score at a time */
+:root{
+  --shell:#b9b6a8; --shell-dark:#8e8b7d; --bezel:#4a4a42; --page:#d9d6cc;
+  --lcd:#c9d2a8; --lcd-2:#b7c193; --lcd-3:#a3ae7c; --mid:#5f6d48; --ink:#2f3a25;
+  --btn:#8a5a6c; --btn-dark:#5e3a48; --btn-ink:#ecd7df; --power:#b8574e;
+  --f-pix:"Press Start 2P","DotGothic16",monospace;
+  --f-dot:"DotGothic16","Noto Sans TC","PingFang TC",monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+body{background:var(--page);color:var(--ink);font-family:var(--f-dot);font-size:16px;line-height:1.55}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:20px 40px}
+.shell{background:var(--shell);border-radius:14px 14px 56px 14px;padding:20px 18px 26px;box-shadow:inset 0 0 0 6px var(--shell-dark),0 8px 0 #9d9a8c}
+.brand{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:0 6px 12px;font-family:var(--f-pix);font-size:10px;color:var(--bezel);letter-spacing:.06em}
+.brand .led{display:inline-flex;align-items:center;gap:6px}
+.brand .led::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--power);box-shadow:0 0 4px var(--power)}
+.lcd{position:relative;background:var(--lcd);border:4px solid var(--ink);box-shadow:inset 0 0 0 3px var(--lcd-2);padding:18px 16px;display:flex;flex-direction:column;gap:30px;min-width:0}
+.lcd::after{content:"";position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(rgba(47,58,37,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(47,58,37,.04) 1px,transparent 1px);background-size:3px 3px}
+h1,h2,h3{margin:0;font-weight:400;text-wrap:balance}
+h1{font-family:var(--f-dot);font-size:clamp(22px,4vw,30px);line-height:1.25}
+h2{font-family:var(--f-pix);font-size:13px;line-height:1.6;padding-bottom:6px;border-bottom:4px solid var(--ink)}
+h3{font-family:var(--f-dot);font-size:20px;display:flex;align-items:center;gap:8px}
+.eyebrow{font-family:var(--f-pix);font-size:10px;color:var(--mid);line-height:1.8}
+header{display:flex;flex-direction:column;gap:6px}
+.sub{color:var(--mid);margin:0;max-width:72ch;font-size:15px}
+.controls{display:flex;flex-wrap:wrap;gap:8px 32px;align-items:center;position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--lcd);padding-block:8px;border-bottom:3px dotted var(--mid)}
+.ctl{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px}
+.ctl-label{font-family:var(--f-pix);font-size:9px;color:var(--mid)}
+.seg{display:flex;flex-wrap:wrap;gap:4px 16px}
+.menu-btn{font-family:var(--f-dot);font-size:16px;border:0;background:transparent;color:var(--mid);padding:2px 0;cursor:pointer;text-align:left}
+.menu-btn::before{content:"▶";display:inline-block;width:1.1em;visibility:hidden}
+.menu-btn[aria-pressed="true"]{color:var(--ink)}
+.menu-btn[aria-pressed="true"]::before{visibility:visible;animation:blink 1s steps(1) infinite}
+.menu-btn:hover{color:var(--ink)}
+@keyframes blink{50%{opacity:0}}
+button:focus-visible,th:focus-visible,select:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.note{font-size:14px;color:var(--mid);max-width:84ch;margin:0}
+section{display:flex;flex-direction:column;gap:12px;min-width:0}
+.scroll{overflow-x:auto;border:3px solid var(--ink);background:var(--lcd)}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:7px 9px;text-align:right;white-space:nowrap;border-bottom:2px dotted var(--lcd-2)}
+th{font-family:var(--f-pix);font-size:10px;font-weight:400;color:var(--mid);background:var(--lcd);border-bottom:3px solid var(--mid);position:sticky;top:0;z-index:1}
+th.sortable{cursor:pointer;user-select:none}
+th.sortable:hover,th.sorted{color:var(--ink)}
+th.sorted::after{content:"▼";margin-left:2px}
+th.sorted[aria-sort="descending"]::after{content:"▲"}
+td.name,th.name{text-align:left}
+tbody tr:last-child td{border-bottom:0}
+td{font-family:var(--f-dot);font-size:16px;line-height:1.45}
+td.name{font-size:16px}
+.cell{display:flex;flex-direction:column;align-items:flex-end;gap:0}
+.rk{display:inline-block;min-width:26px;text-align:center;font-size:13px;color:var(--mid)}
+.rk.top::before{content:"♛"}
+.rk.low::before{content:"☠"}
+.rk.top,.rk.low{color:var(--ink)}
+/* heat tiers: ranks 1-4 / 5-8 / 9-12 / 13-16 */
+td.h1{background:var(--lcd-3)}
+td.h2{background:var(--lcd-2)}
+td.h4{background-image:repeating-linear-gradient(45deg,rgba(47,58,37,.10) 0 2px,transparent 2px 6px)}
+.delta{display:block;font-size:12px;color:var(--mid)}
+.delta.up{color:var(--ink)}
+.delta.up::before{content:"▲"}
+.delta.dn::before{content:"▼"}
+.ovr{font-family:var(--f-pix);font-size:12px}
+tr.me td{background:var(--ink)!important;color:var(--lcd)}
+tr.me td .rk,tr.me td .delta,tr.me td .pos{color:var(--lcd-2)}
+tr.me svg rect{fill:var(--lcd)}
+.tn{display:inline-flex;align-items:center;gap:8px}
+.emb{flex:none;image-rendering:pixelated}
+.emb rect{fill:var(--ink)}
+.tag{font-family:var(--f-pix);font-size:8px;margin-left:6px;padding:1px 3px;border:2px solid currentColor;vertical-align:2px}
+.pos{display:block;font-size:12.5px;color:var(--mid)}
+.slot{display:inline-block;font-family:var(--f-pix);font-size:8px;color:var(--mid);min-width:36px}
+tr.out td{color:var(--mid)}
+tr.out td.name .pname{text-decoration:line-through;text-decoration-thickness:1px}
+.badge{font-family:var(--f-pix);font-size:7px;padding:1px 3px;margin-left:6px;vertical-align:2px;border:2px solid var(--ink)}
+.b-il{background:var(--ink);color:var(--lcd)}
+tr.total td{background:var(--lcd-2);border-top:3px solid var(--ink)}
+tr.ranks td{background:var(--lcd-2);padding-top:0}
+/* HP bar */
+.hp{display:inline-flex;align-items:center;gap:6px}
+.hp-track{position:relative;width:96px;height:10px;border:2px solid var(--ink);background:var(--lcd)}
+.hp-fill{position:absolute;top:0;bottom:0;background:var(--ink)}
+.hp-fill.neg{background:repeating-linear-gradient(90deg,var(--mid) 0 3px,transparent 3px 5px)}
+.hp-mid{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--mid)}
+.hp-num{font-size:13px;min-width:38px;text-align:right}
+/* team picker */
+.picker{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:2px 14px}
+.picker .menu-btn{display:flex;align-items:center;gap:6px;font-size:15px;min-width:0}
+.picker .menu-btn span.t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.team-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px}
+.team-head .summary{font-size:14px;color:var(--mid)}
+/* VS */
+.vs{border:3px solid var(--ink);padding:14px;display:flex;flex-direction:column;gap:14px}
+.vs-top{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px}
+.vs-side{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;min-width:0}
+.vs-side .nm{font-size:16px;overflow-wrap:anywhere}
+.vs-score{font-family:var(--f-pix);font-size:clamp(20px,5vw,34px);text-align:center;line-height:1.3}
+.vs-score small{display:block;font-family:var(--f-dot);font-size:13px;color:var(--mid)}
+.vs-pick{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.vs-pick label{font-family:var(--f-pix);font-size:9px;color:var(--mid)}
+select{font-family:var(--f-dot);font-size:16px;background:var(--lcd);color:var(--ink);border:3px solid var(--ink);padding:4px 8px;max-width:100%}
+.vs-rows{display:grid;gap:6px}
+.vs-row{display:grid;grid-template-columns:minmax(52px,auto) 1fr 52px 1fr minmax(52px,auto);align-items:center;gap:8px;font-size:15px}
+.vs-row .val{text-align:center}
+.vs-row .cat{font-family:var(--f-pix);font-size:9px;text-align:center}
+.vs-bar{height:12px;border:2px solid var(--ink);position:relative;background:var(--lcd)}
+.vs-bar i{position:absolute;top:0;bottom:0;background:var(--mid)}
+.vs-bar.l i{right:0}.vs-bar.r i{left:0}
+.vs-row.win-l .vs-bar.l i,.vs-row.win-r .vs-bar.r i{background:var(--ink)}
+.vs-row.win-l .val.l,.vs-row.win-r .val.r{font-weight:700}
+.vs-row.win-l .val.l::before{content:"♛"}
+.vs-row.win-r .val.r::after{content:"♛"}
+.vs-row.punted{opacity:.5}
+.dash{color:var(--mid)}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:18px 10px 0}
+.foot .sel{font-family:var(--f-pix);font-size:9px;color:var(--bezel);letter-spacing:.1em}
+.foot .ab{display:flex;gap:14px}
+.foot .ab i{width:34px;height:34px;border-radius:50%;background:var(--btn);box-shadow:0 4px 0 var(--btn-dark);display:grid;place-items:center;font-style:normal;font-family:var(--f-pix);font-size:10px;color:var(--btn-ink)}
+/* trade machine */
+.tm{border:3px solid var(--ink);padding:14px;display:flex;flex-direction:column;gap:14px}
+.tm-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.tm-col{display:flex;flex-direction:column;gap:8px;min-width:0}
+.tm-label{font-family:var(--f-pix);font-size:9px;color:var(--mid);line-height:1.8}
+.tm-list{display:flex;flex-direction:column;border:2px solid var(--mid);max-height:340px;overflow-y:auto}
+.tm-item{display:grid;grid-template-columns:18px 1fr auto;gap:8px;align-items:center;padding:5px 8px;border:0;border-bottom:2px dotted var(--lcd-2);background:transparent;color:var(--ink);font-family:var(--f-dot);font-size:15px;text-align:left;cursor:pointer}
+.tm-item:hover{background:var(--lcd-2)}
+.tm-item .bx{width:14px;height:14px;border:2px solid var(--ink)}
+.tm-item[aria-pressed="true"]{background:var(--ink);color:var(--lcd)}
+.tm-item[aria-pressed="true"] .bx{background:var(--lcd);border-color:var(--lcd)}
+.tm-item .meta{font-size:12px;color:var(--mid);text-align:right;line-height:1.3}
+.tm-item[aria-pressed="true"] .meta{color:var(--lcd-2)}
+.tm-item.il .nm{text-decoration:line-through}
+.tm-opts{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+.pxbtn{font-family:var(--f-pix);font-size:10px;background:var(--lcd);color:var(--ink);border:3px solid var(--ink);padding:7px 12px;cursor:pointer;box-shadow:3px 3px 0 var(--ink)}
+.pxbtn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.tm-result{display:flex;flex-direction:column;gap:14px}
+.tm-empty{color:var(--mid);font-size:15px}
+.tm-verdict{font-size:18px;border:3px solid var(--ink);padding:10px 12px;background:var(--lcd-2)}
+.tm-verdict b{font-family:var(--f-pix);font-size:11px;margin-right:8px}
+.tm-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.tm-card{border:2px solid var(--ink);padding:10px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.tm-card .k{font-family:var(--f-pix);font-size:9px;color:var(--mid)}
+.tm-card .v{font-size:22px}
+.tm-card .s{font-size:13px;color:var(--mid)}
+.meter{position:relative;height:14px;border:2px solid var(--ink);background:linear-gradient(90deg,var(--lcd) 0 40%,var(--lcd-2) 40% 60%,var(--lcd-3) 60%)}
+.meter i{position:absolute;top:-5px;bottom:-5px;width:4px;background:var(--ink)}
+.meter-l{display:flex;justify-content:space-between;font-size:11px;color:var(--mid)}
+.pos-up{color:var(--ink)}.pos-up::before{content:"▲"}
+.pos-dn{color:var(--mid)}.pos-dn::before{content:"▼"}
+.tm-h3{font-family:var(--f-pix);font-size:11px;margin-top:6px}
+.as-out{display:flex;flex-direction:column;gap:8px}
+.as-row{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;border:2px solid var(--ink);padding:8px 10px}
+.as-row .n{font-family:var(--f-pix);font-size:11px}
+.as-row .d{font-size:15px;min-width:0}
+.as-row .d small{display:block;font-size:13px;color:var(--mid)}
+/* splash */
+#splash{position:fixed;inset:0;z-index:50;background:var(--lcd);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;text-align:center;padding:16px;cursor:pointer;transition:opacity .35s}
+#splash.gone{opacity:0;pointer-events:none}
+#splash .logo{font-family:var(--f-pix);font-size:clamp(14px,3.5vw,22px);line-height:1.7}
+#splash .press{font-family:var(--f-pix);font-size:12px;animation:blink 1s steps(1) infinite}
+@media (max-width:560px){
+  .vs-row{grid-template-columns:44px 1fr 40px 1fr 44px;font-size:13px;gap:5px}
+  .hp-track{width:64px}
+}
+@media (prefers-reduced-motion: reduce){.menu-btn[aria-pressed="true"]::before,#splash .press{animation:none}#splash{transition:none}}
+</style>
+
+<div id="splash" hidden><div class="logo">JESSICA-AI<br>LEAGUE</div><div class="press">▶ PRESS START</div></div>
+
+<div class="wrap">
+ <div class="shell">
+  <div class="brand"><span class="led">POWER</span><span>JESSICA-AI LEAGUE · H2H 9-CAT</span></div>
+  <div class="lcd">
+  <header>
+    <span class="eyebrow">YAHOO H2H 9-CAT · 16 TEAMS · 2026-27</span>
+    <h1>杰西卡的AI實驗室 戰力表</h1>
+    <p class="sub">每位球員的九項場均數據，加總成球隊每場數據，再排出 16 隊各項名次。FG% 和 FT% 用總命中 ÷ 總出手計算；失誤越少名次越前。IL 球員不計入球隊數據。</p>
+  </header>
+
+  <div class="controls" role="group" aria-label="顯示設定">
+    <div class="ctl">
+      <span class="ctl-label" id="lbl-src">DATA</span>
+      <div class="seg" aria-labelledby="lbl-src">
+        <button class="menu-btn" id="src-pr" type="button" aria-pressed="true">2026-27 三家預測</button>
+        <button class="menu-btn" id="src-ls" type="button" aria-pressed="false">2025-26 上季實際</button>
+      </div>
+    </div>
+    <div class="ctl">
+      <span class="ctl-label" id="lbl-mode">MODE</span>
+      <div class="seg" aria-labelledby="lbl-mode">
+        <button class="menu-btn" id="mode-9" type="button" aria-pressed="true">9 項全算</button>
+        <button class="menu-btn" id="mode-p" type="button" aria-pressed="false">放棄助攻</button>
+      </div>
+    </div>
+  </div>
+
+  <section aria-labelledby="h-vs">
+    <h2 id="h-vs">VS MODE 對戰預測</h2>
+    <div class="vs">
+      <div class="vs-pick"><label for="opp">對手</label><select id="opp"></select></div>
+      <div class="vs-top" id="vs-top"></div>
+      <div class="vs-rows" id="vs-rows"></div>
+    </div>
+    <p class="note">用雙方每場數據加總比較九項，多者勝；FG%、FT% 比命中率，失誤少者勝。H2H 一週的實際結果還會受出賽場次影響。</p>
+  </section>
+
+  <section aria-labelledby="h-trade">
+    <h2 id="h-trade">TRADE MACHINE 交易分析器</h2>
+    <div class="tm">
+      <div class="tm-cols">
+        <div class="tm-col">
+          <div class="tm-label">你送出（最多 3 人）</div>
+          <div class="tm-list" id="tm-give"></div>
+        </div>
+        <div class="tm-col">
+          <div class="tm-label"><label for="tm-opp">交易對象</label></div>
+          <select id="tm-opp"></select>
+          <div class="tm-label">你換回（最多 3 人）</div>
+          <div class="tm-list" id="tm-get"></div>
+        </div>
+      </div>
+      <div class="tm-opts">
+        <label for="tm-fill" class="tm-label">名單空位補 FA</label>
+        <select id="tm-fill"><option value="">不補</option><option value="Matisse Thybulle">Matisse Thybulle（抄截）</option><option value="Isaiah Joe">Isaiah Joe（三分）</option></select>
+        <button class="pxbtn" id="tm-clear" type="button">清除</button>
+      </div>
+      <div id="tm-result" class="tm-result"></div>
+    </div>
+    <h3 class="tm-h3">AUTO SCOUT 自動找交易</h3>
+    <div class="tm">
+      <div class="tm-opts">
+        <label class="tm-label" for="as-sell">要賣的球員</label>
+        <select id="as-sell"></select>
+        <label class="tm-label" for="as-type">類型</label>
+        <select id="as-type"><option value="1">1 換 1</option><option value="2">2 換 1（空位補 Thybulle）</option><option value="all">兩種都找</option></select>
+        <button class="pxbtn" id="as-go" type="button">▶ 搜尋</button>
+      </div>
+      <p class="note" id="as-status">條件：對方以排名＋持有率看不吃虧（≥ 95%），且交易後對方名次不會掉超過 1 名；依你的名次提升排序。</p>
+      <div id="as-out" class="as-out"></div>
+    </div>
+    <p class="note">市場價值 = 季前排名分數 × 70% ＋ Yahoo 持有率 × 30%；多人打包時，單一好球員權重較高（避免 2 個普通球員就換到明星）。數據價值會依預測出賽場次打折。名次模擬沿用聯盟表的算法（各項名次平均）。</p>
+  </section>
+
+  <section aria-labelledby="h-league">
+    <h2 id="h-league">LEAGUE STANDINGS 聯盟排名</h2>
+    <p class="note" id="league-note"></p>
+    <div class="scroll"><table class="league" id="league"></table></div>
+  </section>
+
+  <section aria-labelledby="h-teams">
+    <h2 id="h-teams">SELECT TEAM 各隊球員</h2>
+    <nav class="picker" id="picker" aria-label="選擇球隊"></nav>
+    <div id="team"></div>
+    <p class="note">價值血條：球員九項場均換算成 z 分數加總（放棄助攻模式不算助攻），跟全聯盟被持有的球員比較。實心向右是正貢獻，虛線向左是拖累球隊。</p>
+  </section>
+
+  <p class="note">預測來源：Yahoo（Rotowire）、ESPN、FantasyPros 共識預測，三家場均取平均；FantasyPros 只提供命中率，出手數沿用另外兩家。上季數據取自 Yahoo 2025-26 場均，新秀及上季未出賽者無數據，以「—」表示且不計入。▲▼ 是跟上次更新（交易前，10/9 waiver 後）相比的名次變化。名單更新於 2026/10/9（含石與大小小丑的交易）。</p>
+  </div>
+  <div class="foot"><span class="sel">SELECT  START</span><div class="ab"><i>B</i><i>A</i></div></div>
+ </div>
+</div>
+
+<script>
+const ME="石";
+const DATA=[
+["諸葛衛冕村夫", [["Tyrese Maxey", "PG", "PHI - PG", "", [71, 8.9, 19.27, 4.77, 5.37, 2.89, 25.51, 3.64, 5.86, 1.6, 0.63, 2.17], [70, 9.91, 21.44, 5.31, 5.96, 3.14, 28.29, 4.14, 6.59, 1.86, 0.79, 2.44]], ["Darryn Peterson", "SG", "UTA - SG", "", [74, 6.52, 14.53, 3.64, 4.45, 1.56, 18.43, 4.16, 3.05, 1.3, 0.39, 2.12], null], ["LaMelo Ball", "G", "MIN - PG", "", [67, 8.04, 19.5, 2.7, 3.07, 3.96, 22.71, 5.35, 7.73, 1.35, 0.29, 3.16], [72, 7.03, 17.28, 2.24, 2.49, 3.78, 20.07, 4.82, 7.14, 1.21, 0.24, 2.81]], ["Matas Buzelis", "SF", "CHI - SF,PF", "", [75, 6.26, 13.47, 2.74, 3.47, 2.22, 16.9, 5.9, 2.12, 0.74, 1.55, 2.07], [77, 5.79, 12.51, 2.43, 3.09, 2.25, 16.26, 5.82, 2.05, 0.71, 1.51, 2.06]], ["Derik Queen", "PF", "NOP - PF,C", "", [75, 4.93, 10.33, 2.99, 3.76, 0.32, 12.58, 7.34, 3.81, 1.1, 0.94, 2.41], [81, 4.37, 9.23, 2.68, 3.37, 0.28, 11.7, 7.06, 3.68, 1.04, 0.91, 2.35]], ["Josh Hart", "F", "NYK - SG,SF", "", [71, 4.55, 9.02, 1.47, 1.98, 1.43, 12.05, 7.96, 4.78, 1.22, 0.3, 1.92], [66, 4.56, 8.97, 1.36, 1.89, 1.52, 12, 7.36, 4.8, 1.14, 0.26, 1.94]], ["Zach Edey", "C", "MEM - C", "", [64, 5.68, 9.37, 2.27, 3.02, 0.26, 13.16, 10.45, 1.23, 0.68, 1.85, 2.17], [11, 5.64, 8.91, 2.27, 2.91, 0.09, 13.64, 11.09, 1.09, 0.64, 1.91, 2.36]], ["Kel'el Ware", "C", "MIL - C", "", [73, 5.07, 9.56, 0.99, 1.35, 1.16, 11.52, 8.69, 0.83, 0.77, 1.17, 0.9], [77, 4.47, 8.43, 0.92, 1.25, 1.19, 11.05, 9.01, 0.73, 0.77, 1.09, 0.81]], ["Day'Ron Sharpe", "Util", "BKN - C", "Q", [69, 4.44, 8.06, 1.79, 2.62, 0.22, 10.13, 8.41, 2.47, 1.12, 0.77, 1.73], [62, 3.45, 5.74, 1.66, 2.45, 0.15, 8.71, 6.66, 2.34, 1.08, 0.42, 1.71]], ["Fred VanVleet", "Util", "HOU - PG", "", [67, 4.45, 11.26, 1.88, 2.23, 2.43, 13.15, 3.31, 5.53, 1.25, 0.47, 1.35], null], ["Rui Hachimura", "BN", "LAC - SF,PF", "", [70, 4.52, 8.76, 1.01, 1.38, 1.56, 11.27, 3.62, 0.96, 0.59, 0.31, 0.6], [68, 4.51, 8.78, 0.74, 1.06, 1.71, 11.47, 3.32, 0.84, 0.57, 0.31, 0.62]], ["Jalen Smith", "BN", "CHI - PF,C", "", [65, 3.5, 7.29, 1.3, 1.69, 1.37, 9.77, 6.34, 1.24, 0.45, 0.79, 1.04], [53, 3.68, 7.62, 1.3, 1.75, 1.55, 10.21, 6.7, 1.23, 0.45, 0.79, 1]], ["Naji Marshall", "BN", "DAL - SG,SF,PF", "", [72, 4.42, 8.76, 2.07, 2.67, 0.75, 11.32, 3.93, 2.58, 0.88, 0.1, 1.27], [74, 5.66, 11.09, 3.08, 4.05, 0.84, 15.24, 4.7, 3.26, 1.11, 0.08, 1.61]]]],
+["乂唯一珍❤️杰西卡乂", [["Trae Young", "PG", "WAS - PG", "", [71, 7.17, 17.11, 6.18, 7.14, 2.67, 22.69, 2.78, 10.03, 1.12, 0.19, 4.19], [15, 5.4, 11.8, 5.33, 6.47, 1.8, 17.93, 2, 8, 0.87, 0.13, 2.6]], ["N. Alexander-Walker", "SG", "ATL - PG,SG", "", [79, 6.44, 14.2, 3.11, 3.51, 2.81, 17.74, 3.27, 3.41, 1.12, 0.49, 1.81], [78, 7.03, 15.32, 3.55, 3.94, 3.22, 20.82, 3.44, 3.67, 1.31, 0.54, 2.08]], ["Darius Garland", "G", "LAC - PG", "", [70, 7.74, 16.75, 3.25, 3.76, 2.82, 21.12, 2.89, 7.1, 1.25, 0.19, 2.99], [45, 6.87, 14.93, 2.33, 2.71, 2.71, 18.78, 2.38, 6.69, 0.96, 0.18, 2.89]], ["Dillon Brooks", "SF", "PHX - SF,PF", "", [71, 6.35, 14.63, 2.33, 2.79, 2.28, 17.33, 3.55, 1.73, 0.96, 0.19, 1.46], [56, 7.45, 17.13, 3.04, 3.61, 2.27, 20.2, 3.63, 1.77, 1.02, 0.16, 1.75]], ["John Collins", "PF", "DET - PF,C", "", [69, 6.14, 11.37, 2.3, 2.87, 1.38, 16.01, 7.25, 1.32, 0.86, 0.92, 1.7], [69, 5.28, 9.55, 1.71, 2.23, 1.29, 13.55, 5.32, 1.01, 0.87, 0.74, 1.38]], ["Jabari Smith Jr.", "F", "HOU - PF,C", "", [74, 5.37, 11.98, 2.08, 2.63, 2.11, 14.62, 6.93, 1.62, 0.63, 0.84, 1.27], [77, 5.69, 12.65, 2.1, 2.71, 2.3, 15.78, 6.87, 1.86, 0.73, 0.92, 1.36]], ["Evan Mobley", "C", "CLE - PF,C", "", [69, 7.33, 13.22, 3.02, 4.53, 1.02, 18.69, 9.55, 3.6, 0.88, 1.69, 2.01], [65, 7.22, 13.22, 2.77, 4.57, 0.95, 18.15, 9.02, 3.6, 0.74, 1.74, 1.88]], ["Myles Turner", "C", "MIL - C", "", [71, 4.31, 9.47, 1.88, 2.49, 2.01, 12.54, 5.48, 1.44, 0.67, 1.65, 1.33], [71, 4, 9.1, 1.85, 2.49, 2.07, 11.92, 5.32, 1.45, 0.7, 1.62, 1.17]], ["CJ McCollum", "Util", "ATL - PG,SG", "", [74, 6.71, 14.82, 2.27, 2.97, 2.6, 18.53, 3.28, 3.85, 0.82, 0.47, 1.72], [76, 6.91, 15.18, 2.41, 3.12, 2.51, 18.74, 3.32, 3.86, 0.84, 0.46, 1.78]], ["Ty Jerome", "Util", "MEM - PG,SG", "", [67, 6.42, 13.19, 2.91, 3.33, 2.5, 18.01, 3.18, 5.55, 1.26, 0.16, 1.91], [15, 6.8, 14.33, 3.27, 3.73, 2.8, 19.67, 2.8, 5.67, 1.07, 0.27, 1.8]], ["Miles Bridges", "BN", "PHX - PF", "Q", [72, 6.7, 14.82, 2.89, 3.43, 2, 18.05, 6.57, 3.35, 0.72, 0.52, 1.7], [77, 6.22, 13.53, 2.7, 3.29, 1.92, 17.06, 5.84, 3.19, 0.6, 0.44, 1.39]], ["RJ Barrett", "BN", "TOR - SG,SF,PF", "", [67, 6.84, 14.28, 3.15, 4.61, 1.73, 18.88, 5.58, 3.63, 0.71, 0.31, 2.02], [57, 7.04, 14.32, 3.51, 4.89, 1.68, 19.26, 5.26, 3.32, 0.74, 0.33, 1.74]], ["GG Jackson", "BN", "MEM - SF,PF,C", "", [68, 4.39, 9.4, 1.92, 2.65, 1.27, 11.97, 4.14, 1.22, 0.69, 0.68, 1.83], [55, 4.64, 9.35, 2.04, 2.75, 1.16, 12.47, 4.27, 1.47, 0.56, 0.8, 1.55]], ["Brandon Ingram", "IL", "LAC - SG,SF,PF", "O", [69, 8.32, 17.35, 3.83, 4.68, 1.82, 22.09, 5.67, 4.4, 0.8, 0.69, 2.7], [77, 7.97, 16.73, 3.79, 4.62, 1.75, 21.49, 5.58, 3.69, 0.75, 0.71, 2.43]]]],
+["大小小丑與他的歡樂同伴們", [["De'Aaron Fox", "PG", "SAS - PG", "Q", [71, 7.29, 15.47, 2.94, 3.79, 1.88, 19.36, 3.93, 5.61, 1.34, 0.3, 2.29], [72, 7.07, 14.54, 2.6, 3.42, 1.82, 18.56, 3.75, 6.18, 1.24, 0.26, 2.28]], ["Jaylen Brown", "SG", "PHI - SG,SF,PF", "", [71, 8.8, 18.42, 4.52, 5.86, 1.8, 24.36, 5.99, 4.4, 1.12, 0.39, 2.98], [71, 10.37, 21.73, 6, 7.55, 1.97, 28.7, 6.93, 5.13, 1.01, 0.38, 3.65]], ["Collin Sexton", "G", "LAL - PG,SG", "Q", [71, 6.07, 12.49, 3.62, 4.21, 1.7, 17.18, 2.56, 3.94, 0.97, 0.17, 2.26], [68, 5.29, 10.91, 3.21, 3.75, 1.65, 15.44, 2.28, 3.28, 1.12, 0.15, 2.07]], ["Franz Wagner", "SF", "ORL - SF,PF", "", [68, 8.32, 17.44, 5.05, 5.95, 1.59, 23, 5.67, 4.22, 1.19, 0.38, 2.09], [34, 7.18, 14.91, 4.79, 5.82, 1.41, 20.56, 5.21, 3.32, 0.94, 0.32, 1.71]], ["Kyle Filipowski", "PF", "UTA - PF,C", "Q", [74, 3.88, 7.87, 1.78, 2.44, 0.9, 10.06, 6.3, 2.23, 0.84, 0.44, 1.43], [77, 4.19, 8.53, 2.06, 2.75, 0.96, 11.42, 7.17, 2.57, 0.95, 0.51, 1.62]], ["Grayson Allen", "F", "CHA - SG,SF", "", [67, 4.44, 10.59, 2.2, 2.58, 2.65, 13.26, 2.9, 2.94, 1.01, 0.29, 1.33], [51, 5.27, 13.08, 2.82, 3.29, 3.12, 16.49, 3.04, 3.82, 1.35, 0.25, 1.63]], ["Nikola Jokić", "C", "DEN - C", "", [73, 10.41, 18.24, 5.41, 6.62, 1.69, 27.79, 12.75, 9.93, 1.53, 0.79, 3.39], [65, 9.91, 17.42, 6.14, 7.38, 1.72, 27.68, 12.86, 10.72, 1.42, 0.82, 3.74]], ["Alperen Şengün", "C", "HOU - PF,C", "", [73, 8.07, 15.73, 3.82, 5.53, 0.46, 20.08, 9.28, 5.78, 1.19, 0.98, 2.92], [72, 8.1, 15.6, 3.61, 5.22, 0.56, 20.36, 8.89, 6.18, 1.18, 1.07, 3.15]], ["Jake LaRavia", "Util", "LAL - SF,PF", "", [75, 3.4, 7.4, 1.7, 2.24, 1.1, 9.21, 4.5, 2.19, 1.31, 0.49, 0.99], [82, 2.93, 6.38, 1.41, 1.85, 0.95, 8.22, 3.98, 1.77, 1.27, 0.46, 1.06]], ["Noah Clowney", "BN", "BKN - PF,C", "", [67, 2.84, 7.21, 2.1, 2.6, 1.44, 8.92, 3.37, 1.17, 0.6, 0.52, 1], [66, 3.79, 9.56, 2.73, 3.39, 1.95, 12.26, 4.14, 1.64, 0.76, 0.68, 1.55]], ["Nikola Jović", "BN", "MIA - PF,C", "", [57, 3.15, 7.95, 1.61, 2.23, 1.25, 8.47, 3.68, 2.13, 0.63, 0.38, 1.32], [47, 2.45, 6.68, 1.47, 2.15, 0.96, 7.32, 3.26, 2.17, 0.55, 0.36, 1.38]], ["Paul Reed", "BN", "DET - PF,C", "", [66, 3.31, 5.63, 1.23, 1.79, 0.23, 7.5, 4.63, 1.29, 0.94, 0.93, 0.92], [65, 3.22, 5.22, 1.12, 1.69, 0.2, 7.75, 4.52, 1.23, 0.88, 0.92, 0.89]], ["Jordan Poole", "BN", "NOP - PG,SG", "", [57, 4.13, 9.98, 1.98, 2.26, 1.85, 11.74, 1.77, 2.76, 0.69, 0.27, 1.66], [39, 4.23, 11.38, 2.51, 2.92, 2.46, 13.44, 1.97, 3.05, 0.56, 0.38, 1.77]]]],
+["南方勇者北伐🧔‍♂️七崩賢", [["Reed Sheppard", "PG", "HOU - PG,SG", "", [76, 4.81, 11.16, 0.88, 1.1, 2.51, 12.28, 2.74, 3.09, 1.37, 0.63, 1.39], [82, 4.96, 11.54, 0.84, 1.05, 2.77, 13.54, 2.9, 3.38, 1.49, 0.66, 1.5]], ["Cooper Flagg", "SG", "DAL - SG,SF,PF", "", [74, 8.53, 18.07, 4.42, 5.31, 1.17, 22.44, 7.02, 4.94, 1.28, 0.96, 2.41], [70, 7.99, 17.06, 4.04, 4.89, 1.03, 21.04, 6.66, 4.51, 1.2, 0.91, 2.3]], ["Immanuel Quickley", "G", "TOR - PG,SG", "", [69, 5.55, 12.72, 2.54, 3.03, 2.57, 16.35, 3.93, 5.75, 1.1, 0.11, 1.52], [70, 5.73, 12.93, 2.43, 2.96, 2.54, 16.43, 4.03, 5.93, 1.31, 0.07, 1.46]], ["Peyton Watson", "SF", "CLE - SF,PF", "", [72, 4.85, 10.08, 2.23, 3.1, 1.37, 13.13, 4.8, 2.03, 0.91, 1.31, 1.45], [54, 5.28, 10.76, 2.56, 3.5, 1.5, 14.61, 4.89, 2.06, 0.93, 1.13, 1.72]], ["Saddiq Bey", "F", "NOP - SF,PF", "", [72, 5.2, 11.61, 3.01, 3.58, 1.85, 15.37, 5.18, 2.18, 0.84, 0.1, 0.86], [72, 6.06, 13.43, 3.44, 4.1, 2.1, 17.65, 5.56, 2.53, 0.94, 0.1, 0.94]], ["Victor Wembanyama", "C", "SAS - C", "", [69, 8.98, 17.83, 5.8, 7.04, 2.05, 25.68, 11.67, 3.4, 1.06, 3.35, 2.79], [64, 8.64, 16.88, 5.81, 7.03, 1.91, 25, 11.5, 3.11, 1.03, 3.08, 2.42]], ["Adem Bona", "C", "PHI - C", "Q", [69, 2.25, 3.52, 1.28, 1.81, 0.02, 5.32, 4.47, 0.5, 0.46, 1.23, 0.84], [71, 1.85, 3.1, 1.13, 1.59, 0.03, 4.85, 4.32, 0.45, 0.42, 1.15, 0.79]], ["Payton Pritchard", "Util", "BOS - PG", "Q", [74, 6.48, 13.94, 1.49, 1.7, 2.85, 17.03, 3.94, 4.73, 0.74, 0.11, 1.31], [79, 6.41, 13.81, 1.53, 1.72, 2.68, 17.03, 3.95, 5.16, 0.73, 0.13, 1.38]], ["Scotty Pippen Jr.", "Util", "MEM - PG", "", [66, 4.45, 9.45, 1.9, 2.56, 1.23, 11.63, 3.13, 4.77, 1.68, 0.4, 2.33], [10, 4.3, 9.6, 1.8, 2.3, 1, 11.4, 2.2, 4.7, 1.9, 0.4, 2.7]], ["Christian Braun", "BN", "DEN - SG,SF,PF", "", [70, 4.68, 8.72, 1.83, 2.31, 0.97, 12.11, 4.62, 2.42, 0.81, 0.38, 0.89], [44, 4.59, 8.84, 1.8, 2.3, 0.98, 11.95, 4.8, 2.73, 0.68, 0.27, 0.98]], ["Davion Mitchell", "BN", "MIA - PG", "", [72, 3.62, 7.56, 0.66, 0.99, 1.26, 9.04, 2.54, 6.35, 1.04, 0.26, 1.56], [70, 3.73, 7.61, 0.6, 0.93, 1.29, 9.34, 2.66, 6.47, 0.97, 0.16, 1.54]], ["Dylan Cardwell", "BN", "SAC - PF,C", "", [72, 2.08, 3.6, 0.53, 1.03, 0, 4.69, 6.74, 1.25, 0.6, 1.35, 0.78], [44, 2.39, 4.07, 0.59, 1.16, 0.05, 5.41, 7.55, 1.41, 0.68, 1.52, 0.89]], ["Brayden Burries", "BN", "MIL - SG", "", [73, 4.04, 9.02, 2.62, 3.07, 0.86, 11.55, 3.27, 3.27, 1.05, 0.33, 1.58], null], ["Y. Konan Niederhäuser", "IL", "LAC - C", "O", [66, 2.05, 3.09, 1.44, 1.92, 0.05, 5.58, 3.64, 0.64, 0.26, 0.88, 0.7], [41, 1.56, 2.44, 1.15, 1.51, 0.02, 4.29, 2.85, 0.29, 0.12, 0.73, 0.56]]]],
+["天母羅斯", [["Jamal Murray", "PG", "DEN - PG", "", [70, 8.41, 17.68, 4.02, 4.55, 2.82, 23.39, 4.16, 6.53, 1.06, 0.49, 2.19], [75, 8.76, 18.13, 4.61, 5.2, 3.27, 25.4, 4.4, 7.13, 0.88, 0.39, 2.28]], ["Kevin Durant", "SG", "HOU - SG,SF,PF", "Q", [72, 8.86, 17, 4.68, 5.45, 2.26, 24.85, 5.48, 4.28, 0.79, 0.99, 2.98], [78, 9.18, 17.64, 5.23, 5.99, 2.38, 25.97, 5.46, 4.77, 0.79, 0.91, 3.15]], ["Cedric Coward", "G", "MEM - SG,SF", "", [71, 6.17, 12.85, 2.86, 3.37, 1.75, 16.03, 6.5, 3.21, 0.75, 0.52, 2.01], [62, 4.92, 10.45, 2.26, 2.68, 1.5, 13.6, 5.87, 2.76, 0.65, 0.44, 1.69]], ["Brandon Miller", "SF", "CHA - SF,PF", "Q", [70, 7.63, 17.69, 3.82, 4.33, 3.45, 21.99, 5.17, 3.7, 1.05, 0.69, 2.68], [65, 6.98, 16.06, 3.06, 3.43, 3.14, 20.17, 4.91, 3.34, 1.02, 0.68, 2.51]], ["Jaren Jackson Jr.", "PF", "UTA - PF,C", "", [66, 7.31, 15.58, 3.89, 4.86, 1.75, 20.26, 5.74, 2.04, 1.18, 1.5, 2.18], [48, 7.13, 14.98, 3.4, 4.23, 1.75, 19.4, 5.67, 1.96, 1.1, 1.44, 2.23]], ["Caleb Wilson", "F", "CHI - PF", "", [73, 6.38, 12.93, 3.32, 4.45, 1.02, 16.78, 7.92, 2.2, 1.07, 1.33, 2.02], null], ["Yves Missi", "C", "NOP - C", "", [69, 3.23, 5.68, 1.31, 2.12, 0, 7.65, 7.1, 1.46, 0.4, 1.68, 0.93], [66, 2.42, 4.45, 0.86, 1.55, 0, 5.71, 5.83, 1.27, 0.3, 1.53, 0.82]], ["Wendell Carter Jr.", "C", "ORL - C", "", [72, 3.78, 7.54, 2.09, 2.76, 0.82, 10.4, 7.03, 1.88, 0.73, 0.56, 1.16], [78, 4.18, 8.17, 2.54, 3.21, 0.92, 11.82, 7.4, 1.97, 0.77, 0.63, 1.28]], ["Paolo Banchero", "Util", "ORL - PF", "", [71, 8.11, 17.75, 6.15, 8.17, 1.46, 23.87, 8.04, 5.27, 0.8, 0.6, 3.15], [72, 7.35, 16, 6.35, 8.19, 1.17, 22.21, 8.39, 5.18, 0.71, 0.56, 3.08]], ["Paul George", "Util", "BOS - SF,PF", "Q", [59, 6.25, 13.93, 2.27, 2.66, 2.79, 17.94, 5.07, 3.57, 1.52, 0.46, 1.99], [37, 6.08, 13.86, 2.46, 3, 2.7, 17.32, 5.3, 3.59, 1.68, 0.43, 1.73]], ["Ajay Mitchell", "BN", "OKC - PG,SG", "", [62, 4.78, 9.89, 2.26, 2.62, 0.96, 11.9, 2.96, 3.29, 1.1, 0.28, 1.28], [57, 5.02, 10.35, 2.47, 2.84, 1.07, 13.58, 3.33, 3.61, 1.25, 0.32, 1.42]], ["P.J. Washington", "BN", "DAL - PF,C", "Q", [66, 4.97, 11.07, 2.08, 2.98, 1.4, 13.41, 6.61, 1.85, 0.94, 0.96, 1.62], [56, 5.29, 11.75, 2.23, 3.25, 1.36, 14.16, 7.04, 1.75, 0.98, 1.07, 1.68]], ["Devin Vassell", "BN", "SAS - SG,SF", "", [70, 4.97, 11.21, 1.64, 2.04, 2.22, 13.66, 3.69, 2.68, 0.95, 0.4, 1.09], [67, 4.93, 11.27, 1.58, 1.94, 2.48, 13.91, 4.01, 2.49, 0.85, 0.37, 0.9]]]],
+["CrocoCroco", [["Derrick White", "PG", "BOS - PG,SG", "Q", [76, 5.75, 14.02, 2.2, 2.48, 2.97, 16.9, 4.45, 5.19, 1.06, 1.16, 1.8], [77, 5.68, 14.39, 2.39, 2.65, 2.71, 16.45, 4.4, 5.38, 1.14, 1.27, 1.74]], ["Dylan Harper", "SG", "SAS - PG,SG", "", [72, 6.5, 12.83, 1.82, 2.39, 1.14, 15.67, 4.53, 4.83, 1.05, 0.47, 1.95], [69, 4.8, 9.51, 1.3, 1.72, 0.88, 11.78, 3.39, 3.86, 0.78, 0.35, 1.43]], ["Dejounte Murray", "G", "NOP - PG", "Q", [69, 6.84, 15.48, 2.67, 3.27, 1.84, 17.9, 5.79, 6.3, 1.51, 0.28, 3.07], [14, 6.29, 13, 2.79, 3.21, 1.36, 16.71, 5.36, 6.36, 1.64, 0.21, 3.36]], ["Scottie Barnes", "SF", "TOR - SF,PF,C", "", [73, 7.35, 15.17, 3.27, 4.13, 1.04, 18.86, 7.61, 5.61, 1.41, 1.32, 2.7], [80, 7.11, 14.04, 3.02, 3.71, 0.85, 18.1, 7.5, 5.92, 1.43, 1.45, 2.63]], ["Bam Adebayo", "PF", "MIA - PF,C", "", [74, 7.1, 15.8, 4.24, 5.48, 1.76, 20.05, 9.48, 3.48, 1.22, 0.72, 1.73], [73, 6.93, 15.68, 4.51, 5.79, 1.74, 20.11, 10.03, 3.18, 1.18, 0.67, 1.64]], ["Andrew Wiggins", "F", "MIA - SG,SF,PF", "", [69, 5.68, 12.17, 2.22, 2.86, 2.01, 15.71, 4.77, 2.67, 1.08, 0.96, 1.53], [68, 5.74, 12.07, 1.87, 2.38, 2.03, 15.37, 4.84, 2.68, 1.12, 1.01, 1.51]], ["Donovan Clingan", "C", "POR - C", "", [74, 4.69, 8.88, 1.76, 2.66, 0.92, 11.53, 11.29, 2, 0.62, 1.78, 1.28], [77, 4.62, 8.88, 1.79, 2.64, 1.09, 12.13, 11.58, 2.1, 0.57, 1.69, 1.23]], ["Khaman Maluach", "C", "PHX - C", "", [67, 3.64, 6.61, 1.4, 1.93, 0.38, 9.07, 8.39, 0.59, 0.41, 1.99, 1.35], [46, 1.22, 2.28, 0.48, 0.67, 0.11, 3.02, 2.89, 0.13, 0.11, 0.72, 0.54]], ["Jalen Suggs", "Util", "ORL - PG,SG", "Q", [65, 4.84, 11.17, 1.91, 2.26, 2.03, 13.57, 3.61, 4.42, 1.58, 0.72, 2.41], [57, 4.95, 11.39, 1.75, 2.05, 2.14, 13.79, 3.86, 5.47, 1.84, 0.7, 2.67]], ["Egor Dëmin", "Util", "BKN - PG,SG", "", [72, 4.29, 10.67, 1.42, 1.71, 2.85, 12.43, 3.82, 4, 0.95, 0.39, 1.97], [52, 3.44, 8.63, 1.04, 1.25, 2.38, 10.31, 3.17, 3.33, 0.81, 0.33, 1.65]], ["Tari Eason", "BN", "HOU - SG,SF,PF", "", [66, 4.35, 9.9, 1.04, 1.36, 1.36, 10.43, 6.08, 1.39, 1.27, 0.57, 1.25], [60, 4.02, 9.67, 0.87, 1.12, 1.55, 10.45, 6.27, 1.5, 1.2, 0.47, 1.35]], ["Carter Bryant", "BN", "SAS - SF,PF", "", [72, 2.75, 6.53, 0.75, 1.04, 1.28, 7.53, 4.39, 1.11, 0.56, 0.47, 0.86], [71, 1.52, 3.73, 0.42, 0.59, 0.73, 4.2, 2.51, 0.66, 0.23, 0.32, 0.46]], ["Joan Beringer", "BN", "MIN - PF,C", "", [69, 2.54, 3.7, 1.38, 1.91, 0, 6.45, 4.43, 0.65, 0.65, 1.03, 0.72], [40, 1.63, 2.45, 0.65, 0.93, 0, 3.9, 2.3, 0.3, 0.17, 0.65, 0.28]]]],
+["拿了就起，起了就～駿🏀", [["Ryan Rollins", "PG", "MIL - PG,SG", "", [70, 6.07, 12.87, 1.74, 2.18, 2.17, 15.24, 4.09, 4.87, 1.31, 0.39, 2.37], [74, 6.57, 13.92, 1.69, 2.12, 2.49, 17.31, 4.57, 5.59, 1.49, 0.42, 2.72]], ["Keyonte George", "SG", "UTA - PG,SG", "", [69, 6.16, 14.03, 5.25, 6.02, 2.28, 20, 3.66, 5.99, 1.01, 0.2, 2.97], [54, 7.44, 16.31, 6.24, 7, 2.48, 23.61, 3.69, 6.15, 1.07, 0.26, 3.07]], ["Ja Morant", "G", "POR - PG", "", [65, 6.46, 14.72, 4.71, 5.59, 1.35, 19.51, 3.58, 6.53, 1.04, 0.29, 3.46], [20, 6.6, 16.1, 5.25, 5.85, 1, 19.45, 3.25, 8.05, 1, 0.3, 3.55]], ["Jalen Williams", "SF", "OKC - SF,PF", "", [71, 7.82, 15.73, 3.25, 4.02, 1.43, 20.34, 4.89, 5.19, 1.39, 0.56, 2.02], [33, 6.55, 13.52, 3.27, 3.91, 0.7, 17.06, 4.61, 5.48, 1.18, 0.27, 1.91]], ["Zion Williamson", "PF", "NOP - PF,C", "", [66, 8.73, 14.77, 5.33, 7.6, 0.05, 22.67, 6.03, 4.21, 1.06, 0.66, 2.44], [62, 7.81, 13.02, 5.37, 7.5, 0.02, 21, 5.69, 3.21, 0.97, 0.55, 2.03]], ["Domantas Sabonis", "F", "SAC - PF,C", "Q", [70, 7.33, 12.52, 3.24, 4.43, 0.62, 18.2, 13.44, 6.26, 0.79, 0.45, 2.97], [19, 6.32, 11.63, 2.95, 4.05, 0.26, 15.84, 11.37, 4.11, 0.95, 0.21, 2.68]], ["Rudy Gobert", "C", "MIN - C", "", [73, 4.54, 6.76, 2.4, 4.03, 0, 11.47, 11.31, 1.61, 0.73, 1.61, 1.34], [76, 4.41, 6.46, 2.09, 3.97, 0, 10.91, 11.47, 1.68, 0.76, 1.63, 1.39]], ["Nic Claxton", "C", "CHI - C", "Q", [71, 5.06, 8.56, 1.81, 3.05, 0.06, 11.96, 7.3, 3.24, 0.72, 1.31, 1.37], [69, 4.83, 8.45, 2.04, 3.32, 0.04, 11.74, 6.93, 3.67, 0.65, 1.12, 1.39]], ["Damian Lillard", "Util", "POR - PG", "", [66, 6.3, 14.44, 4.73, 5.14, 2.86, 20.97, 4.77, 5.91, 1.02, 0.19, 2.43], null], ["Klay Thompson", "Util", "MIA - SG,SF", "", [70, 3.95, 9.73, 0.6, 0.76, 2.64, 11.22, 2.19, 1.52, 0.47, 0.29, 1.03], [69, 4.14, 10.55, 0.52, 0.68, 2.93, 11.74, 2.07, 1.39, 0.48, 0.32, 0.91]], ["Jalen Green", "BN", "PHX - SG,SF", "", [69, 7.52, 17.78, 3.01, 3.84, 2.71, 20.58, 4.49, 3.51, 1.05, 0.31, 2.53], [32, 6.75, 16, 2.03, 2.72, 2.22, 17.75, 3.63, 2.84, 1.06, 0.25, 2.25]], ["Jonathan Kuminga", "BN", "MIN - SF,PF", "", [69, 4.89, 10.34, 2.68, 3.85, 0.92, 13.31, 5.15, 2.21, 0.71, 0.4, 1.83], [36, 4.36, 9.42, 2.47, 3.42, 0.97, 12.17, 5.61, 2.31, 0.61, 0.31, 1.86]], ["Ryan Kalkbrenner", "BN", "CHA - C", "", [70, 3.07, 4.12, 1.17, 1.62, 0, 7.07, 5.1, 0.71, 0.45, 1.38, 0.86], [69, 3.17, 4.22, 1.2, 1.68, 0, 7.55, 5.46, 0.78, 0.46, 1.46, 0.9]]]],
+["新中國王", [["Luka Dončić", "PG", "LAL - PG,SG", "", [69, 10.54, 22.29, 7.45, 9.5, 3.78, 32, 8.07, 8.4, 1.59, 0.48, 3.94], [64, 10.83, 22.77, 7.86, 10.08, 3.97, 33.48, 7.73, 8.28, 1.64, 0.53, 3.98]], ["Kevin Porter Jr.", "SG", "MIL - PG,SG", "", [66, 5.1, 11.16, 2.74, 3.24, 0.93, 13.05, 4.1, 5.18, 1.54, 0.34, 2.23], [38, 6.29, 13.53, 3.61, 4.11, 1.21, 17.39, 5.21, 7.37, 2.18, 0.5, 2.89]], ["Mikel Brown Jr.", "G", "BKN - PG", "Q", [73, 5.08, 12.07, 3.34, 4.22, 1.24, 14.89, 3.01, 4.19, 1.21, 0.21, 2.36], null], ["Jayson Tatum", "SF", "BOS - SF,PF", "Q", [71, 8.8, 19.45, 4.92, 6.01, 3.36, 26.5, 8.89, 5.61, 1.09, 0.47, 2.83], [16, 7.38, 17.94, 4.06, 4.94, 2.94, 21.75, 10, 5.31, 1.38, 0.19, 2.44]], ["Naz Reid", "PF", "CHA - PF,C", "", [76, 5.85, 12.83, 1.41, 1.89, 2.44, 15.22, 6.69, 2.35, 0.98, 1.03, 1.69], [77, 5.16, 11.31, 1.17, 1.6, 2.1, 13.58, 6.19, 2.21, 0.99, 1.01, 1.64]], ["AJ Dybantsa", "F", "WAS - SF", "", [75, 6.69, 14.27, 4.36, 5.51, 1.2, 19.1, 5.6, 2.98, 1.02, 0.62, 2.2], null], ["Jakob Poeltl", "C", "TOR - C", "", [65, 4.59, 6.98, 1.33, 2.14, 0, 10.96, 7.67, 2.26, 0.88, 0.96, 1.49], [46, 4.72, 6.74, 1.28, 2.13, 0, 10.72, 7.02, 2.02, 0.87, 0.7, 1.24]], ["Neemias Queta", "C", "BOS - C", "Q", [71, 4.07, 6.25, 1.51, 2.13, 0.01, 9.43, 7.57, 1.45, 0.67, 1.18, 0.95], [76, 4.29, 6.57, 1.62, 2.3, 0.01, 10.21, 8.37, 1.66, 0.79, 1.32, 0.99]], ["Andrew Nembhard", "Util", "IND - PG,SG", "", [70, 4.75, 10.33, 2.11, 2.59, 1.27, 13, 2.99, 6.08, 1.06, 0.12, 2.01], [57, 5.84, 13.21, 3.39, 4.11, 1.88, 16.95, 2.81, 7.67, 0.89, 0.14, 2.4]], ["Keaton Wagler", "Util", "LAC - SG", "", [73, 4.74, 10.33, 2.19, 2.67, 1.19, 13.23, 3.16, 4.04, 1.01, 0.2, 2.06], null], ["Anthony Black", "BN", "ORL - PG,SG,SF", "Q", [71, 5.02, 11.16, 2.61, 3.51, 1.33, 13.35, 3.57, 3.37, 1.33, 0.67, 1.91], [64, 5.39, 12.06, 2.64, 3.61, 1.56, 14.98, 3.81, 3.69, 1.42, 0.7, 2.06]], ["Morez Johnson Jr.", "BN", "DAL - PF", "", [73, 3.57, 6.78, 1.97, 2.64, 0.33, 9.92, 5.42, 1.41, 0.79, 0.98, 1.06], null], ["Pelle Larsson", "BN", "MIA - SG,SF", "Q", [70, 4.03, 8.2, 2.61, 3.31, 0.96, 11.63, 3.47, 3.31, 0.8, 0.27, 1.4], [70, 3.96, 7.99, 2.63, 3.3, 0.89, 11.43, 3.49, 3.37, 0.7, 0.23, 1.44]]]],
+["想你的林", [["Josh Giddey", "PG", "CHI - PG,SG", "", [70, 6.15, 13.58, 3.19, 4.14, 1.88, 17.62, 8.59, 9.22, 1.19, 0.61, 3.63], [54, 5.94, 13.28, 3.22, 4.22, 1.91, 17.02, 8.3, 9.15, 1.02, 0.5, 3.63]], ["Trey Murphy III", "SG", "NOP - SG,SF", "", [69, 7.09, 15.14, 3.39, 3.83, 3.01, 20.29, 5.26, 3.44, 1.25, 0.45, 1.68], [66, 7.48, 15.91, 3.3, 3.73, 3.24, 21.52, 5.71, 3.79, 1.5, 0.36, 1.82]], ["Dyson Daniels", "G", "ATL - SG,SF", "", [74, 5.02, 9.82, 1.01, 1.63, 0.49, 11.64, 6.35, 5.43, 2.15, 0.47, 1.76], [76, 5.29, 10.22, 0.99, 1.61, 0.29, 11.86, 6.84, 5.91, 1.96, 0.41, 1.78]], ["Michael Porter Jr.", "SF", "BKN - SF,PF", "Q", [69, 8, 17.22, 3.24, 3.87, 3.18, 22.03, 6.92, 2.67, 0.96, 0.36, 2.05], [52, 8.54, 18.42, 3.75, 4.37, 3.38, 24.21, 7.06, 3.04, 1.06, 0.25, 2.35]], ["Chet Holmgren", "PF", "OKC - PF,C", "Q", [68, 6.16, 11.49, 3.11, 3.95, 1.37, 16.66, 8.69, 1.91, 0.64, 2.04, 1.59], [69, 6.29, 11.29, 3.26, 4.12, 1.28, 17.12, 8.91, 1.67, 0.62, 1.9, 1.55]], ["OG Anunoby", "F", "NYK - SF,PF", "", [69, 5.9, 12.27, 2.53, 3.09, 2.31, 16.75, 5.15, 2.13, 1.48, 0.77, 1.66], [67, 5.81, 12, 2.73, 3.3, 2.34, 16.69, 5.24, 2.16, 1.55, 0.72, 1.84]], ["Collin Murray-Boyles", "C", "TOR - PF,C", "", [69, 4, 6.86, 1.41, 2.13, 0.3, 9.03, 5.24, 1.94, 0.98, 0.98, 1.15], [57, 3.47, 6, 1.25, 1.89, 0.3, 8.49, 5, 1.86, 0.91, 0.93, 1.04]], ["Bobby Portis Jr.", "C", "MIA - PF,C", "", [67, 5.44, 11.27, 0.87, 1.16, 1.68, 13.22, 6.75, 1.61, 0.64, 0.25, 0.98], [67, 5.46, 11.19, 0.72, 1.01, 2.01, 13.66, 6.39, 1.57, 0.61, 0.18, 0.99]], ["Jeremiah Fears", "Util", "NOP - PG,SG", "", [76, 5.49, 12.66, 2.55, 3.22, 1.24, 14.21, 3.76, 3.45, 1.19, 0.38, 2.2], [82, 5.33, 12.27, 2.37, 3, 1.23, 14.26, 3.66, 3.4, 1.18, 0.37, 2.17]], ["Aday Mara", "Util", "OKC - C", "", [70, 2.09, 3.93, 0.76, 1.29, 0.13, 5.06, 4.8, 1.44, 0.4, 1.11, 0.96], null], ["Hannes Steinbach", "BN", "CHA - PF", "", [73, 2.81, 5.9, 1.27, 1.7, 0.31, 7.26, 4.19, 1.14, 0.64, 0.82, 0.93], null], ["Miles McBride", "BN", "NYK - PG,SG", "", [66, 3.65, 8.68, 0.79, 0.99, 2.21, 10.31, 2.26, 2.45, 0.88, 0.21, 0.66], [41, 4.17, 9.85, 0.9, 1.15, 2.73, 11.98, 2.44, 2.59, 0.85, 0.22, 0.8]], ["Alex Caruso", "BN", "OKC - SG,SF", "", [64, 2.81, 6.46, 0.88, 1.09, 1.23, 7.74, 3.29, 2.55, 1.56, 0.52, 1.0], [56, 2.27, 5.36, 0.73, 0.91, 0.95, 6.21, 2.77, 1.96, 1.29, 0.3, 0.86]], ["Jusuf Nurkić", "IL", "UTA - C", "O", [63, 3.97, 7.96, 1.77, 2.89, 0.52, 10.1, 9.37, 3.62, 1.07, 0.7, 2.15], [41, 4.39, 8.73, 1.51, 2.76, 0.61, 10.9, 10.37, 4.78, 1.27, 0.54, 2.46]]]],
+["欸我姆斯拉", [["Devin Booker", "PG", "PHX - PG,SG", "", [72, 8.83, 18.92, 6.74, 7.64, 2.14, 26.36, 4.14, 6.57, 0.9, 0.28, 2.92], [64, 8.53, 18.72, 7.09, 8.13, 1.91, 26.06, 3.88, 6.03, 0.8, 0.28, 3.14]], ["Austin Reaves", "SG", "LAL - PG,SG,SF", "", [70, 7.38, 15.45, 6.31, 7.25, 2.45, 23, 4.97, 5.7, 1.08, 0.37, 2.86], [51, 7.31, 14.94, 6.33, 7.27, 2.31, 23.27, 4.71, 5.49, 1.1, 0.39, 2.96]], ["Coby White", "G", "CHA - PG,SG", "Q", [72, 6.52, 14.61, 3.64, 4.27, 2.8, 19.69, 3.91, 5.01, 0.71, 0.19, 2.52], [50, 5.56, 12.46, 3.94, 4.82, 2.3, 17.36, 3.4, 4, 0.5, 0.1, 2.56]], ["Kon Knueppel", "SF", "CHA - SG,SF", "Q", [78, 7, 14.85, 2.68, 3.1, 3.63, 19.83, 5.46, 3.62, 0.78, 0.25, 2.17], [81, 6.36, 13.38, 2.41, 2.79, 3.37, 18.49, 5.33, 3.38, 0.7, 0.23, 1.99]], ["Kawhi Leonard", "PF", "TOR - SG,SF,PF", "Q", [64, 8.94, 17.68, 4.38, 4.99, 2.27, 24.68, 6.14, 3.49, 1.66, 0.53, 1.91], [65, 9.77, 19.35, 5.71, 6.4, 2.65, 27.89, 6.35, 3.6, 1.88, 0.42, 2.05]], ["Norman Powell", "F", "CHI - SG,SF", "", [69, 7.44, 15.77, 4.22, 5.13, 2.84, 21.97, 3.44, 2.35, 1.1, 0.26, 1.91], [58, 7.26, 15.43, 4.53, 5.48, 2.69, 21.74, 3.5, 2.47, 1.1, 0.24, 1.91]], ["Jalen Duren", "C", "DET - C", "Q", [73, 7.39, 11.26, 4.56, 6.16, 0, 18.76, 11.35, 2.38, 0.86, 1.05, 2], [70, 7.46, 11.47, 4.59, 6.14, 0, 19.5, 10.53, 1.97, 0.81, 0.84, 1.86]], ["Ivica Zubac", "C", "IND - C", "", [71, 6.24, 10.04, 1.93, 2.8, 0, 14.72, 10.91, 2.25, 0.49, 1.06, 1.5], [48, 6, 10.04, 2.1, 2.96, 0, 14.1, 10.6, 2.19, 0.38, 0.83, 1.79]], ["Cam Spencer", "Util", "MEM - PG,SG", "", [67, 3.37, 7.46, 1.64, 1.79, 1.82, 10.21, 2.49, 5.16, 0.7, 0.15, 1.27], [72, 3.65, 7.72, 1.75, 1.86, 2.03, 11.08, 2.54, 5.56, 0.72, 0.15, 1.29]], ["Kristaps Porziņģis", "Util", "GSW - C", "Q", [61, 5.89, 12.37, 3.92, 4.69, 1.94, 17.72, 5.81, 2.25, 0.7, 1.35, 1.33], [32, 5.41, 12.13, 4.16, 4.94, 1.69, 16.66, 5.22, 2.53, 0.56, 1.19, 1.28]], ["Tre Jones", "BN", "CHI - PG,SG", "Q", [67, 4.27, 7.8, 2.21, 2.62, 0.54, 11.15, 2.73, 4.72, 1, 0.13, 1.16], [65, 5.25, 9.49, 2.94, 3.49, 0.63, 14.06, 3.14, 5.38, 1.17, 0.17, 1.42]], ["Tobias Harris", "BN", "SAS - PF", "Q", [72, 4.86, 10.23, 2.06, 2.38, 1.24, 13.35, 5.33, 2.4, 0.92, 0.57, 1.02], [63, 4.9, 10.46, 2.16, 2.49, 1.3, 13.27, 5.13, 2.49, 0.92, 0.41, 1]], ["Brook Lopez", "BN", "LAC - C", "", [73, 3.52, 7.49, 0.95, 1.18, 1.54, 9.82, 3.9, 1.35, 0.55, 1.46, 0.82], [75, 3.09, 7.23, 0.75, 0.99, 1.52, 8.45, 3.64, 1.29, 0.6, 1.16, 0.81]]]],
+["永保安康", [["Jalen Brunson", "PG", "NYK - PG", "", [73, 9.37, 19.74, 4.95, 5.93, 2.56, 26.28, 3.29, 6.86, 0.87, 0.11, 2.41], [74, 9.31, 19.93, 4.78, 5.69, 2.64, 26.04, 3.34, 6.8, 0.77, 0.11, 2.36]], ["James Harden", "SG", "CLE - PG,SG", "Q", [73, 5.85, 13.82, 5.31, 6.04, 2.72, 19.95, 5, 7.88, 1.2, 0.57, 3.34], [70, 6.96, 16.04, 6.61, 7.49, 3.07, 23.6, 4.8, 7.96, 1.13, 0.4, 3.5]], ["Stephen Curry", "G", "GSW - PG", "Q", [68, 8.41, 18.57, 4.3, 4.65, 4.56, 25.58, 4.13, 5.18, 1.03, 0.39, 2.77], [43, 8.7, 18.58, 4.74, 5.14, 4.42, 26.56, 3.58, 4.72, 1.14, 0.4, 2.81]], ["Keegan Murray", "SF", "SAC - SF,PF", "Q", [72, 5.32, 11.99, 1.14, 1.4, 1.99, 13.56, 6.06, 1.57, 0.9, 1.04, 0.91], [23, 5.48, 13.04, 1.65, 2.13, 1.35, 13.96, 5.74, 1.65, 1.04, 1.57, 1.17]], ["Giannis Antetokounmpo", "PF", "MIA - PF,C", "", [69, 11.6, 18.9, 7.12, 11.08, 0.4, 31.01, 11.15, 6.4, 1.07, 0.9, 3.46], [36, 10.36, 16.61, 6.44, 9.92, 0.42, 27.58, 9.78, 5.44, 0.94, 0.67, 3.19]], ["Kyshawn George", "F", "WAS - SG,SF,PF", "", [69, 4.66, 10.88, 1.89, 2.4, 1.9, 12.85, 4.96, 3.88, 1.02, 0.88, 2.26], [48, 5.27, 12.02, 2.19, 2.73, 2.06, 14.79, 5.1, 4.46, 1, 0.9, 2.6]], ["Isaiah Hartenstein", "C", "OKC - C", "Q", [66, 3.95, 6.49, 1.36, 2.12, 0, 9.4, 9.23, 3.34, 0.96, 0.83, 1.62], [47, 3.91, 6.3, 1.36, 2.23, 0, 9.19, 9.43, 3.53, 1.02, 0.77, 1.74]], ["Oso Ighodaro", "C", "PHX - C", "", [77, 3.18, 4.93, 0.73, 1.52, 0, 6.77, 5.41, 2.27, 0.91, 0.57, 1.32], [82, 2.91, 4.46, 0.65, 1.43, 0, 6.48, 5.1, 2.26, 0.89, 0.7, 1.23]], ["Bennedict Mathurin", "Util", "NOP - SG,SF", "", [69, 4.49, 10.14, 3.71, 4.36, 1.17, 14.52, 4.54, 1.8, 0.61, 0.25, 1.77], [54, 5.39, 12.54, 5.41, 6.22, 1.39, 17.57, 5.43, 2.39, 0.8, 0.24, 2.19]], ["Jerami Grant", "Util", "MEM - SF,PF", "", [67, 5.37, 12.33, 4.11, 5.01, 2.32, 16.93, 3.28, 2.13, 0.73, 0.68, 1.79], [57, 5.81, 12.81, 4.6, 5.65, 2.39, 18.6, 3.47, 2.14, 0.74, 0.63, 2.09]], ["Isaiah Jackson", "BN", "LAC - C", "", [65, 3.02, 4.77, 1.41, 2.16, 0.01, 6.99, 5.45, 1, 0.67, 0.95, 1.06], [55, 2.75, 4.31, 1.24, 1.91, 0, 6.73, 5.27, 0.95, 0.65, 0.89, 1.05]], ["Ben Simmons", "BN", "SAC - PG", "Q", [26, 1.6, 3.02, 0.3, 0.48, 0, 3.5, 3.47, 2.88, 0.52, 0.39, 1.18], null], ["Bilal Coulibaly", "BN", "WAS - SG,SF", "", [66, 3.73, 8.7, 2.04, 2.74, 0.96, 10.07, 3.9, 2.31, 1.14, 0.79, 1.43], [56, 4.11, 9.66, 2.36, 3.16, 1.16, 11.73, 4.34, 2.59, 1.34, 0.96, 1.45]], ["Mark Williams", "IL", "PHX - C", "O", [32, 5.21, 8.25, 2.5, 3.2, 0, 12.59, 8.61, 1.38, 0.82, 0.99, 1.19], [60, 4.7, 7.3, 2.25, 2.92, 0.02, 11.67, 7.95, 0.97, 0.92, 0.92, 1.08]]]],
+["高移肉 想念booker 的第一天", [["Donovan Mitchell", "PG", "CLE - PG,SG", "", [71, 9.15, 19.68, 4.89, 5.76, 3.27, 26.61, 4.81, 5.59, 1.56, 0.3, 2.59], [70, 9.69, 20.04, 5.31, 6.14, 3.2, 27.89, 4.51, 5.69, 1.49, 0.29, 2.83]], ["Tyrese Haliburton", "SG", "IND - PG,SG", "", [68, 6.5, 13.8, 2.56, 3.01, 2.82, 18.43, 3.61, 9.47, 1.26, 0.65, 1.83], null], ["Desmond Bane", "G", "ORL - SG,SF", "", [72, 7.33, 15.29, 3.5, 3.89, 2.27, 20.13, 4.63, 4.46, 1.1, 0.47, 2.23], [82, 7.11, 14.7, 3.83, 4.22, 2.04, 20.09, 4.12, 4.12, 1.05, 0.45, 2]], ["Lauri Markkanen", "SF", "UTA - SF,PF", "Q", [70, 7.97, 17.28, 4.77, 5.36, 2.87, 23.23, 7.14, 1.87, 0.9, 0.47, 1.45], [42, 9.14, 19.17, 5.71, 6.38, 2.74, 26.74, 6.88, 2.12, 1, 0.5, 1.5]], ["DeMar DeRozan", "PF", "DEN - SF,PF", "", [76, 5.68, 11.66, 3.99, 4.63, 0.66, 16.16, 2.83, 3.49, 0.74, 0.3, 1.07], [77, 6.48, 13.05, 4.86, 5.6, 0.61, 18.43, 2.94, 4.1, 1.04, 0.3, 1.25]], ["Jaime Jaquez Jr.", "F", "MIL - SG,SF,PF", "", [74, 5.75, 11.24, 2.18, 2.8, 0.84, 14.27, 4.8, 4.25, 0.78, 0.25, 1.61], [75, 6.19, 12.2, 2.21, 2.88, 0.77, 15.36, 5, 4.69, 0.68, 0.28, 2.03]], ["Onyeka Okongwu", "C", "ATL - C", "", [72, 5.69, 11.55, 2.2, 2.9, 1.74, 14.86, 7.8, 2.87, 1.06, 1.08, 1.54], [74, 5.58, 11.62, 2.07, 2.73, 1.95, 15.18, 7.59, 3.12, 1.11, 1.07, 1.72]], ["Jarrett Allen", "C", "CLE - C", "", [71, 6.08, 9.21, 2.92, 4.05, 0, 15.09, 9.59, 2.06, 0.92, 0.95, 1.34], [56, 6.02, 9.43, 3.3, 4.66, 0.02, 15.36, 8.5, 1.79, 0.98, 0.84, 1.34]], ["Ayo Dosunmu", "Util", "MIN - PG,SG", "", [73, 5.85, 11.58, 1.77, 2.06, 1.74, 14.97, 3.61, 3.84, 0.95, 0.33, 1.5], [69, 5.59, 10.83, 1.84, 2.1, 1.78, 14.81, 3.43, 3.61, 0.84, 0.26, 1.39]], ["Ace Bailey", "Util", "UTA - SF,PF", "", [73, 5.48, 12.35, 1.07, 1.41, 1.89, 13.9, 4.32, 1.9, 0.89, 0.7, 1.53], [72, 5.49, 12.39, 0.92, 1.22, 1.9, 13.79, 4.19, 1.82, 0.83, 0.68, 1.49]], ["Draymond Green", "BN", "GSW - PF,C", "Q", [67, 3.02, 7, 1.07, 1.53, 1.23, 8.28, 5.75, 5.39, 1.08, 0.75, 2.49], [68, 3.01, 7.22, 0.87, 1.24, 1.49, 8.38, 5.51, 5.53, 0.9, 0.62, 2.66]], ["Jaylon Tyson", "BN", "CLE - SG,SF,PF", "", [67, 4.44, 9.28, 1.1, 1.48, 1.71, 11.55, 4.72, 1.7, 0.77, 0.35, 1.2], [66, 5, 10.15, 1.2, 1.62, 2.02, 13.21, 5.12, 2.23, 0.82, 0.42, 1.5]], ["Scoot Henderson", "BN", "POR - PG", "", [68, 4.75, 11, 2.53, 3.1, 1.71, 13.3, 2.81, 3.87, 0.94, 0.36, 1.89], [30, 4.77, 11.4, 2.8, 3.33, 1.9, 14.23, 2.67, 3.73, 0.9, 0.3, 2.43]], ["Donte DiVincenzo", "IL", "MIN - SG,SF", "O", [13, 3.39, 8.17, 0.74, 0.98, 2.4, 9.71, 3.09, 2.92, 0.99, 0.29, 1.13], [82, 4.13, 10.18, 0.95, 1.28, 2.98, 12.2, 4.1, 3.82, 1.27, 0.41, 1.44]], ["Max Strus", "IL", "LAC - SF,PF", "O", [67, 3.71, 8.6, 0.77, 0.95, 2.23, 10.15, 4.35, 3.01, 0.65, 0.27, 1.12], [12, 3.92, 8.83, 0.58, 0.75, 2.75, 11.17, 5.42, 2, 0.25, 0, 0.75]]]],
+["石", [["Anthony Edwards", "PG", "MIN - PG,SG", "", [74, 9.9, 20.94, 5.83, 7.19, 3.56, 29.09, 5.47, 3.92, 1.31, 0.75, 3.01], [61, 9.87, 20.18, 5.7, 7.16, 3.36, 28.8, 4.95, 3.7, 1.36, 0.8, 2.85]], ["Aaron Nesmith", "SG", "IND - SG,SF", "", [67, 4.55, 9.77, 1.72, 2.02, 2.06, 12.76, 4.07, 1.52, 0.76, 0.5, 1.04], [45, 4.71, 11.38, 2.04, 2.47, 2.33, 13.8, 4.16, 1.91, 0.58, 0.51, 1.4]], ["Kyrie Irving", "G", "DAL - PG", "", [61, 8.47, 17.65, 3.22, 3.53, 2.76, 23.37, 4.5, 4.62, 1.2, 0.45, 1.89], null], ["Herbert Jones", "SF", "NOP - SG,SF", "", [66, 3.31, 8.17, 1.11, 1.35, 1.32, 8.97, 3.34, 2.67, 1.5, 0.51, 1.28], [56, 3.27, 8.54, 0.89, 1.11, 1.43, 8.86, 3.39, 2.77, 1.57, 0.48, 1.3]], ["Gui Santos", "PF", "GSW - SF,PF", "Q", [69, 2.67, 5.61, 1.01, 1.41, 1.01, 7.24, 4.46, 2.22, 0.79, 0.25, 1.18], [68, 3.38, 6.76, 1.28, 1.76, 1.15, 9.19, 3.91, 2.34, 0.9, 0.32, 1.5]], ["Anthony Davis", "F", "WAS - PF,C", "", [63, 8.43, 16.03, 4.74, 6.02, 0.5, 22.26, 11.03, 3.11, 1.08, 2.02, 2.05], [20, 8.45, 16.7, 2.95, 4.05, 0.5, 20.35, 11.05, 2.8, 1.1, 1.65, 2.05]], ["Joel Embiid", "C", "PHI - C", "", [54, 8.6, 17.57, 7.47, 8.65, 1.3, 26.04, 7.94, 4.07, 0.64, 1.19, 2.84], [38, 8.97, 18.34, 7.53, 8.82, 1.39, 26.87, 7.71, 3.95, 0.55, 1.21, 2.87]], ["Alex Sarr", "C", "WAS - C", "Q", [69, 6.48, 13.81, 2.22, 3.2, 1.23, 16.12, 7.23, 2.68, 0.86, 1.86, 1.77], [48, 6.58, 13.67, 2.1, 3.04, 1.04, 16.31, 7.4, 2.71, 0.81, 1.98, 1.71]], ["Daniel Gafford", "Util", "DAL - C", "", [67, 4.03, 5.84, 1.94, 2.84, 0, 9.69, 6.44, 1.2, 0.63, 1.46, 1.01], [55, 3.76, 5.75, 2, 2.93, 0, 9.53, 6.87, 1.05, 0.76, 1.25, 1.15]], ["Tyler Herro", "Util", "MIL - PG,SG", "", [68, 8.1, 17.16, 3.92, 4.38, 3.01, 22.71, 4.96, 4.73, 0.79, 0.26, 2.27], [33, 7.48, 15.61, 3, 3.27, 2.55, 20.52, 4.79, 4.12, 0.7, 0.36, 1.94]], ["Keldon Johnson", "BN", "SAS - SF,PF", "", [77, 5.07, 10.29, 2, 2.55, 1.22, 12.67, 4.89, 1.62, 0.57, 0.19, 0.98], [82, 5.05, 9.72, 1.88, 2.37, 1.21, 13.18, 5.37, 1.35, 0.56, 0.13, 0.85]], ["Kelly Oubre Jr.", "BN", "IND - SF,PF", "", [69, 4.47, 9.62, 1.97, 2.6, 1.19, 11.8, 4.42, 1.36, 1.07, 0.46, 1.08], [50, 5.08, 10.88, 2.22, 2.9, 1.72, 14.1, 5.04, 1.6, 1.36, 0.48, 1.38]], ["Sam Merrill", "BN", "CLE - SG,SF", "", [64, 3.44, 7.82, 0.81, 0.92, 2.58, 10.27, 2.4, 2.02, 0.66, 0.11, 0.69], [52, 4.29, 9.31, 1.13, 1.33, 3.04, 12.75, 2.56, 2.4, 0.63, 0.13, 0.81]], ["Jimmy Butler III", "IL", "GSW - SF,PF", "O", [41, 5.54, 10.94, 5.75, 6.75, 0.74, 17.93, 4.71, 4.77, 1.33, 0.27, 1.41], [38, 6.32, 12.16, 6.53, 7.55, 0.84, 20, 5.55, 4.87, 1.45, 0.21, 1.58]]]],
+["老蔡水煎包", [["Shai Gilgeous-Alexander", "PG", "OKC - PG", "", [75, 10.75, 20.13, 7.76, 8.76, 1.71, 31.09, 4.69, 6.33, 1.63, 0.86, 2.29], [68, 10.75, 19.43, 7.94, 9.03, 1.69, 31.13, 4.29, 6.59, 1.4, 0.76, 2.22]], ["Cade Cunningham", "SG", "DET - PG,SG", "", [70, 8.98, 19.47, 4.76, 5.78, 2.05, 24.78, 5.83, 9.63, 1.33, 0.8, 3.93], [64, 8.56, 18.58, 4.84, 5.97, 1.95, 23.92, 5.55, 9.91, 1.44, 0.84, 3.69]], ["Brandin Podziemski", "G", "GSW - PG,SG", "Q", [78, 4.87, 10.82, 2.05, 2.62, 1.94, 13.68, 5.44, 3.83, 1.16, 0.2, 1.58], [82, 4.8, 10.56, 2.34, 2.94, 1.87, 13.82, 5.11, 3.71, 1.07, 0.18, 1.6]], ["Zaccharie Risacher", "SF", "DAL - SF,PF", "", [69, 3.91, 8.49, 1.07, 1.57, 1.54, 10.43, 3.78, 1.21, 0.89, 0.53, 1], [67, 3.64, 8, 0.87, 1.34, 1.42, 9.57, 3.84, 1.13, 0.88, 0.54, 0.87]], ["Cameron Boozer", "PF", "MEM - PF", "", [74, 6.72, 13.56, 3.78, 4.87, 0.79, 17.85, 8.2, 3.17, 1.01, 0.78, 2.41], null], ["Sandro Mamukelashvili", "F", "LAL - PF,C", "", [74, 4.34, 9.05, 1.61, 2.16, 1.92, 12.2, 5.92, 2.18, 0.77, 0.36, 1.43], [80, 4.13, 7.89, 1.48, 1.98, 1.44, 11.16, 4.94, 1.89, 0.8, 0.51, 0.84]], ["Aaron Gordon", "C", "DEN - PF,C", "", [68, 5.5, 10.63, 3.09, 3.99, 1.52, 15.41, 5.53, 3.03, 0.52, 0.33, 1.29], [36, 5.5, 11.06, 3.47, 4.53, 1.69, 16.17, 5.81, 2.67, 0.58, 0.28, 1.06]], ["Marvin Bagley III", "C", "DEN - PF,C", "", [60, 3.62, 6.06, 1.44, 2.08, 0.29, 8.58, 5.06, 1.11, 0.39, 0.51, 0.72], [60, 4.23, 6.85, 1.58, 2.4, 0.4, 10.45, 6.1, 1.42, 0.47, 0.72, 1.02]], ["Darius Acuff Jr.", "Util", "SAC - PG", "", [75, 6.13, 14.04, 3.57, 4.36, 1.6, 17.59, 3.42, 5.68, 1.1, 0.32, 2.82], null], ["Julian Champagnie", "Util", "SAS - SF,PF", "", [80, 3.5, 8.13, 1.27, 1.48, 2.15, 10.01, 4.75, 1.42, 0.7, 0.46, 0.78], [82, 3.67, 8.4, 1.39, 1.65, 2.38, 11.11, 5.77, 1.55, 0.76, 0.46, 0.84]], ["Will Riley", "BN", "WAS - SF,PF", "", [70, 2.93, 6.06, 1.59, 2, 1.03, 8.47, 2.36, 1.24, 0.27, 0.14, 0.7], [74, 3.66, 8.35, 1.95, 2.43, 1.05, 10.32, 2.86, 1.97, 0.73, 0.12, 1.27]], ["Deandre Ayton", "BN", "WAS - C", "", [67, 4.67, 7.69, 0.94, 1.38, 0.03, 10.28, 7.13, 0.91, 0.53, 0.73, 1.12], [72, 5.6, 8.35, 1.26, 1.96, 0, 12.46, 7.99, 0.82, 0.57, 0.97, 1.15]], ["Dennis Schröder", "BN", "CHA - PG,SG", "", [72, 3.35, 7.82, 1.82, 2.22, 1.2, 9.95, 2.24, 3.93, 0.61, 0.33, 1.42], [70, 3.64, 8.99, 2.44, 2.93, 1.07, 10.8, 2.71, 4.87, 0.79, 0.16, 1.77]]]],
+["金采源老公", [["Zach LaVine", "PG", "SAC - PG,SG,SF", "", [66, 6.68, 13.52, 2.89, 3.41, 2.56, 19.14, 3.49, 3.16, 0.7, 0.2, 2.19], [39, 6.72, 14.03, 3.21, 3.64, 2.54, 19.18, 2.77, 2.28, 0.72, 0.26, 1.9]], ["Deni Avdija", "SG", "POR - SG,SF,PF", "", [73, 6.82, 14.51, 6.47, 8.16, 1.8, 22.08, 7.16, 5.88, 0.85, 0.6, 3.37], [66, 7.45, 16.12, 7.41, 9.24, 1.89, 24.21, 6.88, 6.7, 0.77, 0.62, 3.83]], ["Ausar Thompson", "G", "DET - SG,SF,PF", "", [70, 4.59, 8.74, 1.63, 2.78, 0.15, 10.61, 5.98, 3.11, 1.99, 1, 1.6], [73, 4.15, 7.9, 1.49, 2.62, 0.08, 9.88, 5.73, 3.12, 2, 0.95, 1.51]], ["Mikal Bridges", "SF", "NYK - SF,PF", "", [81, 6.02, 12.36, 1.12, 1.36, 1.94, 15.1, 3.64, 3.61, 1.15, 0.67, 1.26], [82, 5.76, 11.74, 0.99, 1.2, 1.9, 14.4, 3.8, 3.71, 1.3, 0.76, 1.01]], ["Karl-Anthony Towns", "PF", "NYK - PF,C", "", [72, 7.51, 14.73, 4.58, 5.38, 1.76, 21.32, 11.48, 3.86, 0.89, 0.63, 2.56], [75, 6.89, 13.76, 4.76, 5.55, 1.51, 20.05, 11.85, 3.01, 0.87, 0.53, 2.49]], ["Toumani Camara", "F", "POR - SF,PF", "", [75, 4.19, 9.39, 1.13, 1.57, 1.99, 11.39, 5.18, 2.09, 1.19, 0.51, 1.47], [82, 4.78, 10.87, 1.18, 1.67, 2.67, 13.41, 5.13, 2.45, 1.15, 0.43, 1.76]], ["Pascal Siakam", "C", "IND - PF,C", "", [73, 8.59, 16.83, 3.55, 4.95, 1.53, 22.14, 6.93, 3.81, 0.96, 0.46, 1.76], [62, 9.02, 18.63, 4.23, 6.1, 1.69, 23.95, 6.63, 3.81, 1.11, 0.4, 2.23]], ["Maxime Raynaud", "C", "SAC - C", "", [74, 5.09, 8.92, 1.7, 2.18, 0.32, 12.22, 7.2, 1.26, 0.5, 0.51, 1.2], [74, 5.18, 9.07, 1.78, 2.27, 0.32, 12.46, 7.51, 1.35, 0.51, 0.53, 1.27]], ["Julius Randle", "Util", "BKN - PF", "", [73, 7.38, 15.65, 4.74, 5.94, 1.48, 20.59, 7.31, 4.83, 0.77, 0.21, 2.95], [79, 7.34, 15.28, 5.04, 6.28, 1.38, 21.1, 6.73, 5.04, 1.09, 0.23, 2.75]], ["Jaden McDaniels", "Util", "MIN - SF", "", [75, 5.56, 11, 2.1, 2.54, 1.36, 14.42, 4.67, 2.61, 1.17, 0.96, 1.59], [73, 5.71, 11.08, 2.01, 2.41, 1.41, 14.85, 4.25, 2.73, 1.11, 1, 1.79]], ["Cason Wallace", "BN", "OKC - PG,SG,SF", "", [75, 3.31, 7.44, 0.62, 0.77, 1.22, 8.15, 3.01, 2.4, 1.8, 0.4, 0.86], [77, 3.27, 7.58, 0.71, 0.88, 1.31, 8.57, 3.09, 2.6, 1.95, 0.36, 0.95]], ["Yaxel Lendeborg", "BN", "GSW - PF", "Q", [73, 4.12, 8.65, 2.1, 2.67, 0.7, 10.73, 5.25, 2.16, 0.95, 0.82, 1.33], null], ["Cameron Johnson", "BN", "DEN - SF,PF", "", [66, 4.56, 9.52, 1.87, 2.18, 2.12, 13.35, 3.96, 2.6, 0.78, 0.41, 1.09], [54, 4.22, 8.8, 1.74, 2.07, 2.04, 12.22, 3.81, 2.44, 0.74, 0.39, 0.87]], ["Shaedon Sharpe", "IL", "POR - PG,SG", "O", [27, 6.39, 14.15, 2.54, 3.23, 1.69, 16.36, 3.66, 2.23, 0.96, 0.12, 2.12], [50, 7.84, 17.36, 3.1, 3.94, 2.06, 20.84, 4.34, 2.64, 1.4, 0.12, 2.94]]]],
+["坂木老大：賣全身球員求合成", [["Amen Thompson", "PG", "HOU - PG,SG", "", [76, 6.89, 12.75, 3.77, 4.91, 0.33, 17.42, 7.67, 4.95, 1.52, 0.81, 2.23], [79, 7.05, 13.22, 3.85, 4.94, 0.32, 18.27, 7.77, 5.32, 1.51, 0.61, 2.41]], ["Stephon Castle", "SG", "SAS - PG,SG", "", [73, 6.13, 13.07, 4.5, 6.11, 1.32, 17.91, 5.34, 7.07, 1.23, 0.31, 3.18], [68, 5.66, 12.01, 4.15, 5.65, 1.19, 16.66, 5.32, 7.38, 1.15, 0.28, 3.19]], ["VJ Edgecombe", "G", "PHI - PG,SG", "", [74, 5.86, 13.32, 2, 2.46, 1.88, 15.39, 5.69, 4.16, 1.43, 0.52, 1.8], [75, 6.01, 13.73, 1.97, 2.41, 1.99, 15.99, 5.64, 4.2, 1.43, 0.52, 1.83]], ["Jalen Johnson", "SF", "ATL - SF,PF", "Q", [71, 8.33, 16.97, 4.22, 5.37, 1.62, 22.14, 10.06, 7.58, 1.29, 0.55, 3.22], [72, 8.33, 17.06, 4.18, 5.31, 1.67, 22.51, 10.28, 7.86, 1.24, 0.43, 3.39]], ["LeBron James", "PF", "PHI - SF,PF", "", [66, 7.58, 14.68, 3.43, 4.53, 1.55, 20.62, 6.31, 6.82, 1.01, 0.53, 2.95], [60, 7.88, 15.32, 3.88, 5.27, 1.28, 20.93, 6.07, 7.2, 1.2, 0.58, 2.98]], ["Quentin Grimes", "F", "LAL - SG,SF", "", [73, 5.28, 11.61, 2.6, 3.24, 2.12, 14.75, 4, 3.25, 0.97, 0.36, 1.91], [75, 4.53, 10.07, 2.65, 3.16, 1.69, 13.41, 3.64, 3.25, 0.85, 0.37, 1.77]], ["Walker Kessler", "C", "LAL - C", "Q", [67, 5.29, 7.99, 2.04, 3.55, 0.27, 12.38, 11.93, 1.7, 0.73, 2.5, 1.58], [5, 5.2, 7.4, 2.8, 4, 1.2, 14.4, 10.8, 3, 1.4, 1.8, 3.2]], ["Nikola Vučević", "C", "ORL - C", "", [72, 4.62, 9.21, 0.92, 1.14, 0.98, 11.24, 6.38, 2.2, 0.52, 0.49, 0.98], [64, 6.16, 12.48, 1.2, 1.45, 1.56, 15.08, 8.39, 3.33, 0.61, 0.64, 1.33]], ["Collin Gillespie", "Util", "PHX - PG,SG", "", [73, 4.14, 9.87, 0.9, 1.04, 2.52, 11.14, 3.72, 4.15, 1.16, 0.19, 1.32], [80, 4.4, 10.53, 0.95, 1.09, 2.9, 12.65, 4.09, 4.64, 1.24, 0.2, 1.56]], ["Moussa Diabaté", "Util", "CHA - C", "", [70, 2.9, 4.69, 1.44, 2.21, 0.01, 6.84, 7.61, 1.61, 0.67, 0.84, 0.98], [73, 3.14, 4.97, 1.59, 2.41, 0.01, 7.88, 8.7, 1.93, 0.77, 0.99, 1]], ["Steven Adams", "BN", "HOU - C", "", [58, 1.5, 2.95, 1.01, 1.7, 0, 3.74, 5.44, 1.27, 0.44, 0.41, 0.86], [32, 2.19, 4.34, 1.47, 2.53, 0, 5.84, 8.63, 1.5, 0.69, 0.63, 1.09]], ["Mitchell Robinson", "BN", "BOS - C", "Q", [64, 2.82, 4, 0.81, 1.94, 0, 6.48, 9.76, 0.95, 1.05, 1.34, 0.8], [60, 2.48, 3.43, 0.7, 1.72, 0, 5.67, 8.75, 0.87, 0.93, 1.17, 0.68]], ["Jrue Holiday", "BN", "POR - PG,SG", "", [69, 4.57, 10.05, 1.13, 1.32, 1.83, 11.78, 4.16, 4.35, 0.91, 0.31, 1.76], [53, 6.04, 13.38, 1.66, 1.98, 2.58, 16.32, 4.62, 6.08, 1.02, 0.11, 2.75]]]]
+];
+const MKT={"Tyrese Maxey":[8,100],"Darryn Peterson":[114,80],"LaMelo Ball":[23,100],"Matas Buzelis":[64,91],"Derik Queen":[100,86],"Josh Hart":[98,85],"Zach Edey":[66,91],"Kel'el Ware":[74,90],"Day'Ron Sharpe":[90,82],"Fred VanVleet":[150,42],"Rui Hachimura":[119,39],"Jalen Smith":[165,7],"Naji Marshall":[197,9],"Trae Young":[18,99],"N. Alexander-Walker":[58,94],"Darius Garland":[53,94],"Dillon Brooks":[140,35],"John Collins":[97,69],"Jabari Smith Jr.":[96,80],"Evan Mobley":[27,99],"Myles Turner":[118,76],"CJ McCollum":[106,74],"Ty Jerome":[88,70],"Miles Bridges":[101,80],"RJ Barrett":[132,69],"GG Jackson":[221,4],"Brandon Ingram":[83,91],"De'Aaron Fox":[70,90],"Jaylen Brown":[47,100],"Collin Sexton":[205,16],"Franz Wagner":[50,96],"Kyle Filipowski":[204,12],"Grayson Allen":[177,18],"Nikola Jokić":[1,100],"Alperen Şengün":[22,100],"Jake LaRavia":[164,7],"Noah Clowney":[232,3],"Nikola Jović":[235,2],"Paul Reed":[181,15],"Jordan Poole":[190,8],"Reed Sheppard":[141,40],"Cooper Flagg":[11,100],"Immanuel Quickley":[87,85],"Peyton Watson":[120,67],"Saddiq Bey":[151,36],"Victor Wembanyama":[2,100],"Adem Bona":[284,3],"Payton Pritchard":[80,90],"Scotty Pippen Jr.":[166,12],"Christian Braun":[155,27],"Davion Mitchell":[112,58],"Dylan Cardwell":[202,4],"Brayden Burries":[242,7],"Y. Konan Niederhäuser":[425,6],"Jamal Murray":[17,100],"Kevin Durant":[14,100],"Cedric Coward":[75,86],"Brandon Miller":[35,98],"Jaren Jackson Jr.":[40,97],"Caleb Wilson":[82,89],"Yves Missi":[131,15],"Wendell Carter Jr.":[125,37],"Paolo Banchero":[51,98],"Paul George":[76,90],"Ajay Mitchell":[126,29],"P.J. Washington":[137,29],"Devin Vassell":[163,36],"Derrick White":[39,98],"Dylan Harper":[85,90],"Dejounte Murray":[57,92],"Scottie Barnes":[15,100],"Bam Adebayo":[26,100],"Andrew Wiggins":[91,82],"Donovan Clingan":[44,98],"Khaman Maluach":[113,55],"Jalen Suggs":[95,75],"Egor Dëmin":[143,26],"Tari Eason":[159,19],"Carter Bryant":[385,2],"Joan Beringer":[182,8],"Ryan Rollins":[60,91],"Keyonte George":[46,96],"Ja Morant":[94,88],"Jalen Williams":[37,99],"Zion Williamson":[81,92],"Domantas Sabonis":[34,99],"Rudy Gobert":[78,91],"Nic Claxton":[110,83],"Damian Lillard":[67,93],"Klay Thompson":[213,14],"Jalen Green":[122,80],"Jonathan Kuminga":[136,28],"Ryan Kalkbrenner":[246,5],"Luka Dončić":[3,100],"Kevin Porter Jr.":[128,41],"Mikel Brown Jr.":[157,13],"Jayson Tatum":[7,100],"Naz Reid":[65,94],"AJ Dybantsa":[93,90],"Jakob Poeltl":[117,46],"Neemias Queta":[107,65],"Andrew Nembhard":[111,65],"Keaton Wagler":[203,20],"Anthony Black":[148,35],"Morez Johnson Jr.":[214,9],"Pelle Larsson":[153,12],"Josh Giddey":[19,99],"Trey Murphy III":[28,99],"Dyson Daniels":[62,93],"Michael Porter Jr.":[61,94],"Chet Holmgren":[31,100],"OG Anunoby":[69,94],"Collin Murray-Boyles":[102,67],"Bobby Portis Jr.":[172,19],"Jeremiah Fears":[185,33],"Aday Mara":[248,14],"Miles McBride":[194,4],"Alex Caruso":[200,9],"Jusuf Nurkić":[115,67],"Devin Booker":[24,100],"Austin Reaves":[21,100],"Coby White":[86,87],"Kon Knueppel":[63,97],"Kawhi Leonard":[36,100],"Norman Powell":[89,87],"Jalen Duren":[32,99],"Ivica Zubac":[54,93],"Cam Spencer":[226,6],"Kristaps Porziņģis":[154,53],"Tre Jones":[138,17],"Tobias Harris":[158,17],"Brook Lopez":[171,12],"Jalen Brunson":[29,100],"James Harden":[33,99],"Stephen Curry":[25,100],"Keegan Murray":[99,60],"Giannis Antetokounmpo":[6,100],"Kyshawn George":[121,59],"Isaiah Hartenstein":[104,74],"Oso Ighodaro":[178,8],"Bennedict Mathurin":[160,17],"Jerami Grant":[168,15],"Isaiah Jackson":[169,9],"Ben Simmons":[227,7],"Bilal Coulibaly":[208,6],"Mark Williams":[206,23],"Donovan Mitchell":[13,100],"Tyrese Haliburton":[10,100],"Desmond Bane":[48,97],"Lauri Markkanen":[30,99],"DeMar DeRozan":[142,62],"Jaime Jaquez Jr.":[135,68],"Onyeka Okongwu":[49,95],"Jarrett Allen":[72,92],"Ayo Dosunmu":[108,70],"Ace Bailey":[147,29],"Draymond Green":[152,28],"Jaylon Tyson":[231,4],"Scoot Henderson":[180,8],"Donte DiVincenzo":[252,7],"Max Strus":[228,6],"Anthony Edwards":[9,100],"Aaron Nesmith":[156,15],"Kyrie Irving":[41,98],"Herbert Jones":[162,17],"Gui Santos":[149,13],"Anthony Davis":[45,99],"Joel Embiid":[52,97],"Alex Sarr":[56,92],"Daniel Gafford":[130,30],"Tyler Herro":[68,93],"Keldon Johnson":[212,9],"Kelly Oubre Jr.":[179,14],"Sam Merrill":[270,2],"Jimmy Butler III":[145,53],"Shai Gilgeous-Alexander":[4,100],"Cade Cunningham":[5,100],"Brandin Podziemski":[105,67],"Zaccharie Risacher":[273,6],"Cameron Boozer":[55,94],"Sandro Mamukelashvili":[129,39],"Aaron Gordon":[124,63],"Marvin Bagley III":[245,2],"Darius Acuff Jr.":[127,69],"Julian Champagnie":[173,16],"Will Riley":[224,2],"Deandre Ayton":[187,13],"Dennis Schröder":[188,6],"Zach LaVine":[103,79],"Deni Avdija":[42,98],"Ausar Thompson":[73,89],"Mikal Bridges":[79,90],"Karl-Anthony Towns":[16,100],"Toumani Camara":[109,69],"Pascal Siakam":[59,96],"Maxime Raynaud":[161,26],"Julius Randle":[71,93],"Jaden McDaniels":[92,88],"Cason Wallace":[123,43],"Yaxel Lendeborg":[133,52],"Cameron Johnson":[146,21],"Shaedon Sharpe":[218,11],"Amen Thompson":[20,99],"Stephon Castle":[77,95],"VJ Edgecombe":[84,92],"Jalen Johnson":[12,100],"LeBron James":[43,99],"Quentin Grimes":[134,32],"Walker Kessler":[38,99],"Nikola Vučević":[167,25],"Collin Gillespie":[116,29],"Moussa Diabaté":[144,21],"Steven Adams":[397,1],"Mitchell Robinson":[176,19],"Jrue Holiday":[139,28],"Hannes Steinbach":[260,5]};
+
+const CATS=[
+ {k:"fg",l:"FG%",pct:true},{k:"ft",l:"FT%",pct:true},{k:"tpm",l:"3PM"},{k:"pts",l:"PTS"},{k:"reb",l:"REB"},
+ {k:"ast",l:"AST"},{k:"stl",l:"STL"},{k:"blk",l:"BLK"},{k:"to",l:"TO",low:true}];
+const IDX={gp:0,fgm:1,fga:2,ftm:3,fta:4,tpm:5,pts:6,reb:7,ast:8,stl:9,blk:10,to:11};
+const PREV={"pr":{"諸葛衛冕村夫":[3,2],"乂唯一珍❤️杰西卡乂":[10,10],"大小小丑與他的歡樂同伴們":[14,12],"南方勇者北伐🧔‍♂️七崩賢":[8,9],"天母羅斯":[4,4],"CrocoCroco":[5,7],"拿了就起，起了就～駿🏀":[11,13],"新中國王":[13,14],"想你的林":[12,8],"欸我姆斯拉":[2,1],"永保安康":[15,16],"高移肉 想念booker 的第一天":[1,3],"石":[6,5],"老蔡水煎包":[16,15],"金采源老公":[7,6],"坂木老大：賣全身球員求合成":[9,11]},"ls":{"諸葛衛冕村夫":[13,9],"乂唯一珍❤️杰西卡乂":[7,10],"大小小丑與他的歡樂同伴們":[12,13],"南方勇者北伐🧔‍♂️七崩賢":[5,6],"天母羅斯":[6,4],"CrocoCroco":[9,8],"拿了就起，起了就～駿🏀":[14,15],"新中國王":[16,16],"想你的林":[11,11],"欸我姆斯拉":[1,2],"永保安康":[10,12],"高移肉 想念booker 的第一天":[3,3],"石":[2,1],"老蔡水煎包":[15,14],"金采源老公":[8,5],"坂木老大：賣全身球員求合成":[4,7]}};
+// 8x8 pixel emblems
+const EMB={
+"石":["00111100","01111110","11101111","11111101","11011111","11111111","01111110","00000000"],
+"乂唯一珍❤️杰西卡乂":["01100110","11111111","11111111","11111111","01111110","00111100","00011000","00000000"],
+"大小小丑與他的歡樂同伴們":["10000001","11000011","01100110","00111100","01111110","11111111","10100101","00000000"],
+"南方勇者北伐🧔‍♂️七崩賢":["00000011","00000111","00001110","00011100","10111000","01110000","01100000","10010000"],
+"天母羅斯":["00111000","01101100","01111100","00111000","00010000","01011000","00110000","00010000"],
+"CrocoCroco":["00000000","11110000","10011111","11111111","10101010","11111111","01111110","00000000"],
+"拿了就起，起了就～駿🏀":["00111100","01011010","10011001","11111111","10011001","01011010","00111100","00000000"],
+"新中國王":["00000000","10011001","10111101","11111111","11111111","01111110","01111110","00000000"],
+"想你的林":["00011000","00111100","01111110","00111100","01111110","11111111","00011000","00011000"],
+"欸我姆斯拉":["00011000","00011000","11111111","01111110","00111100","01100110","11000011","00000000"],
+"永保安康":["11111111","10011001","10011001","11111111","10011001","01011010","00111100","00011000"],
+"高移肉 想念booker 的第一天":["00000110","00001111","00011111","00111110","01111100","01111000","10000000","11000000"],
+"老蔡水煎包":["00011000","00100100","01011010","10100101","11111111","11111111","01111110","00000000"],
+"金采源老公":["00111100","01000010","00111100","01100110","11000011","11000011","01100110","00111100"],
+"諸葛衛冕村夫":["10101010","11111110","01111100","00111000","00010000","00010000","00010000","00111000"],
+"坂木老大：賣全身球員求合成":["01100110","11000011","11000011","11000011","11000011","01100110","01100110","00000000"]};
+function emblem(name,size=20){const b=EMB[name];if(!b)return "";let r="";b.forEach((row,y)=>[...row].forEach((c,x)=>{if(c==="1")r+=`<rect x="${x}" y="${y}" width="1" height="1"/>`}));return `<svg class="emb" width="${size}" height="${size}" viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true">${r}</svg>`}
+
+let state={src:"pr",punt:false,sort:{k:"ovr",dir:1},team:ME,opp:null};
+try{const s=JSON.parse(localStorage.getItem("lp-state2")||"null");if(s)state={...state,...s};}catch(e){}
+function save(){try{localStorage.setItem("lp-state2",JSON.stringify({src:state.src,punt:state.punt,team:state.team,opp:state.opp}))}catch(e){}}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+const f1=x=>x.toFixed(1), f3=x=>x.toFixed(3).replace(/^0/,"");
+const SI=()=>state.src==="pr"?4:5;
+const active=p=>p[1]!=="IL";
+
+function compute(data=DATA){
+  const si=SI();
+  return data.map(team=>{
+    const t={fgm:0,fga:0,ftm:0,fta:0,tpm:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0};let n=0,miss=0;
+    team[1].forEach(p=>{if(!active(p))return;const s=p[si];if(!s){miss++;return;}n++;for(const k in t)t[k]+=s[IDX[k]];});
+    const v={fg:t.fga?t.fgm/t.fga:0,ft:t.fta?t.ftm/t.fta:0,tpm:t.tpm,pts:t.pts,reb:t.reb,ast:t.ast,stl:t.stl,blk:t.blk,to:t.to};
+    return {name:team[0],ps:team[1],v,n,miss};
+  });
+}
+function rankAll(rows){
+  CATS.forEach(c=>{[...rows].sort((a,b)=>c.low?a.v[c.k]-b.v[c.k]:b.v[c.k]-a.v[c.k]).forEach((r,i)=>{(r.r=r.r||{})[c.k]=i+1})});
+  rows.forEach(r=>{r.avg=CATS.reduce((a,c)=>a+r.r[c.k],0)/9;r.avgNA=CATS.filter(c=>c.k!=="ast").reduce((a,c)=>a+r.r[c.k],0)/8;});
+  [["avg","ovr9"],["avgNA","ovrNA"]].forEach(([k,n])=>[...rows].sort((a,b)=>a[k]-b[k]).forEach((r,i)=>r[n]=i+1));
+  rows.forEach(r=>{r.ovr=state.punt?r.ovrNA:r.ovr9;r.avgUse=state.punt?r.avgNA:r.avg;});
+}
+// player value (z-score sum vs all active rostered players)
+function playerValues(){
+  const si=SI(),pool=[];DATA.forEach(t=>t[1].forEach(p=>{if(active(p)&&p[si])pool.push(p[si])}));
+  const sum=(f)=>pool.reduce((a,s)=>a+f(s),0);
+  const lfg=sum(s=>s[1])/sum(s=>s[2]),lft=sum(s=>s[3])/sum(s=>s[4]);
+  const raw=s=>({fg:s[1]-lfg*s[2],ft:s[3]-lft*s[4],tpm:s[5],pts:s[6],reb:s[7],ast:s[8],stl:s[9],blk:s[10],to:-s[11]});
+  const R=pool.map(raw),mu={},sd={};
+  CATS.forEach(c=>{const a=R.map(r=>r[c.k]);mu[c.k]=a.reduce((x,y)=>x+y,0)/a.length;sd[c.k]=Math.sqrt(a.reduce((x,y)=>x+(y-mu[c.k])**2,0)/a.length)||1});
+  return s=>{if(!s)return null;const r=raw(s);return CATS.reduce((a,c)=>a+(state.punt&&c.k==="ast"?0:(r[c.k]-mu[c.k])/sd[c.k]),0)};
+}
+const tier=n=>n<=4?"h1":n<=8?"h2":n<=12?"h3":"h4";
+function rk(n){return `<span class="rk ${n<=3?"top":n>=14?"low":""}">${n}</span>`}
+const fmt=(c,v)=>c.pct?f3(v):f1(v);
+const visCats=()=>CATS.filter(c=>!(state.punt&&c.k==="ast"));
+
+function renderLeague(rows){
+  const s=state.sort,cats=visCats();
+  if(state.punt&&s.k==="ast")state.sort={k:"ovr",dir:1};
+  const key=r=>s.k==="ovr"?r.ovr:r.r[s.k];
+  const list=[...rows].sort((a,b)=>(key(a)-key(b))*s.dir||a.ovr-b.ovr);
+  const th=(k,l)=>`<th scope="col" class="sortable ${s.k===k?"sorted":""}" data-k="${k}" tabindex="0" aria-sort="${s.k===k?(s.dir===1?"ascending":"descending"):"none"}">${l}</th>`;
+  let h=`<thead><tr><th scope="col" class="name">TEAM</th>${th("ovr",state.punt?"不算AST":"9項綜合")}${cats.map(c=>th(c.k,c.l)).join("")}</tr></thead><tbody>`;
+  list.forEach(r=>{
+    const me=r.name===ME,prev=(PREV[state.src][r.name]||[])[state.punt?1:0];
+    const d=prev?prev-r.ovr:0;
+    const dl=d>0?`<span class="delta up">${d}</span>`:d<0?`<span class="delta dn">${-d}</span>`:`<span class="delta">–</span>`;
+    h+=`<tr class="${me?"me":""}"><td class="name"><span class="tn">${emblem(r.name)}<span>${esc(r.name)}</span>${me?'<span class="tag">1P</span>':""}</span></td>
+    <td><div class="cell"><span class="ovr">${r.ovr}</span>${dl}<span class="pos">平均第 ${f1(r.avgUse)}</span></div></td>
+    ${cats.map(c=>`<td class="${tier(r.r[c.k])}"><div class="cell"><span>${fmt(c,r.v[c.k])}</span>${rk(r.r[c.k])}</div></td>`).join("")}</tr>`;
+  });
+  document.getElementById("league").innerHTML=h+"</tbody>";
+  const missT=rows.reduce((a,r)=>a+r.miss,0);
+  document.getElementById("league-note").textContent=
+    "數字是全隊（不含 IL）每場數據加總。♛ 前 3 名、☠ 第 14–16 名；格子越深名次越前（1–4、5–8、9–12、13–16 四階）。點欄位標題可排序。"
+    +(state.src==="ls"?` 上季版有 ${missT} 位球員沒有上季數據，不計入加總。`:"");
+  document.querySelectorAll("#league th.sortable").forEach(el=>{
+    const go=()=>{const k=el.dataset.k;state.sort=state.sort.k===k?{k,dir:-state.sort.dir}:{k,dir:1};render();};
+    el.onclick=go;el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};
+  });
+}
+
+function renderVS(rows){
+  const sel=document.getElementById("opp");
+  const others=rows.filter(r=>r.name!==ME).sort((a,b)=>a.ovr-b.ovr);
+  if(!state.opp||!others.find(r=>r.name===state.opp))state.opp=others[0].name;
+  sel.innerHTML=others.map(r=>`<option value="${esc(r.name)}" ${r.name===state.opp?"selected":""}>#${r.ovr} ${esc(r.name)}</option>`).join("");
+  const A=rows.find(r=>r.name===ME),B=rows.find(r=>r.name===state.opp);
+  let w=0,l=0,t=0;
+  const rowsH=CATS.map(c=>{
+    const a=A.v[c.k],b=B.v[c.k];const eq=Math.abs(a-b)<1e-9;
+    const aw=!eq&&(c.low?a<b:a>b);if(eq)t++;else if(aw)w++;else l++;
+    const mx=Math.max(a,b)||1,mn=Math.min(a,b);
+    let pa,pb;if(c.pct){const lo=mn-0.03;pa=(a-lo)/(mx-lo)*100;pb=(b-lo)/(mx-lo)*100;}else{pa=a/mx*100;pb=b/mx*100;}
+    const pun=state.punt&&c.k==="ast";
+    return `<div class="vs-row ${eq?"":aw?"win-l":"win-r"} ${pun?"punted":""}"><span class="val l">${fmt(c,a)}</span><div class="vs-bar l"><i style="width:${pa.toFixed(0)}%"></i></div><span class="cat">${c.l}${c.low?"↓":""}</span><div class="vs-bar r"><i style="width:${pb.toFixed(0)}%"></i></div><span class="val r">${fmt(c,b)}</span></div>`;
+  }).join("");
+  const verdict=w>l?"WIN":w<l?"LOSE":"DRAW";
+  document.getElementById("vs-top").innerHTML=`<div class="vs-side">${emblem(ME,40)}<span class="nm">${esc(ME)} <span class="tag">1P</span></span></div>
+    <div class="vs-score">${w} : ${l}${t?`<small>平手 ${t} 項</small>`:""}<small>預測 ${verdict}</small></div>
+    <div class="vs-side">${emblem(B.name,40)}<span class="nm">${esc(B.name)}</span></div>`;
+  document.getElementById("vs-rows").innerHTML=rowsH;
+  sel.onchange=()=>{state.opp=sel.value;save();render();};
+}
+
+function hpBar(v){
+  if(v==null)return '<span class="dash">—</span>';
+  const max=8,c=Math.max(-max,Math.min(max,v)),half=48;
+  const w=Math.abs(c)/max*50;
+  const style=c>=0?`left:50%;width:${w}%`:`right:50%;width:${w}%`;
+  return `<span class="hp"><span class="hp-track"><span class="hp-fill ${c<0?"neg":""}" style="${style}"></span><span class="hp-mid" style="left:calc(50% - 1px)"></span></span><span class="hp-num">${v>0?"+":""}${v.toFixed(1)}</span></span>`;
+}
+
+function renderTeams(rows){
+  const pk=document.getElementById("picker");
+  const order=[...rows].sort((a,b)=>a.name===ME?-1:b.name===ME?1:a.ovr-b.ovr);
+  pk.innerHTML=order.map(r=>`<button class="menu-btn" type="button" data-t="${esc(r.name)}" aria-pressed="${r.name===state.team}">${emblem(r.name,16)}<span class="t">${esc(r.name)}</span>${r.name===ME?'<span class="tag">1P</span>':""}</button>`).join("");
+  pk.querySelectorAll("button").forEach(b=>b.onclick=()=>{state.team=b.dataset.t;save();render();});
+  if(!rows.find(r=>r.name===state.team))state.team=ME;
+  const r=rows.find(x=>x.name===state.team),si=SI(),val=playerValues();
+  const body=r.ps.map(p=>{
+    const s=p[si],out=!active(p);
+    const badge=out?'<span class="badge b-il">IL</span>':p[3]==="Q"?'<span class="badge">Q</span>':"";
+    const cells=s?[`${f3(s[2]?s[1]/s[2]:0)}<span class="pos">${f1(s[1])}/${f1(s[2])}</span>`,`${f3(s[4]?s[3]/s[4]:0)}<span class="pos">${f1(s[3])}/${f1(s[4])}</span>`,f1(s[5]),f1(s[6]),f1(s[7]),f1(s[8]),f1(s[9]),f1(s[10]),f1(s[11])]:Array(9).fill('<span class="dash">—</span>');
+    const keep=CATS.map((c,i)=>state.punt&&c.k==="ast"?null:cells[i]).filter(x=>x!==null);
+    return `<tr class="${out?"out":""}"><td class="name"><span class="slot">${esc(p[1])}</span><span class="pname">${esc(p[0])}</span>${badge}${p[2]?`<span class="pos" style="padding-left:36px">${esc(p[2])}</span>`:""}</td><td>${hpBar(val(s))}</td><td>${s?s[0]:'<span class="dash">—</span>'}</td>${keep.map(c=>`<td>${c}</td>`).join("")}</tr>`;
+  }).join("");
+  const cats=visCats();
+  const tot=`<tr class="total"><td class="name">球隊每場加總（${r.n} 人）</td><td></td><td></td>${cats.map(c=>`<td>${fmt(c,r.v[c.k])}</td>`).join("")}</tr>
+    <tr class="ranks"><td class="name" style="color:var(--mid)">16 隊排名</td><td></td><td></td>${cats.map(c=>`<td class="${tier(r.r[c.k])}">${rk(r.r[c.k])}</td>`).join("")}</tr>`;
+  document.getElementById("team").innerHTML=`<article class="team" style="display:flex;flex-direction:column;gap:8px">
+    <div class="team-head"><h3>${emblem(r.name,28)}${esc(r.name)}${r.name===ME?'<span class="tag">1P</span>':""}</h3><span class="summary">${state.punt?"不算 AST":"9 項綜合"}第 ${r.ovr}</span></div>
+    <div class="scroll"><table><thead><tr><th class="name" scope="col">PLAYER</th><th scope="col">價值</th><th scope="col">GP</th>${cats.map(c=>`<th scope="col">${c.l}</th>`).join("")}</tr></thead><tbody>${body}${tot}</tbody></table></div></article>`;
+}
+
+function render(){
+  const rows=compute();rankAll(rows);renderVS(rows);renderTrade(rows);renderLeague(rows);renderTeams(rows);
+  const set=(id,on)=>document.getElementById(id).setAttribute("aria-pressed",on);
+  set("src-pr",state.src==="pr");set("src-ls",state.src==="ls");set("mode-9",!state.punt);set("mode-p",state.punt);
+}
+document.getElementById("src-pr").onclick=()=>{state.src="pr";save();render()};
+document.getElementById("src-ls").onclick=()=>{state.src="ls";save();render()};
+document.getElementById("mode-9").onclick=()=>{state.punt=false;save();render()};
+document.getElementById("mode-p").onclick=()=>{state.punt=true;save();render()};
+
+// splash: once per session, auto-dismiss
+(function(){
+  const sp=document.getElementById("splash");let seen=false;
+  try{seen=sessionStorage.getItem("lp-splash")==="1";sessionStorage.setItem("lp-splash","1");}catch(e){seen=true;}
+  if(seen||matchMedia("(prefers-reduced-motion: reduce)").matches)return;
+  sp.hidden=false;const close=()=>{sp.classList.add("gone");setTimeout(()=>sp.hidden=true,400);document.removeEventListener("keydown",close);};
+  sp.onclick=close;document.addEventListener("keydown",close);setTimeout(close,1400);
+})();
+
+// ---------- TRADE MACHINE ----------
+const FA={"Matisse Thybulle":["Matisse Thybulle","BN","LAL - SG,SF","",[55,2.06,4.82,0.54,0.71,1.26,5.91,2.23,1.21,1.92,0.61,0.81],null],
+"Isaiah Joe":["Isaiah Joe","BN","DET - SG,SF","",[73,3.49,7.75,1.23,1.4,2.49,10.57,2.55,1.44,0.69,0.19,0.62],[71,3.55,7.79,1.18,1.34,2.53,11.08,2.48,1.34,0.68,0.2,0.6]]};
+const tm={give:[],get:[],opp:null,fill:""};
+const mval=n=>{const m=MKT[n]||[260,3];return .7*100*Math.exp(-(m[0]-1)/70)+.3*m[1]};
+const pkg=list=>list.reduce((a,n)=>a+Math.pow(mval(n),1.4),0);
+const actCount=(team,names)=>names.filter(n=>{const p=DATA.find(t=>t[0]===team)[1].find(p=>p[0]===n);return p&&p[1]!=="IL"}).length;
+const findP=(team,n)=>DATA.find(t=>t[0]===team)[1].find(p=>p[0]===n);
+function vfunc(){const v=playerValues(),si=SI();return p=>{const s=p&&p[si];const x=v(s);return x==null?null:x*Math.min(s[0],72)/72}}
+
+function simulate(give,get,opp,fill){
+  const data=DATA.map(t=>[t[0],t[1].slice()]);
+  const me=data.find(t=>t[0]===ME)[1],ot=data.find(t=>t[0]===opp)[1];
+  const take=(arr,n)=>{const i=arr.findIndex(p=>p[0]===n);return i<0?null:arr.splice(i,1)[0]};
+  const g1=give.map(n=>take(me,n)).filter(Boolean),g2=get.map(n=>take(ot,n)).filter(Boolean);
+  me.push(...g2);ot.push(...g1);
+  const val=vfunc();let dropped=[],added=[];
+  const trim=(arr,k)=>{const out=[];for(let i=0;i<k;i++){const act=arr.filter(p=>p[1]!=="IL");act.sort((a,b)=>(val(a)??-99)-(val(b)??-99));const w=act[0];arr.splice(arr.indexOf(w),1);out.push(w[0]);}return out};
+  const actN=a=>a.filter(p=>p[1]!=="IL").length;const diff=actN(g1)-actN(g2);
+  if(diff<0)dropped=trim(me,-diff);
+  if(diff>0&&fill&&FA[fill]){me.push(FA[fill]);added.push(fill);}
+  if(diff>0)trim(ot,diff);
+  const rows=compute(data);rankAll(rows);
+  return {rows,dropped,added};
+}
+// baseline for 2-for-1 comparisons: just pick up the FA (drop my lowest-value active player), no trade
+function baseWithFill(fill){
+  const data=DATA.map(t=>[t[0],t[1].slice()]);const me=data.find(t=>t[0]===ME)[1];const val=vfunc();
+  const act=me.filter(p=>p[1]!=="IL").sort((a,b)=>(val(a)??-99)-(val(b)??-99));me.splice(me.indexOf(act[0]),1);me.push(FA[fill]);
+  const rows=compute(data);rankAll(rows);return {rows,dropped:act[0][0]};
+}
+function judge(give,get,opp,fill,base){
+  const sim=simulate(give,get,opp,fill);
+  const b0=base.find(r=>r.name===ME),o0=base.find(r=>r.name===opp);
+  const b1=sim.rows.find(r=>r.name===ME),o1=sim.rows.find(r=>r.name===opp);
+  const val=vfunc();
+  const vGive=give.reduce((a,n)=>a+(val(findP(ME,n))||0),0),vGet=get.reduce((a,n)=>a+(val(findP(opp,n))||0),0);
+  const fair=pkg(give)/Math.max(pkg(get),1);
+  let sc=fair>=1.05?2:fair>=0.95?1.5:fair>=0.8?0.5:-1;
+  const od=o0.ovr-o1.ovr; sc+=od>0?1:od<-1?-1:0;
+  const acc=sc>=2.5?"高":sc>=1.5?"中":"低";
+  return {sim,b0,b1,o0,o1,vGain:vGet-vGive,fair,acc,myAvg:b0.avgUse-b1.avgUse,oppAvg:o0.avgUse-o1.avgUse};
+}
+
+function initTrade(){
+  document.getElementById("tm-opp").onchange=e=>{tm.opp=e.target.value;tm.get=[];render();};
+  document.getElementById("tm-fill").onchange=e=>{tm.fill=e.target.value;render();};
+  document.getElementById("tm-clear").onclick=()=>{tm.give=[];tm.get=[];render();};
+  document.getElementById("as-go").onclick=autoScout;
+}
+function itemList(team,sel,elId){
+  const val=vfunc(),el=document.getElementById(elId);
+  const ps=DATA.find(t=>t[0]===team)[1];
+  el.innerHTML=ps.map(p=>{const v=val(p),m=MKT[p[0]]||[260,3],on=sel.includes(p[0]);
+    return `<button type="button" class="tm-item ${p[1]==="IL"?"il":""}" aria-pressed="${on}" data-n="${esc(p[0])}"><span class="bx"></span><span class="nm">${esc(p[0])}${p[1]==="IL"?' <span class="badge b-il">IL</span>':""}</span><span class="meta">價值 ${v==null?"—":(v>0?"+":"")+v.toFixed(1)}<br>排名 ${m[0]} · ${m[1]}%</span></button>`}).join("");
+  el.querySelectorAll(".tm-item").forEach(b=>b.onclick=()=>{const n=b.dataset.n,i=sel.indexOf(n);if(i>=0)sel.splice(i,1);else if(sel.length<3)sel.push(n);render();});
+}
+const sgn=x=>(x>0?"+":"")+x.toFixed(1);
+function moveTxt(a,b){const d=a-b;return d>0?`<span class="pos-up">${d}</span>`:d<0?`<span class="pos-dn">${-d}</span>`:"–"}
+function renderTrade(rows){
+  const others=rows.filter(r=>r.name!==ME).map(r=>r.name);
+  if(!tm.opp||!others.includes(tm.opp))tm.opp=others[0];
+  const so=document.getElementById("tm-opp");
+  so.innerHTML=others.map(n=>`<option value="${esc(n)}" ${n===tm.opp?"selected":""}>${esc(n)}</option>`).join("");
+  document.getElementById("tm-fill").value=tm.fill;
+  itemList(ME,tm.give,"tm-give");itemList(tm.opp,tm.get,"tm-get");
+  const ss=document.getElementById("as-sell");const cur=ss.value;
+  ss.innerHTML='<option value="">任何球員</option>'+DATA.find(t=>t[0]===ME)[1].map(p=>`<option value="${esc(p[0])}">${esc(p[0])}</option>`).join("");ss.value=cur;
+  const out=document.getElementById("tm-result");
+  if(!tm.give.length||!tm.get.length){out.innerHTML='<p class="tm-empty">▶ 左邊選你要送出的球員，右邊選對象和要換回的球員，就會顯示分析結果。</p>';return;}
+  const spare=actCount(ME,tm.give)-actCount(tm.opp,tm.get);const useFB=tm.fill&&spare>0;const FB=useFB?baseWithFill(tm.fill):null;
+  const J=judge(tm.give,tm.get,tm.opp,tm.fill,useFB?FB.rows:rows);
+  const pos=Math.max(0,Math.min(100,(J.fair-0.5)*100));
+  const paper=J.fair>=1.05?"對方帳面賺":J.fair>=0.95?"帳面公平":"對方帳面虧";
+  const good=J.myAvg>0.05;
+  const verdict=good&&J.acc==="高"?"強力推薦：你變強，對方也容易接受。":good&&J.acc==="中"?"值得一試：你變強，對方可能要再談。":good?"你會變強，但對方大概不會接受，需要加碼或換對象。":J.acc==="高"?"不建議：對方會接受，但你沒有變強。":"不建議：對你沒幫助。";
+  const cats=visCats();
+  const cRow=(lab,r0,r1)=>`<tr><td class="name">${lab}</td>${cats.map(c=>{const a=r0.r[c.k],b=r1.r[c.k];return `<td class="${tier(b)}">${b}<span class="delta">${a===b?"–":moveTxt(a,b)}</span></td>`}).join("")}</tr>`;
+  const extra=[J.sim.dropped.length?`你需要釋出：${J.sim.dropped.map(esc).join("、")}（隊上價值最低）`:"",J.sim.added.length?`空位補上：${J.sim.added.map(esc).join("、")}`:"",(spare>0&&!tm.fill)?"⚠ 2 換 1 會空出名單位，記得補人（上方可選 FA 模擬）":"",useFB?`比較基準：不交易、只用 ${esc(FB.dropped)} 換撿 ${esc(tm.fill)} 的陣容，這樣名次變化只反映交易本身。`:""].filter(Boolean).map(x=>`<p class="note">${x}</p>`).join("");
+  out.innerHTML=`<div class="tm-verdict"><b>RESULT</b>${verdict}</div>
+  <div class="tm-grid">
+    <div class="tm-card"><span class="k">你的名次（${state.punt?"不算 AST":"9 項"}）</span><span class="v">${J.b0.ovr} → ${J.b1.ovr} ${moveTxt(J.b0.ovr,J.b1.ovr)}</span><span class="s">平均名次 ${f1(J.b0.avgUse)} → ${f1(J.b1.avgUse)}</span></div>
+    <div class="tm-card"><span class="k">對方名次</span><span class="v">${J.o0.ovr} → ${J.o1.ovr} ${moveTxt(J.o0.ovr,J.o1.ovr)}</span><span class="s">${esc(tm.opp)}</span></div>
+    <div class="tm-card"><span class="k">你的數據價值淨增</span><span class="v">${sgn(J.vGain)}</span><span class="s">z 分數，已依出賽場次打折</span></div>
+    <div class="tm-card"><span class="k">公平度（對方角度）</span><span class="v">${Math.round(J.fair*100)}% · ${paper}</span><div class="meter"><i style="left:calc(${pos}% - 2px)"></i></div><div class="meter-l"><span>對方虧</span><span>公平</span><span>對方賺</span></div></div>
+    <div class="tm-card"><span class="k">成交機率</span><span class="v">${J.acc}</span><span class="s">帳面公平度＋對方名次變化</span></div>
+  </div>${extra}
+  <div class="scroll"><table><thead><tr><th class="name">各項名次</th>${cats.map(c=>`<th>${c.l}</th>`).join("")}</tr></thead><tbody>${cRow("石（交易後）",J.b0,J.b1)}${cRow(esc(tm.opp)+"（交易後）",J.o0,J.o1)}</tbody></table></div>`;
+}
+
+async function autoScout(){
+  const sell=document.getElementById("as-sell").value,type=document.getElementById("as-type").value;
+  const st=document.getElementById("as-status"),out=document.getElementById("as-out");
+  const base=compute();rankAll(base);const base2=baseWithFill("Matisse Thybulle").rows;
+  const mine=DATA.find(t=>t[0]===ME)[1].map(p=>p[0]);
+  const gives=[];
+  if(type!=="2")(sell?[sell]:mine).forEach(n=>gives.push([n]));
+  if(type!=="1")for(let i=0;i<mine.length;i++)for(let j=i+1;j<mine.length;j++){const g=[mine[i],mine[j]];if(!sell||g.includes(sell))gives.push(g);}
+  const targets=[];DATA.forEach(t=>{if(t[0]!==ME)t[1].forEach(p=>{if(p[1]!=="IL")targets.push([t[0],p[0]])})});
+  const res=[];let done=0;const total=gives.length*targets.length;
+  for(const g of gives){
+    for(const [team,n] of targets){
+      const fair=pkg(g)/Math.max(pkg([n]),1);done++;
+      if(fair<0.95||fair>1.6)continue;
+      const sp=actCount(ME,g)-actCount(team,[n])>0;const J=judge(g,[n],team,sp?"Matisse Thybulle":"",sp?base2:base);
+      if(J.o0.ovr-J.o1.ovr<-1)continue;
+      if(J.myAvg<=0.05)continue;
+      res.push({g,team,n,J});
+    }
+    st.textContent=`搜尋中… ${Math.round(done/total*100)}%`;await new Promise(r=>setTimeout(r,0));
+  }
+  res.sort((a,b)=>b.J.myAvg-a.J.myAvg||b.J.vGain-a.J.vGain);
+  const top=res.slice(0,8);
+  st.textContent=top.length?`找到 ${res.length} 個可行方案，顯示前 ${top.length} 個（依你的平均名次提升排序；2 換 1 是跟「不交易、只撿 Thybulle」比較）。`:"找不到符合條件的交易。可以換一位要賣的球員，或改成「兩種都找」。";
+  out.innerHTML=top.map((x,i)=>`<div class="as-row"><span class="n">${i+1}</span><span class="d">${x.g.map(esc).join(" ＋ ")} → ${esc(x.n)}<small>${esc(x.team)} · 你的名次 ${x.J.b0.ovr}→${x.J.b1.ovr}（平均 ${sgn(x.J.myAvg)}）· 價值 ${sgn(x.J.vGain)} · 公平度 ${Math.round(x.J.fair*100)}% · 成交 ${x.J.acc}</small></span><button class="pxbtn" type="button" data-i="${i}">套用</button></div>`).join("");
+  out.querySelectorAll("button").forEach(b=>b.onclick=()=>{const x=top[+b.dataset.i];tm.give=[...x.g];tm.get=[x.n];tm.opp=x.team;tm.fill=actCount(ME,x.g)-actCount(x.team,[x.n])>0?"Matisse Thybulle":"";render();document.getElementById("h-trade").scrollIntoView({behavior:"smooth"});});
+}
+
+initTrade();
+render();
+</script>
+
+</body>
+</html>

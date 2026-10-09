@@ -173,6 +173,8 @@ select{font-family:var(--f-dot);font-size:16px;background:var(--lcd);color:var(-
 .upd kbd{font-family:var(--f-dot);border:2px solid var(--mid);padding:0 4px}
 .upd textarea{font-family:var(--f-dot);font-size:14px;width:100%;background:var(--lcd);color:var(--ink);border:3px solid var(--ink);padding:6px 8px;resize:vertical}
 a.pxbtn{display:inline-block;text-decoration:none}
+.chk{display:inline-flex;align-items:center;gap:6px;font-size:15px;cursor:pointer}
+.chk input{accent-color:var(--ink);width:16px;height:16px;margin:0}
 @media (max-width:560px){
   .vs-row{grid-template-columns:44px 1fr 40px 1fr 44px;font-size:13px;gap:5px}
   .hp-track{width:64px}
@@ -280,6 +282,33 @@ a.pxbtn{display:inline-block;text-decoration:none}
     <p class="note">市場價值 = 季前排名分數 × 70% ＋ Yahoo 持有率 × 30%；多人打包時，單一好球員權重較高（避免 2 個普通球員就換到明星）。數據價值會依預測出賽場次打折。名次模擬沿用聯盟表的算法（各項名次平均）。</p>
   </section>
 
+  <section aria-labelledby="h-fa">
+    <h2 id="h-fa">FA MACHINE FA 分析器</h2>
+    <p class="note" id="fa-warn"></p>
+    <div class="tm">
+      <div class="tm-opts">
+        <label for="fa-add" class="tm-label">撿進來的 FA</label>
+        <select id="fa-add"></select>
+        <label for="fa-drop" class="tm-label">丟掉的球員</label>
+        <select id="fa-drop"></select>
+      </div>
+      <p class="note" id="fa-roster"></p>
+      <div id="fa-result" class="tm-result"></div>
+    </div>
+    <h3 class="tm-h3">AUTO PICKUP 自動推薦</h3>
+    <div class="tm">
+      <div class="tm-opts">
+        <label class="chk"><input type="checkbox" id="fa-nowaiver">排除 waiver</label>
+        <label class="chk"><input type="checkbox" id="fa-noout" checked>排除缺陣（O）</label>
+        <label class="tm-label" for="fa-pos">位置</label>
+        <select id="fa-pos"><option value="">全部</option><option>PG</option><option>SG</option><option>SF</option><option>PF</option><option>C</option></select>
+        <button class="pxbtn" id="fa-go" type="button">▶ 搜尋</button>
+      </div>
+      <p class="note" id="fa-status">每位 FA 都跟你隊上每一位可以丟的人配一次（名單有空位時也試「不丟人」），列出讓你平均名次進步最多的前 10 位。</p>
+      <div id="fa-out" class="as-out"></div>
+    </div>
+    <p class="note">名次用跟聯盟表一樣的算法（非 IL 球員場均加總、各項名次平均），只有你的隊伍改變。FA 依目前數據來源的價值排序，括號裡是價值。不檢查先發位置，也不考慮出賽場次。</p>
+  </section>
   <section aria-labelledby="h-league">
     <h2 id="h-league">LEAGUE STANDINGS 聯盟排名</h2>
     <p class="note" id="league-note"></p>

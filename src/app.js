@@ -145,7 +145,7 @@ function renderTeams(rows){
 }
 
 function render(){
-  const rows=compute();rankAll(rows);renderVS(rows);renderTrade(rows);renderLeague(rows);renderTeams(rows);
+  const rows=compute();rankAll(rows);renderVS(rows);renderTrade(rows);renderFA(rows);renderLeague(rows);renderTeams(rows);
   const set=(id,on)=>document.getElementById(id).setAttribute("aria-pressed",on);
   set("src-pr",state.src==="pr");set("src-ls",state.src==="ls");set("src-cur",state.src==="cur");set("mode-9",!state.punt);set("mode-p",state.punt);
 }

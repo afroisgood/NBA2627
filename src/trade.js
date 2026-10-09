@@ -126,6 +126,3 @@ async function autoScout(){
   out.querySelectorAll("button").forEach(b=>b.onclick=()=>{const x=top[+b.dataset.i];tm.give=[...x.g];tm.get=[x.n];tm.opp=x.team;tm.fill=actCount(ME,x.g)-actCount(x.team,[x.n])>0?fa:"";render();document.getElementById("h-trade").scrollIntoView({behavior:"smooth"});});
 }
 
-initTrade();
-render();
-initImport();

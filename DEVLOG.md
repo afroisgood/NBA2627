@@ -20,9 +20,11 @@ Yahoo Fantasy Basketball 聯盟「杰西卡的AI實驗室」（聯盟 ID **1031*
 
 ```
 fantasy-power-table/
+├── index.html           ← GitHub Pages 首頁，自動轉到 league-power.html
+├── league-power.html    ← GitHub Pages 實際顯示的網頁＝dist/league-power.html 的複本（build.py 會自動更新）
 ├── DEVLOG.md            ← 本文件
 ├── CLAUDE.md            ← 給 Claude Code 的簡短指引
-├── build.py             ← 把 src/ 組成 dist/ 的兩個 HTML
+├── build.py             ← 把 src/ 組成 dist/ 的兩個 HTML，並更新根目錄 league-power.html
 ├── src/
 │   ├── layout.html      ← <title>、字型、CSS、頁面骨架（沒有 <html>/<head>/<body>）
 │   ├── data.js          ← ME（自己隊名）＋ DATA（16 隊名單與每位球員數據）

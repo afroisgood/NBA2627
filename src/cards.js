@@ -66,6 +66,55 @@ function pixAvatar(name,size=40){
     r+=`<rect x="${x}" y="${y}" width="1" height="1"/><rect x="${7-x}" y="${y}" width="1" height="1"/>`;}
   return `<svg class="pav" width="${size}" height="${size}" viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true">${r}</svg>`;
 }
+// ---------- 球員照片頭像：ESPN 大頭照 → 24×24 的四階 LCD 點陣；沒有編號或抓不到就用上面的圖案 ----------
+const PHOTO_N=24,PIDS=IMP&&IMP.IDS?IMP.IDS:{};
+const PHOTO={},photoStat={ok:0,fail:0};   // PHOTO[編號]：點陣圖的 data URL，抓不到是 "fail"，載入中是 "wait"
+const photoURL=id=>`https://a.espncdn.com/i/headshots/nba/players/full/${id}.png`;
+// rgba 像素 → 每格明暗等級 0（最暗）～3，透明的是 −1；先把亮度拉滿 0～255，再用 4×4 網點（Bayer）分成四階
+const BAYER=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
+function lcdLevels(rgba,w,h){
+  const L=[];let lo=255,hi=0;
+  for(let i=0;i<w*h;i++){if(rgba[i*4+3]<128){L.push(-1);continue;}const y=.299*rgba[i*4]+.587*rgba[i*4+1]+.114*rgba[i*4+2];L.push(y);if(y<lo)lo=y;if(y>hi)hi=y;}
+  const span=Math.max(1,hi-lo);
+  return L.map((y,i)=>{if(y<0)return -1;const d=(BAYER[(Math.floor(i/w)%4)*4+i%w%4]+.5)/16-.5;return Math.max(0,Math.min(3,Math.round((y-lo)/span*3+d*.9)))});
+}
+function photoFrom(img){
+  const c=document.createElement("canvas");c.width=c.height=PHOTO_N;const g=c.getContext("2d");
+  // ESPN 大頭照是 350×254 的橫圖，臉在上方中間：取中間偏上的正方形
+  const side=img.naturalHeight*.86,sx=(img.naturalWidth-side)/2;
+  g.imageSmoothingQuality="high";g.drawImage(img,sx,0,side,side,0,0,PHOTO_N,PHOTO_N);
+  const lv=lcdLevels(g.getImageData(0,0,PHOTO_N,PHOTO_N).data,PHOTO_N,PHOTO_N);   // 照片網站不允許讀取時這裡會出錯 → 算失敗
+  const css=getComputedStyle(document.documentElement),pal=["--ink","--lo","--lcd-3","--lcd"].map(k=>css.getPropertyValue(k).trim());
+  const out=g.createImageData(PHOTO_N,PHOTO_N),hex=s=>[1,3,5].map(i=>parseInt(s.slice(i,i+2),16));
+  lv.forEach((l,i)=>{if(l<0)return;const [r,gg,b]=hex(pal[l]);out.data.set([r,gg,b,255],i*4);});
+  g.putImageData(out,0,0);return c.toDataURL();
+}
+const avatarHTML=name=>{const id=PIDS[name],ph=id&&PHOTO[id];
+  return ph&&ph!=="fail"&&ph!=="wait"?`<img class="pav" src="${ph}" width="52" height="52" alt="">`:`<span class="pav-w"${id&&ph!=="fail"?` data-pid="${id}"`:""}>${pixAvatar(name,48)}</span>`};
+// 把畫面上還沒換成照片的頭像換掉；同時最多抓 6 張
+let photoBusy=0;
+function loadPhotos(){
+  if(typeof Image==="undefined")return;
+  const todo=[...new Set([...document.querySelectorAll(".pav-w[data-pid]")].map(e=>e.dataset.pid))].filter(id=>!PHOTO[id]);
+  const swap=id=>document.querySelectorAll(`.pav-w[data-pid="${id}"]`).forEach(e=>{if(PHOTO[id]==="fail")e.removeAttribute("data-pid");else e.outerHTML=`<img class="pav" src="${PHOTO[id]}" width="52" height="52" alt="">`;});
+  const next=()=>{
+    while(photoBusy<6&&todo.length){
+      const id=todo.shift();if(PHOTO[id])continue;PHOTO[id]="wait";photoBusy++;
+      const img=new Image();img.crossOrigin="anonymous";
+      const done=ok=>{photoBusy--;if(ok)photoStat.ok++;else{PHOTO[id]="fail";photoStat.fail++;}swap(id);photoNote();next();};
+      img.onload=()=>{try{PHOTO[id]=photoFrom(img);done(true);}catch(e){done(false);}};
+      img.onerror=()=>done(false);
+      img.src=photoURL(id);
+    }
+  };
+  next();
+}
+function photoNote(){
+  const n=Object.keys(PIDS).length,el=document.getElementById("dex-photo");
+  el.textContent=!n?"頭像：目前用名字產生的圖案。從 Yahoo 更新資料後，會換成球員照片做成的像素頭像。"
+    :`頭像：${n} 位球員有照片編號；目前畫面上已換成照片 ${photoStat.ok} 張${photoStat.fail?`，抓不到 ${photoStat.fail} 張（用原本的圖案）`:""}。`;
+}
+
 // 全部卡片：價值用 FA 分析器同一套（z 分數加總，依出賽場數打折），六角圖是各軸在被持有球員裡的百分位
 function dexAll(){
   const val=vfunc(),cz=catZ(),si=SI(),cards=[];
@@ -82,7 +131,8 @@ function cardHTML(c,extra=""){
   const st=p[3]?`<span class="badge">${esc(p[3])}</span>`:"",w=p[1]==="W"?'<span class="badge">W</span>':"",il=p[1]==="IL"?'<span class="badge b-il">IL</span>':"";
   return `<article class="card r-${c.rar}">
     <div class="c-top"><span class="c-rar">${c.faRank?"FA·":""}${c.rar}</span><span class="c-no">${c.faRank?`FA 第 ${c.faRank}`:`No.${String(c.rank).padStart(3,"0")}`}</span></div>
-    <div class="c-art">${pixAvatar(p[0],30)}<div class="c-id"><div class="c-nm">${esc(p[0])}</div><div class="c-sub">${esc(tm||"")} · ${esc(pos||"")}${st}${w}${il}</div></div></div>
+    <div class="c-nm">${esc(p[0])}</div>
+    <div class="c-art">${avatarHTML(p[0])}<div class="c-sub">${esc(tm||"")}<br>${esc(pos||"")}${st}${w}${il}</div></div>
     ${radar(c.ax)}
     <div class="c-foot"><span>價值 ${sgn(c.v)}</span><span>${gp?`預測 ${Math.round(gp)} 場`:""}</span></div>
     <div class="c-own">${c.owner?`${esc(c.owner)}${c.owner===ME?'<span class="tag">1P</span>':""}`:"自由球員 FA"}</div>${extra}</article>`;
@@ -102,6 +152,7 @@ function renderDexGrid(){
   document.getElementById("dex-grid").innerHTML=list.length?list.slice(0,dx.n).map(c=>cardHTML(c)).join(""):'<p class="tm-empty">沒有符合的球員。</p>';
   document.getElementById("dex-count").textContent=`共 ${list.length} 張，顯示 ${Math.min(dx.n,list.length)} 張`;
   document.getElementById("dex-more").hidden=list.length<=dx.n;
+  loadPhotos();photoNote();
 }
 
 // ---------- FA 抽卡 ----------
@@ -133,7 +184,7 @@ function gacha(n){
   const best=got.some(c=>c.rar==="SSR")?"SSR":got.some(c=>c.rar==="SR")?"SR":"";
   document.getElementById("g-msg").textContent=best==="SSR"?"✦ 抽到 SSR！✦":best==="SR"?"抽到 SR！":"";
   out.querySelectorAll(".g-try").forEach(b=>b.onclick=()=>{fam.add=b.dataset.n;fam.drop=null;render();document.getElementById("h-fa").scrollIntoView({behavior:"smooth"});});
-  renderGachaInfo();
+  renderGachaInfo();loadPhotos();
 }
 
 function initDex(){

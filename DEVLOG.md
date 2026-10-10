@@ -95,6 +95,7 @@ const MKT = { "球員名": [季前排名, 持有率%], ... };
   FA: [ ["球員名", "FA" 或 "W", "NBA球隊 - 位置", "狀態", proj, last, cur], ... ],   // 可撿的球員，W＝在 waiver 上
   SCHED: { base: "2026-10-01", teams: { "LAL": [19, 21, ...], ... } },   // 每隊比賽日（美東），距離 base 的天數；可能是 null
   MATCH: { at, week, opp: "對手隊名", me: {fg,ft,tpm,pts,reb,ast,stl,blk,to}|null, op: {...}|null },   // Yahoo 本週對戰；還沒開打時 me/op 是 null
+  IDS: { "球員名": ESPN球員編號, ... },   // 球員卡照片頭像用（v16 起；舊資料沒有）
   PREV: { pr: {隊名: [9項名次, 不算AST名次]}, ls: {...}, cur: {...} } }   // PREV 是套用時網頁自己算的
 ```
 
@@ -305,10 +306,19 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 - 卡片＝各隊名單（含 IL）＋FA，價值用 `vfunc()`（跟 FA 分析器一樣：z 分數加總 × min(GP, 72)/72，放棄助攻模式不算 AST）；目前資料來源沒有數據的球員不出卡
 - 稀有度看價值排名（`rarOf()`）：1–12 SSR、13–40 SR、41–110 R、其他 N
 - 六角圖是各軸在「被持有的非 IL 球員」裡的百分位（`catZ()` 是從 `playerValues()` 拆出來的九項 z 分數）
-- 頭像 `pixAvatar()`：名字的 FNV-1a 雜湊 → 8×8 左右對稱像素圖
+- 頭像 `pixAvatar()`：名字的 FNV-1a 雜湊 → 8×8 左右對稱像素圖；有 ESPN 編號時換成照片點陣（5.18）
 - **FA 抽卡**：FA 的價值大多排在 100 名以後（10/10 的資料最好的 FA 排第 104），用全體稀有度會全部是 N，所以抽卡在 FA 裡面另外排（`faPool()`）：FA 前 3% SSR、≤15% SR、≤50% R、其他 N，卡片標「FA·」。每張 FA 被抽到的機會相同，所以機率剛好是 3／12／35／50%。10 連抽沒有 SR 以上時，最後一張換成隨機一張 SR 以上
 - 抽過的名字存在 localStorage `lp-dex`（收集率、NEW!），讀寫都包 try/catch
 - 「撿撿看」：設定 `fam.add`、`fam.drop=null`（讓 FA 分析器自己選要丟誰），重畫後捲到 FA 分析器
+
+### 5.18 球員照片頭像（v16，`loadPhotos()`、`lcdLevels()`，src/cards.js）
+
+- 更新程式抓 ESPN 預測時順便記下每位球員的 ESPN 編號（`p.player.id`，名字用同一套 `key()` 對應），存成匯入資料的 `IDS`（名單＋FA；ESPN 前 800 名以外的球員沒有）
+- 卡片先放名字圖案（`.pav-w[data-pid]`），`loadPhotos()` 再去抓 `https://a.espncdn.com/i/headshots/nba/players/full/{編號}.png`（`crossOrigin="anonymous"`，同時最多 6 張），只抓畫面上的卡
+- `photoFrom()`：取大頭照中間偏上的正方形（高度 × 0.86）縮成 24×24 → `lcdLevels()`：亮度拉滿後用 4×4 Bayer 網點分成四階 → 換成 `--ink`、`--lo`、`--lcd-3`、`--lcd` 四色，透明的地方不畫 → data URL，用 `image-rendering:pixelated` 放大成 48px
+- 結果記在 `PHOTO[編號]`（只在記憶體，重新整理會重抓，瀏覽器有快取）；抓不到（沒有圖、或照片網站不允許讀取像素）就記 `"fail"`，繼續用名字圖案
+- 圖鑑下方 `#dex-photo` 顯示有編號的人數、已換成照片幾張、抓不到幾張，用來確認是否成功
+- **還沒在真的 ESPN 網站上確認過**：開發環境連不到 ESPN。ESPN 的圖片伺服器如果沒有回 `Access-Control-Allow-Origin`，所有照片都會「抓不到」。到時候的備案：用 GitHub Actions 定時下載照片、轉成點陣存進專案（例如 `data/avatars.js`），網頁直接讀現成的點陣，不用跨網站讀圖
 
 ---
 
@@ -357,6 +367,7 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 | v7 | 交易分析器＋自動找交易；修正 IL 球員佔名單位的誤判、2 換 1 比較基準 |
 | v8 | 網頁內一鍵更新資料：書籤／console 在 Yahoo 頁面抓名單和數據，自動帶回網頁套用；新增「2026-27 本季實際」數據來源；FA 補位改成完整 FA 清單，自動找交易的 2 換 1 不再固定補 Thybulle |
 | v9 | FA 分析器：撿人／丟人後撿人的名次模擬，加上自動推薦 |
+| v16 | 球員卡照片頭像：ESPN 大頭照轉成四階 LCD 點陣（更新程式多存 ESPN 球員編號 `IDS`） |
 | v15 | 隊伍職業鑑定（TEAM CLASS）、球員卡圖鑑（CARD DEX）＋ FA 抽卡 |
 | v14 | 出賽率：控制列 GP「考慮出賽率」（預設），球員依預測出賽場數打折，避免高估常受傷的隊伍 |
 | v13 | 交易分析器分成「我和別隊交易」和「其他隊之間交易」 |

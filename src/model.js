@@ -3,6 +3,13 @@
 // 傷兵：O（缺陣）不算，Q（出賽存疑）打 75 折；「全部照算」時都算 1
 const Q_RATE=0.75;
 const injW=p=>!state.inj?1:p[3]==="O"?0:p[3]==="Q"?Q_RATE:1;
+// 出賽率：預測出賽場數 ÷ 全聯盟最多的預測場數（季前大約 82；開季後預測只算剩下的比賽，會跟著變少）
+// 沒有預測就用上季場數 ÷ 82；容易受傷、輪休的球員打折；「不考慮」時都算 1
+let GP_FULL=0;
+const gpFull=()=>{if(!GP_FULL){const m=Math.max(0,...DATA.flatMap(t=>t[1].map(p=>p[4]?p[4][0]:0)));GP_FULL=m>=20?m:82;}return GP_FULL};
+const gpRate=p=>{const r=p[4]?p[4][0]/gpFull():p[5]?p[5][0]/82:1;return Math.min(1,r||1)};
+// 球員在加總時的權重＝傷兵 × 出賽率
+const playW=p=>injW(p)*(state.gp?gpRate(p):1);
 
 // 預測＋本季混合（存在 index 7）：本季打 g 場時，本季佔 g/(g+K)、預測佔 K/(g+K)
 const MIX_K=20;
@@ -79,14 +86,14 @@ function lineup(players){
   players.forEach((p,i)=>tryPlace(i,[]));
   return new Set(slot.filter(i=>i>=0));
 }
-// 一隊在某一週的預測總數：每天只算排得進先發的人，傷兵打折
+// 一隊在某一週的預測總數：每天只算排得進先發的人，傷兵和出賽率打折
 function weekTotals(ps,w,val){
   const si=SI(),t={fgm:0,fga:0,ftm:0,fta:0,tpm:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0};let starts=0,benched=0;
-  const pool=ps.filter(p=>active(p)&&p[si]&&injW(p)>0).map(p=>({p,v:val(p[si])??-99,g:GAMES[nbaTeam(p)]})).sort((a,b)=>b.v-a.v);
+  const pool=ps.filter(p=>active(p)&&p[si]&&playW(p)>0).map(p=>({p,v:val(p[si])??-99,g:GAMES[nbaTeam(p)]})).sort((a,b)=>b.v-a.v);
   for(let d=w.s;d<=w.e;d++){
     const today=pool.filter(x=>x.g&&x.g.has(d));if(!today.length)continue;
     const on=lineup(today.map(x=>x.p));
-    today.forEach((x,i)=>{if(!on.has(i)){benched++;return;}starts++;const s=x.p[si],k=injW(x.p);for(const key in t)t[key]+=s[IDX[key]]*k;});
+    today.forEach((x,i)=>{if(!on.has(i)){benched++;return;}starts++;const s=x.p[si],k=playW(x.p);for(const key in t)t[key]+=s[IDX[key]]*k;});
   }
   const v={fg:t.fga?t.fgm/t.fga:0,ft:t.fta?t.ftm/t.fta:0,tpm:t.tpm,pts:t.pts,reb:t.reb,ast:t.ast,stl:t.stl,blk:t.blk,to:t.to};
   return {v,starts,benched};

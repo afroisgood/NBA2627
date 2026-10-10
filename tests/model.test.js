@@ -30,6 +30,30 @@ test("compute：只加非 IL 球員；傷兵 O 不算、Q 打 75 折；全部照
   near(row(run, "A").v.pts, 3 * 13 * 1.3);
 });
 
+test("出賽率：預測場數 ÷ 82，最多算 1；沒預測用上季場數；關掉時都算 1", () => {
+  const { run } = load();
+  fixtureLeague(run);
+  near(run(`gpRate(${JSON.stringify(P("x", "PG", "LAL - PG", "", s(41, 1, 2, 1, 1, 1, 10, 1, 1, 1, 1, 1)))})`), 0.5);
+  near(run(`gpRate(${JSON.stringify(P("x", "PG", "LAL - PG", "", s(90, 1, 2, 1, 1, 1, 10, 1, 1, 1, 1, 1)))})`), 1);
+  near(run(`gpRate(${JSON.stringify(P("x", "PG", "LAL - PG", "", null, s(20.5, 1, 2, 1, 1, 1, 10, 1, 1, 1, 1, 1)))})`), 0.25);
+  near(run(`gpRate(${JSON.stringify(P("x", "PG", "LAL - PG", "", null))})`), 1);
+  run("state.gp=true");
+  near(row(run, "A").v.pts, 3 * 13 * 1.3 * 70 / 82);
+  // 傷兵和出賽率一起打折
+  run(`DATA[0][1][1][3]="Q"`);
+  near(row(run, "A").v.pts, (3 * 13 * 1.3 - 13 * 1.3 * 0.25) * 70 / 82);
+  // 同樣每場數據，常缺陣的隊伍名次比較後面
+  run(`DATA[3][1].forEach(p=>p[4][0]=40)`);
+  const r = run(`(()=>{const r=compute();rankAll(r,true);return Object.fromEntries(r.map(x=>[x.name,x.r.pts]));})()`);
+  assert.equal(r.D, 4, "D 每人只打 40 場，得分掉到最後");
+  run("state.gp=false");
+  assert.equal(row(run, "D").r.pts, 3, "不考慮出賽率時 D 還是第 3");
+  // 基準＝全聯盟最多的預測場數（開季後預測只剩剩下的比賽，大家一起變少）
+  run("GP_FULL=0");
+  assert.equal(run("gpFull()"), 70);
+  near(run("gpRate(DATA[3][1][0])"), 40 / 70);
+});
+
 test("rankAll：各項名次、TO 越少越前、綜合名次", () => {
   const { run } = load();
   fixtureLeague(run);
@@ -99,6 +123,7 @@ test("賽程：週一到週日分週、算出每位球員本週場數和先發�
   const imp = importFixture(tmp.run);
   const { run } = load({ local: { "lp-data": JSON.stringify(imp) } });
   assert.equal(run("IMP_FROM"), "local");
+  run("state.gp=false");
   const w = run("WEEKS[0]");
   assert.equal(w.s, 19, "第 1 週從開幕日 10/20（星期二）開始");
   assert.equal(w.e, 24, "到星期日 10/25");
@@ -107,6 +132,9 @@ test("賽程：週一到週日分週、算出每位球員本週場數和先發�
   const wt = run(`(()=>{const val=playerValues();return weekTotals(DATA[0][1],WEEKS[0],val);})()`);
   assert.equal(wt.starts, 4, "LAL 3 場＋BOS 1 場；DEN 沒比賽；IL 不算");
   near(wt.v.pts, 13 * 1.3 * 4);
+  run("state.gp=true; GP_FULL=82");
+  const wg = run(`(()=>{const val=playerValues();return weekTotals(DATA[0][1],WEEKS[0],val);})()`);
+  near(wg.v.pts, 13 * 1.3 * 4 * 70 / 82, 1e-6);
 });
 
 test("匯入資料：網站共用和這台電腦的資料，用比較新的那份", () => {

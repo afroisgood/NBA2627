@@ -33,7 +33,8 @@ fantasy-power-table/
 │   ├── model.js         ← 預測模型：傷兵權重、預測＋本季混合、H2H 勝率、賽程與每週先發陣容
 │   ├── app.js           ← 主程式：計算、排名、VS、聯盟表、各隊表、開機畫面
 │   ├── trade.js         ← 交易分析器＋自動找交易
-│   └── fa.js            ← FA 分析器＋自動推薦，最後呼叫 initTrade()、initFA()、render()、initImport()
+│   ├── cards.js         ← 隊伍職業鑑定、球員卡圖鑑、FA 抽卡
+│   └── fa.js            ← FA 分析器＋自動推薦，最後呼叫 initTrade()、initFA()、initDex()、render()、initImport()
 ├── data/
 │   └── latest.js        ← 網站共用資料：window.SHARED_DATA（null＝用內建）；網頁「下載網站資料檔」產生，上傳取代
 ├── tests/
@@ -51,7 +52,7 @@ fantasy-power-table/
 
 建置：`python3 build.py`；測試：`npm test`（不用安裝任何套件，Node 22 以上）。兩個完整網頁會先用 `<script src>` 載入 `data/latest.js`（根目錄用 `data/latest.js`、dist 用 `../data/latest.js`），Artifact 版不載入
 
-**JS 載入順序很重要**：data.js → market.js → import.js → model.js → app.js → trade.js → fa.js。model.js 載入時就會讀 `IMP.SCHED`，所以要在 import.js 後面；它用到的 state、SI、CATS 等都是呼叫時才讀。import.js 必須在 app.js 前面（app.js 一載入就會用到 ME、IMP、hasCur）。trade.js、fa.js 裡有 `const`（tm、FA、fam 等），所以 `initTrade(); initFA(); render(); initImport();` 必須放在 fa.js 最後，不能放在前面的檔案，否則會遇到 TDZ 錯誤。
+**JS 載入順序很重要**：data.js → market.js → import.js → model.js → app.js → trade.js → cards.js → fa.js。model.js 載入時就會讀 `IMP.SCHED`，所以要在 import.js 後面；它用到的 state、SI、CATS 等都是呼叫時才讀。import.js 必須在 app.js 前面（app.js 一載入就會用到 ME、IMP、hasCur）。trade.js、cards.js、fa.js 裡有 `const`（tm、FA、dx、fam 等），所以 `initTrade(); initFA(); initDex(); render(); initImport();` 必須放在 fa.js 最後，不能放在前面的檔案，否則會遇到 TDZ 錯誤。
 
 ---
 
@@ -228,7 +229,7 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 - 結論：平均名次進步 > 0.05 → 建議撿；−0.05～0.05 → 差不多；其他 → 不建議；列出進步、退步的項目
 - 自動推薦（AUTO PICKUP）：每位 FA × 每個可丟的人（有空位時加上不丟人），只保留平均名次進步 > 0.05 的組合；**每位 FA 只留最好的丟人選擇**，依平均名次進步、綜合名次、價值淨增排序，顯示前 10 名，可「套用」到手動模擬
 - 篩選：排除 waiver、排除缺陣（O，預設勾選）、位置（看 NBA 位置欄 `p[2]` 的「 - 」後面）
-- 不檢查先發位置、不考慮出賽場次（跟聯盟表一樣）
+- 不檢查先發位置；出賽率跟聯盟表一樣看 GP 設定（5.15）
 - 約 400 位 FA × 14 個選擇，實測不到 1 秒
 
 ### 5.8 傷兵（v11，`injW()`）
@@ -273,7 +274,7 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 
 - `tests/harness.js`：照 build.py 的順序把 src/ 載入 Node vm，document、localStorage 等用假的；`run("運算式")` 拿得到 const/let 變數，回傳的物件會轉成一般資料
 - `fixtureLeague()`：4 隊的固定小聯盟（A 最強、B 最弱），結果可以手算
-- 測試範圍：compute（IL、傷兵、出賽率）、rankAll、H2H 勝率、addMix、先發陣容、賽程週次與一週總數、匯入資料優先順序與格式檢查、本週對戰有效期、交易模擬、撿人模擬、build.py 檔案順序、更新程式不能有行尾 `//` 註解
+- 測試範圍：compute（IL、傷兵、出賽率）、隊伍職業、球員卡稀有度、FA 抽卡、rankAll、H2H 勝率、addMix、先發陣容、賽程週次與一週總數、匯入資料優先順序與格式檢查、本週對戰有效期、交易模擬、撿人模擬、build.py 檔案順序、更新程式不能有行尾 `//` 註解
 - 改了計算方式，記得同步更新測試的預期值
 
 
@@ -287,6 +288,27 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 - 這是「期望值」的做法：沒有模擬「主力缺陣時板凳補上」，所以板凳深的隊伍會稍微被低估、常受傷的隊伍的真實損失比打折的幅度小一些
 - 交易分析器的價值淨增本來就有用 GP（`vfunc`：場數 ÷ 72，最多 1），不受這個開關影響
 - ▲▼ 的比較基準（PREV）是套用資料當下用當時的設定算的；剛切換算法時箭頭會反映算法差異
+
+
+### 5.16 隊伍職業鑑定（v15，`teamClass()`，src/cards.js）
+
+- 每隊九項數據換成 z 分數（跟 16 隊的平均、標準差比；TO 反過來，少失誤是正的）
+- **放棄**：z ≤ −1 的項目，由差到好最多取 2 項 →「放棄○＋○流」；沒有就是「均衡流」
+- **職業**：6 個職業各有權重（`CLASSES`），分數＝Σ 權重 × z ÷ Σ 權重，取最高的。例外：九項 z 都 ≥ −0.5 而且平均 ≥ 0.3 →「全能勇者」；最高分 < 0.2 而且平均 < −0.3 →「見習冒險者」
+- 強項：不算放棄的項目裡 z 最高的 3 項，顯示名次
+- Lv.＝round(H2H 勝率 × 98) + 1；依 H2H 勝率排名排序
+- 六角圖（`radar()`）：得分、三分、籃板、助攻、防守＝(STL+BLK)/2、效率＝(FG+FT+TO)/3，z 從 −2～2 對到 0～1
+- 我的隊伍摘要多一張「職業鑑定」卡；職業卡上會判斷助攻有沒有真的被放棄（z ≤ −1）
+
+### 5.17 球員卡圖鑑與 FA 抽卡（v15，`dexAll()`、`drawFA()`，src/cards.js）
+
+- 卡片＝各隊名單（含 IL）＋FA，價值用 `vfunc()`（跟 FA 分析器一樣：z 分數加總 × min(GP, 72)/72，放棄助攻模式不算 AST）；目前資料來源沒有數據的球員不出卡
+- 稀有度看價值排名（`rarOf()`）：1–12 SSR、13–40 SR、41–110 R、其他 N
+- 六角圖是各軸在「被持有的非 IL 球員」裡的百分位（`catZ()` 是從 `playerValues()` 拆出來的九項 z 分數）
+- 頭像 `pixAvatar()`：名字的 FNV-1a 雜湊 → 8×8 左右對稱像素圖
+- **FA 抽卡**：FA 的價值大多排在 100 名以後（10/10 的資料最好的 FA 排第 104），用全體稀有度會全部是 N，所以抽卡在 FA 裡面另外排（`faPool()`）：FA 前 3% SSR、≤15% SR、≤50% R、其他 N，卡片標「FA·」。每張 FA 被抽到的機會相同，所以機率剛好是 3／12／35／50%。10 連抽沒有 SR 以上時，最後一張換成隨機一張 SR 以上
+- 抽過的名字存在 localStorage `lp-dex`（收集率、NEW!），讀寫都包 try/catch
+- 「撿撿看」：設定 `fam.add`、`fam.drop=null`（讓 FA 分析器自己選要丟誰），重畫後捲到 FA 分析器
 
 ---
 
@@ -309,6 +331,8 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 | TRADE MACHINE | 手動交易分析：最多 3 換 3、補 FA、公平度量表、成交機率、雙方各項名次變化 |
 | TRADE MACHINE（其他隊） | 分析兩支別隊之間的交易：誰贏、兩隊和你的名次／勝率變化、公平度 |
 | AUTO SCOUT | 自動找交易 |
+| TEAM CLASS | 每隊職業稱號、放棄的項目、Lv.、六角圖（`renderClass()`） |
+| CARD DEX | 球員卡圖鑑（隊伍、稀有度、名字篩選）＋ FA 抽卡（`renderDex()`、`gacha()`） |
 | FA MACHINE | 撿人模擬：選 FA＋丟掉的人（或直接撿），顯示名次、各項名次和每場數據的變化 |
 | AUTO PICKUP | 自動推薦撿人組合：可排除 waiver、缺陣，篩位置 |
 | 聯盟排名表 | 可排序；♛ 前 3、☠ 後 3；四階熱度色塊；▲▼ 名次變化；8×8 像素隊徽 |
@@ -333,6 +357,7 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 | v7 | 交易分析器＋自動找交易；修正 IL 球員佔名單位的誤判、2 換 1 比較基準 |
 | v8 | 網頁內一鍵更新資料：書籤／console 在 Yahoo 頁面抓名單和數據，自動帶回網頁套用；新增「2026-27 本季實際」數據來源；FA 補位改成完整 FA 清單，自動找交易的 2 換 1 不再固定補 Thybulle |
 | v9 | FA 分析器：撿人／丟人後撿人的名次模擬，加上自動推薦 |
+| v15 | 隊伍職業鑑定（TEAM CLASS）、球員卡圖鑑（CARD DEX）＋ FA 抽卡 |
 | v14 | 出賽率：控制列 GP「考慮出賽率」（預設），球員依預測出賽場數打折，避免高估常受傷的隊伍 |
 | v13 | 交易分析器分成「我和別隊交易」和「其他隊之間交易」 |
 | v12 | VS 自動帶入 Yahoo 本週對手並顯示實際比分；網站共用資料（data/latest.js）；自動測試（npm test、GitHub Actions） |

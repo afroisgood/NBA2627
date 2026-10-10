@@ -200,6 +200,65 @@ a.pxbtn{display:inline-block;text-decoration:none}
 .ms-card.line p{margin:0;font-size:16px;font-weight:700}
 .chk{display:inline-flex;align-items:center;gap:6px;font-size:15px;cursor:pointer}
 .chk input{accent-color:var(--ink);width:16px;height:16px;margin:0}
+/* team class */
+.cl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.cl-card{border:3px solid var(--ink);padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.cl-card.me{background:var(--ink);color:var(--lcd)}
+.cl-card.me .emb rect{fill:var(--lcd)}
+.cl-head{display:flex;justify-content:space-between;align-items:center;gap:8px;min-width:0}
+.cl-head .tn{min-width:0}
+.cl-nm{font-size:15px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cl-lv{font-family:var(--f-dot);font-size:18px;flex:none}
+.cl-title{font-size:18px;font-weight:900;line-height:1.4}
+.cl-ic{display:inline-block;width:1.3em}
+.cl-body{display:flex;align-items:center;gap:10px}
+.cl-txt{min-width:0;font-size:14px}
+.cl-txt p,.cl-fit{margin:0}
+.cl-fit{font-size:13px;font-weight:700;color:var(--lcd-2)}
+.radar{flex:none;overflow:visible}
+.radar polygon.rg{fill:none;stroke:var(--lcd-3);stroke-width:1}
+.radar line{stroke:var(--lcd-3);stroke-width:.8}
+.radar polygon.rv{fill:var(--mid);fill-opacity:.55;stroke:var(--ink);stroke-width:1.6;stroke-linejoin:round}
+.radar text{font-family:var(--f-txt);font-size:9px;font-weight:700;fill:var(--mid);text-anchor:middle}
+.cl-card.me .radar polygon.rg,.cl-card.me .radar line{stroke:var(--mid)}
+.cl-card.me .radar polygon.rv{fill:var(--lcd-3);stroke:var(--lcd)}
+.cl-card.me .radar text{fill:var(--lcd-2)}
+/* card dex */
+.dex-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:12px}
+.nw{white-space:nowrap}
+.card{border:3px solid var(--ink);background:var(--lcd);padding:8px;display:flex;flex-direction:column;align-items:stretch;gap:4px;min-width:0;height:100%}
+.card .radar{align-self:center;width:100%;max-width:150px;height:auto}
+.card.r-N{border:3px dashed var(--mid)}
+.card.r-SR{border:6px double var(--ink)}
+.card.r-SSR{background:var(--ink);color:var(--lcd);box-shadow:3px 3px 0 var(--mid)}
+.card.r-SSR .pav rect{fill:var(--lcd)}
+.card.r-SSR .radar polygon.rg,.card.r-SSR .radar line{stroke:var(--mid)}
+.card.r-SSR .radar polygon.rv{fill:var(--lcd-3);stroke:var(--lcd)}
+.card.r-SSR .radar text,.card.r-SSR .c-sub,.card.r-SSR .c-own,.card.r-SSR .c-no{color:var(--lcd-2);fill:var(--lcd-2)}
+.card.r-SSR .badge{border-color:var(--lcd)}
+.c-top{display:flex;justify-content:space-between;align-items:center}
+.c-rar{font-family:var(--f-pix);font-size:10px}
+.card.r-SSR .c-rar::before,.card.r-SSR .c-rar::after{content:"✦";animation:blink 1s steps(1) infinite}
+.c-no{font-family:var(--f-dot);font-size:13px;color:var(--mid)}
+.c-art{display:flex;align-items:center;gap:8px;min-width:0}
+.pav{flex:none;image-rendering:pixelated}
+.pav rect{fill:var(--ink)}
+.c-id{min-width:0}
+.c-nm{font-size:13px;font-weight:700;line-height:1.3;overflow-wrap:anywhere}
+.c-sub{font-size:12px;color:var(--mid)}
+.c-foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:0 6px;font-family:var(--f-dot);font-size:13px}
+.c-foot span{white-space:nowrap}
+.c-own{font-size:12px;color:var(--mid);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-top:2px dotted var(--lcd-3);padding-top:4px}
+.g-card{position:relative;display:flex;flex-direction:column;gap:6px;animation:flipin .4s both}
+.g-card .card{height:auto;flex:1}
+.g-new{position:absolute;top:-8px;right:-4px;z-index:1;font-family:var(--f-pix);font-size:8px;background:var(--power);color:var(--lcd);padding:2px 4px}
+.g-try{font-size:13px;min-height:36px;padding:4px 8px;margin-top:4px}
+.g-msg{font-weight:900;font-size:18px}
+@keyframes flipin{from{transform:perspective(600px) rotateY(90deg);opacity:0}to{transform:none;opacity:1}}
+input[type=search]{font-family:var(--f-txt);font-size:16px;min-height:40px;background:var(--lcd);color:var(--ink);border:3px solid var(--ink);padding:4px 8px;max-width:100%;width:14em}
+input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.dex-more{align-self:center}
+@media (prefers-reduced-motion: reduce){.g-card{animation:none}.card.r-SSR .c-rar::before,.card.r-SSR .c-rar::after{animation:none}}
 @media (max-width:560px){
   .vs-row{grid-template-columns:44px 1fr 40px 1fr 44px;font-size:13px;gap:5px}
   .hp-track{width:64px}
@@ -385,7 +444,7 @@ a.pxbtn{display:inline-block;text-decoration:none}
       <p class="note" id="fa-status">每位 FA 都跟你隊上每一位可以丟的人配一次（名單有空位時也試「不丟人」），列出讓你平均名次進步最多的前 10 位。</p>
       <div id="fa-out" class="as-out"></div>
     </div>
-    <p class="note">名次用跟聯盟表一樣的算法（非 IL 球員場均加總、各項名次平均），只有你的隊伍改變。FA 依目前數據來源的價值排序，括號裡是價值。不檢查先發位置，也不考慮出賽場次。</p>
+    <p class="note">名次用跟聯盟表一樣的算法（非 IL 球員場均加總、各項名次平均），只有你的隊伍改變。FA 依目前數據來源的價值排序，括號裡是價值。不檢查先發位置；出賽率跟著上方 GP 的設定。</p>
   </section>
   <section aria-labelledby="h-league">
     <h2 id="h-league"><span class="en">LEAGUE STANDINGS</span>聯盟排名</h2>
@@ -393,11 +452,44 @@ a.pxbtn{display:inline-block;text-decoration:none}
     <div class="scroll"><table class="league" id="league"></table></div>
   </section>
 
+  <section aria-labelledby="h-class">
+    <h2 id="h-class"><span class="en">TEAM CLASS</span>隊伍職業鑑定</h2>
+    <p class="note">依各隊九項數據跟其他 15 隊比較，自動判斷職業和實際在放棄哪幾項（明顯比聯盟平均差一截的項目）。等級＝H2H 勝率換算（Lv.1～99），依等級排序。數據跟著上方的資料來源、傷兵和出賽率設定。</p>
+    <div class="cl-grid" id="class-grid"></div>
+  </section>
+
   <section aria-labelledby="h-teams">
     <h2 id="h-teams"><span class="en">SELECT TEAM</span>各隊球員</h2>
     <nav class="picker" id="picker" aria-label="選擇球隊"></nav>
     <div id="team"></div>
     <p class="note">價值血條：球員九項場均換算成 z 分數加總（放棄助攻模式不算助攻），跟全聯盟被持有的球員比較。實心向右是正貢獻，虛線向左是拖累球隊。</p>
+  </section>
+
+  <section aria-labelledby="h-dex">
+    <h2 id="h-dex"><span class="en">CARD DEX</span>球員卡圖鑑</h2>
+    <p class="note">每位球員一張卡。稀有度看價值排名（被持有的球員和 FA 一起排）：前 12 名 SSR、13–40 名 SR、41–110 名 R、其他 N。價值和 FA 分析器一樣（九項 z 分數加總，依預測出賽場數打折，放棄助攻模式不算助攻）。六角圖是每一軸在被持有球員裡的百分位：防守＝抄截＋阻攻，效率＝命中率＋罰球＋少失誤。</p>
+    <h3 class="tm-h3"><span class="en">FA GACHA</span>FA 抽卡</h3>
+    <div class="tm">
+      <div class="tm-opts">
+        <button class="pxbtn" id="g-1" type="button">▶ 抽 1 張</button>
+        <button class="pxbtn" id="g-10" type="button">▶ 10 連抽</button>
+        <span class="g-msg" id="g-msg" aria-live="polite"></span>
+      </div>
+      <p class="note">從 FA 裡隨機抽。FA 很少比得上被持有的球員，所以這裡的稀有度是在 FA 裡面排（卡片左上角標「FA·」）：FA 前 3% 是 SSR、前 15% SR、前 50% R、其他 N，機率剛好是 SSR 3%、SR 12%、R 35%、N 50%。10 連抽保底一張 SR 以上。<span id="g-info"></span>抽到喜歡的按「撿撿看」，會直接帶到 FA 分析器。</p>
+      <div class="dex-grid" id="g-out"></div>
+    </div>
+    <h3 class="tm-h3"><span class="en">ALL CARDS</span>全部卡片</h3>
+    <div class="tm-opts">
+      <label class="tm-label" for="dex-owner">隊伍</label>
+      <select id="dex-owner"></select>
+      <label class="tm-label" for="dex-rar">稀有度</label>
+      <select id="dex-rar"><option value="">全部</option><option>SSR</option><option>SR</option><option>R</option><option>N</option></select>
+      <label class="tm-label" for="dex-q">找球員</label>
+      <input id="dex-q" type="search" placeholder="輸入英文名字" autocomplete="off">
+    </div>
+    <p class="note" id="dex-count"></p>
+    <div class="dex-grid" id="dex-grid"></div>
+    <button class="pxbtn dex-more" id="dex-more" type="button">▼ 顯示更多</button>
   </section>
 
   <p class="note" id="foot-note">預測來源：Yahoo（Rotowire）、ESPN、FantasyPros 共識預測，三家場均取平均；FantasyPros 只提供命中率，出手數沿用另外兩家。上季數據取自 Yahoo 2025-26 場均，新秀及上季未出賽者無數據，以「—」表示且不計入。▲▼ 是跟上次更新（交易前，10/9 waiver 後）相比的名次變化。名單更新於 2026/10/9（含石與大小小丑的交易）。</p>

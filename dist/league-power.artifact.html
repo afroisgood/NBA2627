@@ -200,6 +200,65 @@ a.pxbtn{display:inline-block;text-decoration:none}
 .ms-card.line p{margin:0;font-size:16px;font-weight:700}
 .chk{display:inline-flex;align-items:center;gap:6px;font-size:15px;cursor:pointer}
 .chk input{accent-color:var(--ink);width:16px;height:16px;margin:0}
+/* team class */
+.cl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.cl-card{border:3px solid var(--ink);padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.cl-card.me{background:var(--ink);color:var(--lcd)}
+.cl-card.me .emb rect{fill:var(--lcd)}
+.cl-head{display:flex;justify-content:space-between;align-items:center;gap:8px;min-width:0}
+.cl-head .tn{min-width:0}
+.cl-nm{font-size:15px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cl-lv{font-family:var(--f-dot);font-size:18px;flex:none}
+.cl-title{font-size:18px;font-weight:900;line-height:1.4}
+.cl-ic{display:inline-block;width:1.3em}
+.cl-body{display:flex;align-items:center;gap:10px}
+.cl-txt{min-width:0;font-size:14px}
+.cl-txt p,.cl-fit{margin:0}
+.cl-fit{font-size:13px;font-weight:700;color:var(--lcd-2)}
+.radar{flex:none;overflow:visible}
+.radar polygon.rg{fill:none;stroke:var(--lcd-3);stroke-width:1}
+.radar line{stroke:var(--lcd-3);stroke-width:.8}
+.radar polygon.rv{fill:var(--mid);fill-opacity:.55;stroke:var(--ink);stroke-width:1.6;stroke-linejoin:round}
+.radar text{font-family:var(--f-txt);font-size:9px;font-weight:700;fill:var(--mid);text-anchor:middle}
+.cl-card.me .radar polygon.rg,.cl-card.me .radar line{stroke:var(--mid)}
+.cl-card.me .radar polygon.rv{fill:var(--lcd-3);stroke:var(--lcd)}
+.cl-card.me .radar text{fill:var(--lcd-2)}
+/* card dex */
+.dex-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:12px}
+.nw{white-space:nowrap}
+.card{border:3px solid var(--ink);background:var(--lcd);padding:8px;display:flex;flex-direction:column;align-items:stretch;gap:4px;min-width:0;height:100%}
+.card .radar{align-self:center;width:100%;max-width:150px;height:auto}
+.card.r-N{border:3px dashed var(--mid)}
+.card.r-SR{border:6px double var(--ink)}
+.card.r-SSR{background:var(--ink);color:var(--lcd);box-shadow:3px 3px 0 var(--mid)}
+.card.r-SSR .pav rect{fill:var(--lcd)}
+.card.r-SSR .radar polygon.rg,.card.r-SSR .radar line{stroke:var(--mid)}
+.card.r-SSR .radar polygon.rv{fill:var(--lcd-3);stroke:var(--lcd)}
+.card.r-SSR .radar text,.card.r-SSR .c-sub,.card.r-SSR .c-own,.card.r-SSR .c-no{color:var(--lcd-2);fill:var(--lcd-2)}
+.card.r-SSR .badge{border-color:var(--lcd)}
+.c-top{display:flex;justify-content:space-between;align-items:center}
+.c-rar{font-family:var(--f-pix);font-size:10px}
+.card.r-SSR .c-rar::before,.card.r-SSR .c-rar::after{content:"✦";animation:blink 1s steps(1) infinite}
+.c-no{font-family:var(--f-dot);font-size:13px;color:var(--mid)}
+.c-art{display:flex;align-items:center;gap:8px;min-width:0}
+.pav{flex:none;image-rendering:pixelated}
+.pav rect{fill:var(--ink)}
+.c-id{min-width:0}
+.c-nm{font-size:13px;font-weight:700;line-height:1.3;overflow-wrap:anywhere}
+.c-sub{font-size:12px;color:var(--mid)}
+.c-foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:0 6px;font-family:var(--f-dot);font-size:13px}
+.c-foot span{white-space:nowrap}
+.c-own{font-size:12px;color:var(--mid);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-top:2px dotted var(--lcd-3);padding-top:4px}
+.g-card{position:relative;display:flex;flex-direction:column;gap:6px;animation:flipin .4s both}
+.g-card .card{height:auto;flex:1}
+.g-new{position:absolute;top:-8px;right:-4px;z-index:1;font-family:var(--f-pix);font-size:8px;background:var(--power);color:var(--lcd);padding:2px 4px}
+.g-try{font-size:13px;min-height:36px;padding:4px 8px;margin-top:4px}
+.g-msg{font-weight:900;font-size:18px}
+@keyframes flipin{from{transform:perspective(600px) rotateY(90deg);opacity:0}to{transform:none;opacity:1}}
+input[type=search]{font-family:var(--f-txt);font-size:16px;min-height:40px;background:var(--lcd);color:var(--ink);border:3px solid var(--ink);padding:4px 8px;max-width:100%;width:14em}
+input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.dex-more{align-self:center}
+@media (prefers-reduced-motion: reduce){.g-card{animation:none}.card.r-SSR .c-rar::before,.card.r-SSR .c-rar::after{animation:none}}
 @media (max-width:560px){
   .vs-row{grid-template-columns:44px 1fr 40px 1fr 44px;font-size:13px;gap:5px}
   .hp-track{width:64px}
@@ -385,7 +444,7 @@ a.pxbtn{display:inline-block;text-decoration:none}
       <p class="note" id="fa-status">每位 FA 都跟你隊上每一位可以丟的人配一次（名單有空位時也試「不丟人」），列出讓你平均名次進步最多的前 10 位。</p>
       <div id="fa-out" class="as-out"></div>
     </div>
-    <p class="note">名次用跟聯盟表一樣的算法（非 IL 球員場均加總、各項名次平均），只有你的隊伍改變。FA 依目前數據來源的價值排序，括號裡是價值。不檢查先發位置，也不考慮出賽場次。</p>
+    <p class="note">名次用跟聯盟表一樣的算法（非 IL 球員場均加總、各項名次平均），只有你的隊伍改變。FA 依目前數據來源的價值排序，括號裡是價值。不檢查先發位置；出賽率跟著上方 GP 的設定。</p>
   </section>
   <section aria-labelledby="h-league">
     <h2 id="h-league"><span class="en">LEAGUE STANDINGS</span>聯盟排名</h2>
@@ -393,11 +452,44 @@ a.pxbtn{display:inline-block;text-decoration:none}
     <div class="scroll"><table class="league" id="league"></table></div>
   </section>
 
+  <section aria-labelledby="h-class">
+    <h2 id="h-class"><span class="en">TEAM CLASS</span>隊伍職業鑑定</h2>
+    <p class="note">依各隊九項數據跟其他 15 隊比較，自動判斷職業和實際在放棄哪幾項（明顯比聯盟平均差一截的項目）。等級＝H2H 勝率換算（Lv.1～99），依等級排序。數據跟著上方的資料來源、傷兵和出賽率設定。</p>
+    <div class="cl-grid" id="class-grid"></div>
+  </section>
+
   <section aria-labelledby="h-teams">
     <h2 id="h-teams"><span class="en">SELECT TEAM</span>各隊球員</h2>
     <nav class="picker" id="picker" aria-label="選擇球隊"></nav>
     <div id="team"></div>
     <p class="note">價值血條：球員九項場均換算成 z 分數加總（放棄助攻模式不算助攻），跟全聯盟被持有的球員比較。實心向右是正貢獻，虛線向左是拖累球隊。</p>
+  </section>
+
+  <section aria-labelledby="h-dex">
+    <h2 id="h-dex"><span class="en">CARD DEX</span>球員卡圖鑑</h2>
+    <p class="note">每位球員一張卡。稀有度看價值排名（被持有的球員和 FA 一起排）：前 12 名 SSR、13–40 名 SR、41–110 名 R、其他 N。價值和 FA 分析器一樣（九項 z 分數加總，依預測出賽場數打折，放棄助攻模式不算助攻）。六角圖是每一軸在被持有球員裡的百分位：防守＝抄截＋阻攻，效率＝命中率＋罰球＋少失誤。</p>
+    <h3 class="tm-h3"><span class="en">FA GACHA</span>FA 抽卡</h3>
+    <div class="tm">
+      <div class="tm-opts">
+        <button class="pxbtn" id="g-1" type="button">▶ 抽 1 張</button>
+        <button class="pxbtn" id="g-10" type="button">▶ 10 連抽</button>
+        <span class="g-msg" id="g-msg" aria-live="polite"></span>
+      </div>
+      <p class="note">從 FA 裡隨機抽。FA 很少比得上被持有的球員，所以這裡的稀有度是在 FA 裡面排（卡片左上角標「FA·」）：FA 前 3% 是 SSR、前 15% SR、前 50% R、其他 N，機率剛好是 SSR 3%、SR 12%、R 35%、N 50%。10 連抽保底一張 SR 以上。<span id="g-info"></span>抽到喜歡的按「撿撿看」，會直接帶到 FA 分析器。</p>
+      <div class="dex-grid" id="g-out"></div>
+    </div>
+    <h3 class="tm-h3"><span class="en">ALL CARDS</span>全部卡片</h3>
+    <div class="tm-opts">
+      <label class="tm-label" for="dex-owner">隊伍</label>
+      <select id="dex-owner"></select>
+      <label class="tm-label" for="dex-rar">稀有度</label>
+      <select id="dex-rar"><option value="">全部</option><option>SSR</option><option>SR</option><option>R</option><option>N</option></select>
+      <label class="tm-label" for="dex-q">找球員</label>
+      <input id="dex-q" type="search" placeholder="輸入英文名字" autocomplete="off">
+    </div>
+    <p class="note" id="dex-count"></p>
+    <div class="dex-grid" id="dex-grid"></div>
+    <button class="pxbtn dex-more" id="dex-more" type="button">▼ 顯示更多</button>
   </section>
 
   <p class="note" id="foot-note">預測來源：Yahoo（Rotowire）、ESPN、FantasyPros 共識預測，三家場均取平均；FantasyPros 只提供命中率，出手數沿用另外兩家。上季數據取自 Yahoo 2025-26 場均，新秀及上季未出賽者無數據，以「—」表示且不計入。▲▼ 是跟上次更新（交易前，10/9 waiver 後）相比的名次變化。名單更新於 2026/10/9（含石與大小小丑的交易）。</p>
@@ -893,15 +985,20 @@ function rankAll(rows,full){
   rows.forEach(r=>{r.ovr=state.punt?r.ovrNA:r.ovr9;r.avgUse=state.punt?r.avgNA:r.avg;});
   if(full)h2hAll(rows);
 }
-// player value (z-score sum vs all active rostered players)
-function playerValues(){
+// 每位球員九項的 z 分數（跟全聯盟被持有的非 IL 球員比較）；FG%、FT% 用「命中數 − 聯盟命中率 × 出手數」換算
+function catZ(){
   const si=SI(),pool=[];DATA.forEach(t=>t[1].forEach(p=>{if(active(p)&&p[si])pool.push(p[si])}));
   const sum=(f)=>pool.reduce((a,s)=>a+f(s),0);
   const lfg=sum(s=>s[1])/sum(s=>s[2]),lft=sum(s=>s[3])/sum(s=>s[4]);
   const raw=s=>({fg:s[1]-lfg*s[2],ft:s[3]-lft*s[4],tpm:s[5],pts:s[6],reb:s[7],ast:s[8],stl:s[9],blk:s[10],to:-s[11]});
   const R=pool.map(raw),mu={},sd={};
   CATS.forEach(c=>{const a=R.map(r=>r[c.k]);mu[c.k]=a.reduce((x,y)=>x+y,0)/a.length;sd[c.k]=Math.sqrt(a.reduce((x,y)=>x+(y-mu[c.k])**2,0)/a.length)||1});
-  return s=>{if(!s)return null;const r=raw(s);return CATS.reduce((a,c)=>a+(state.punt&&c.k==="ast"?0:(r[c.k]-mu[c.k])/sd[c.k]),0)};
+  return s=>{if(!s)return null;const r=raw(s),z={};CATS.forEach(c=>z[c.k]=(r[c.k]-mu[c.k])/sd[c.k]);return z};
+}
+// player value (z-score sum vs all active rostered players)
+function playerValues(){
+  const cz=catZ();
+  return s=>{const z=cz(s);return z&&CATS.reduce((a,c)=>a+(state.punt&&c.k==="ast"?0:z[c.k]),0)};
 }
 const tier=n=>n<=4?"h1":n<=8?"h2":n<=12?"h3":"h4";
 function rk(n){return `<span class="rk ${n<=3?"top":n>=14?"low":""}">${n}</span>`}
@@ -1023,15 +1120,16 @@ function renderMe(rows){
   const r=rows.find(x=>x.name===ME),prev=PREV[state.src][ME]||[];
   const dl=(now,before)=>{const d=before?before-now:0;return d>0?`▲${d}`:d<0?`▼${-d}`:"–"};
   const cats=visCats().map(c=>({l:c.l,n:r.r[c.k]})).sort((a,b)=>a.n-b.n);
-  const list=a=>a.map(c=>`${c.l} ${c.n}`).join(" · ");
+  const list=a=>a.map(c=>`${c.l} ${c.n}`).join(" · "),tc=teamClass(rows)[ME];
   document.getElementById("me-sum").innerHTML=`
     <div class="ms-card"><span class="k">${esc(ME)} 1P · 9 CAT</span><div class="v"><b>第 ${r.ovr9} 名</b><span>${dl(r.ovr9,prev[0])}</span></div><span class="s">H2H 預期勝率 ${pctTxt(r.win)}（第 ${r.winRk}）</span></div>
     <div class="ms-card"><span class="k">${esc(ME)} 1P · PUNT AST</span><div class="v"><b>第 ${r.ovrNA} 名</b><span>${dl(r.ovrNA,prev[1])}${r.ovrNA===1?" ♛":""}</span></div></div>
-    <div class="ms-card line"><span class="k">強項 ／ 弱項</span><p>♛ ${list(cats.slice(0,3))}</p><p>☠ ${list(cats.slice(-2).reverse())}</p></div>`;
+    <div class="ms-card line"><span class="k">強項 ／ 弱項</span><p>♛ ${list(cats.slice(0,3))}</p><p>☠ ${list(cats.slice(-2).reverse())}</p></div>
+    <div class="ms-card line"><span class="k">職業鑑定 · Lv.${Math.round(r.win*98)+1}</span><p>${tc.cls.i} ${tc.title}</p><p class="s">${tc.cls.d}</p></div>`;
 }
 
 function render(){
-  const rows=compute();rankAll(rows,true);renderMe(rows);renderVS(rows);renderTrade(rows);renderFA(rows);renderLeague(rows);renderTeams(rows);
+  const rows=compute();rankAll(rows,true);renderMe(rows);renderVS(rows);renderTrade(rows);renderFA(rows);renderLeague(rows);renderClass(rows);renderTeams(rows);renderDex();
   const set=(id,on)=>document.getElementById(id).setAttribute("aria-pressed",on);
   set("src-pr",state.src==="pr");set("src-ls",state.src==="ls");set("src-cur",state.src==="cur");set("src-mix",state.src==="mix");set("inj-on",state.inj);set("inj-off",!state.inj);set("gp-on",state.gp);set("gp-off",!state.gp);set("mode-9",!state.punt);set("mode-p",state.punt);
 }
@@ -1249,6 +1347,152 @@ async function autoScout(){
 }
 
 
+// ---------- 隊伍職業鑑定（TEAM CLASS）和球員卡圖鑑（CARD DEX）＋ FA 抽卡 ----------
+
+// 六角能力圖的六個軸：防守＝抄截＋阻攻，效率＝FG%＋FT%＋少失誤
+const AXES=[{k:"pts",l:"得分"},{k:"tpm",l:"三分"},{k:"reb",l:"籃板"},{k:"ast",l:"助攻"},{k:"def",l:"防守"},{k:"eff",l:"效率"}];
+const axisOf=z=>({pts:z.pts,tpm:z.tpm,reb:z.reb,ast:z.ast,def:(z.stl+z.blk)/2,eff:(z.fg+z.ft+z.to)/3});
+const CAT_ZH={fg:"命中率",ft:"罰球",tpm:"三分",pts:"得分",reb:"籃板",ast:"助攻",stl:"抄截",blk:"阻攻",to:"失誤"};
+
+// 六角圖：vals 是 0～1，依 AXES 的順序
+function radar(vals,size=150){
+  const R=40,pt=(i,r)=>{const a=-Math.PI/2+i*Math.PI/3;return [(r*Math.cos(a)).toFixed(1),(r*Math.sin(a)).toFixed(1)]};
+  const ring=f=>AXES.map((_,i)=>pt(i,R*f).join(",")).join(" ");
+  const shape=AXES.map((a,i)=>pt(i,R*Math.max(.06,Math.min(1,vals[i]))).join(",")).join(" ");
+  const lbl=AXES.map((a,i)=>{const [x,y]=pt(i,R+11);return `<text x="${x}" y="${(+y+3).toFixed(1)}">${a.l}</text>`}).join("");
+  return `<svg class="radar" width="${size}" height="${size}" viewBox="-60 -58 120 116" aria-hidden="true">${[1,2/3,1/3].map(f=>`<polygon class="rg" points="${ring(f)}"/>`).join("")}${AXES.map((_,i)=>`<line x1="0" y1="0" x2="${pt(i,R)[0]}" y2="${pt(i,R)[1]}"/>`).join("")}<polygon class="rv" points="${shape}"/>${lbl}</svg>`;
+}
+
+// ---------- 隊伍職業 ----------
+// 職業＝九項 z 分數（跟其他 15 隊比）乘上權重後最高的那個；放棄＝z ≤ −1 的項目（最多 2 項）
+const CLASSES=[
+  {n:"重裝坦克",i:"▣",w:{reb:1,blk:1,fg:.8},d:"籃板、阻攻、命中率撐起禁區"},
+  {n:"神射手",i:"➶",w:{tpm:1,ft:1,pts:.4},d:"三分和罰球是招牌"},
+  {n:"狂戰士",i:"⚔",w:{pts:1.2,tpm:.4,fg:.4},d:"火力全開，靠得分壓制"},
+  {n:"刺客",i:"✦",w:{stl:1.2,tpm:.4,ast:.4},d:"抄截神出鬼沒"},
+  {n:"魔導師",i:"✧",w:{ast:1.2,ft:.4,tpm:.4},d:"助攻組織，掌控全場"},
+  {n:"聖騎士",i:"✚",w:{to:1,fg:.6,ft:.6},d:"穩紮穩打，很少失誤"},
+];
+const HERO={n:"全能勇者",i:"★",d:"九項沒有明顯弱點"},ROOKIE={n:"見習冒險者",i:"·",d:"還在找自己的路"};
+function teamClass(rows){
+  const mu={},sd={};
+  CATS.forEach(c=>{const a=rows.map(r=>r.v[c.k]);mu[c.k]=a.reduce((x,y)=>x+y,0)/a.length;sd[c.k]=Math.sqrt(a.reduce((x,y)=>x+(y-mu[c.k])**2,0)/a.length)||1});
+  const out={};
+  rows.forEach(r=>{
+    const z={};CATS.forEach(c=>z[c.k]=(c.low?mu[c.k]-r.v[c.k]:r.v[c.k]-mu[c.k])/sd[c.k]);
+    const zs=CATS.map(c=>z[c.k]),mean=zs.reduce((a,b)=>a+b,0)/9;
+    const punts=CATS.filter(c=>z[c.k]<=-1).sort((a,b)=>z[a.k]-z[b.k]).slice(0,2).map(c=>c.k);
+    const scored=CLASSES.map(c=>{let s=0,w=0;for(const k in c.w){s+=c.w[k]*z[k];w+=c.w[k];}return {c,s:s/w}}).sort((a,b)=>b.s-a.s);
+    const cls=Math.min(...zs)>=-.5&&mean>=.3?HERO:scored[0].s<.2&&mean<-.3?ROOKIE:scored[0].c;
+    const style=punts.length?`放棄${punts.map(k=>CAT_ZH[k]).join("＋")}流`:"均衡流";
+    const best=CATS.filter(c=>!punts.includes(c.k)).sort((a,b)=>z[b.k]-z[a.k]).slice(0,3).map(c=>c.k);
+    out[r.name]={cls,style,title:`${cls.n}・${style}`,punts,best,z,ax:AXES.map(a=>(axisOf(z)[a.k]+2)/4)};
+  });
+  return out;
+}
+function renderClass(rows){
+  const tc=teamClass(rows),list=[...rows].sort((a,b)=>(a.winRk||a.ovr)-(b.winRk||b.ovr));
+  document.getElementById("class-grid").innerHTML=list.map(r=>{
+    const t=tc[r.name],me=r.name===ME,lv=r.win==null?"":`Lv.${Math.round(r.win*98)+1}`;
+    const fit=me&&t.punts.includes("ast")?`<p class="cl-fit">✔ 跟你放棄助攻的戰術一致</p>`:me?`<p class="cl-fit">✖ 助攻沒有墊底，放棄助攻的效果還沒出來</p>`:"";
+    return `<article class="cl-card${me?" me":""}">
+      <div class="cl-head"><span class="tn">${emblem(r.name,18)}<span class="cl-nm">${esc(r.name)}</span>${me?'<span class="tag">1P</span>':""}</span><span class="cl-lv">${lv}</span></div>
+      <div class="cl-title"><span class="cl-ic" aria-hidden="true">${t.cls.i}</span>${t.title}</div>
+      <div class="cl-body">${radar(t.ax,120)}<div class="cl-txt"><p>${t.cls.d}</p><p>♛ ${t.best.map(k=>`<span class="nw">${CAT_ZH[k]} ${r.r[k]}</span>`).join("、")}</p>${t.punts.length?`<p>☠ ${t.punts.map(k=>`<span class="nw">${CAT_ZH[k]} ${r.r[k]}</span>`).join("、")}</p>`:""}</div></div>
+      ${fit}</article>`;
+  }).join("");
+}
+
+// ---------- 球員卡 ----------
+// 稀有度看價值排名（全部被持有的球員＋FA 一起排）：前 12 名 SSR、13–40 SR、41–110 R、其他 N
+const RARITY=[["SSR",12],["SR",40],["R",110],["N",Infinity]];
+const rarOf=rank=>RARITY.find(([,n])=>rank<=n)[0];
+// 名字算出固定的 8×8 像素頭像（左右對稱）
+function pixAvatar(name,size=40){
+  let h=2166136261;for(const ch of name){h^=ch.codePointAt(0);h=Math.imul(h,16777619)>>>0;}
+  let r="";for(let y=0;y<8;y++)for(let x=0;x<4;x++){if(h>>>(y*4+x)&1)continue;
+    r+=`<rect x="${x}" y="${y}" width="1" height="1"/><rect x="${7-x}" y="${y}" width="1" height="1"/>`;}
+  return `<svg class="pav" width="${size}" height="${size}" viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true">${r}</svg>`;
+}
+// 全部卡片：價值用 FA 分析器同一套（z 分數加總，依出賽場數打折），六角圖是各軸在被持有球員裡的百分位
+function dexAll(){
+  const val=vfunc(),cz=catZ(),si=SI(),cards=[];
+  DATA.forEach(t=>t[1].forEach(p=>cards.push({p,owner:t[0]})));
+  Object.values(FA).forEach(p=>cards.push({p,owner:""}));
+  const list=cards.map(c=>({...c,v:val(c.p)})).filter(c=>c.v!=null).sort((a,b)=>b.v-a.v);
+  const ref=AXES.map(a=>DATA.flatMap(t=>t[1].filter(p=>active(p)&&p[si]).map(p=>axisOf(cz(p[si]))[a.k])).sort((x,y)=>x-y));
+  const pct=(i,x)=>{const a=ref[i];let lo=0,hi=a.length;while(lo<hi){const m=lo+hi>>1;if(a[m]<x)lo=m+1;else hi=m;}return a.length?lo/a.length:.5};
+  list.forEach((c,i)=>{c.rank=i+1;c.rar=rarOf(i+1);const ax=axisOf(cz(c.p[si]));c.ax=AXES.map((a,j)=>pct(j,ax[a.k]));});
+  return list;
+}
+function cardHTML(c,extra=""){
+  const p=c.p,[tm,pos]=(p[2]||"").split(" - "),gp=p[4]?p[4][0]:null;
+  const st=p[3]?`<span class="badge">${esc(p[3])}</span>`:"",w=p[1]==="W"?'<span class="badge">W</span>':"",il=p[1]==="IL"?'<span class="badge b-il">IL</span>':"";
+  return `<article class="card r-${c.rar}">
+    <div class="c-top"><span class="c-rar">${c.faRank?"FA·":""}${c.rar}</span><span class="c-no">${c.faRank?`FA 第 ${c.faRank}`:`No.${String(c.rank).padStart(3,"0")}`}</span></div>
+    <div class="c-art">${pixAvatar(p[0],30)}<div class="c-id"><div class="c-nm">${esc(p[0])}</div><div class="c-sub">${esc(tm||"")} · ${esc(pos||"")}${st}${w}${il}</div></div></div>
+    ${radar(c.ax)}
+    <div class="c-foot"><span>價值 ${sgn(c.v)}</span><span>${gp?`預測 ${Math.round(gp)} 場`:""}</span></div>
+    <div class="c-own">${c.owner?`${esc(c.owner)}${c.owner===ME?'<span class="tag">1P</span>':""}`:"自由球員 FA"}</div>${extra}</article>`;
+}
+const dx={owner:"",rar:"",q:"",n:24};
+let DEX=[];
+function renderDex(){
+  DEX=dexAll();
+  const so=document.getElementById("dex-owner");
+  so.innerHTML=`<option value="">全部</option><option value="${esc(ME)}">我的隊伍</option><option value="FA">自由球員 FA</option>`+DATA.filter(t=>t[0]!==ME).map(t=>`<option value="${esc(t[0])}">${esc(t[0])}</option>`).join("");
+  so.value=dx.owner;
+  renderDexGrid();renderGachaInfo();
+}
+function renderDexGrid(){
+  const q=dx.q.trim().toLowerCase();
+  const list=DEX.filter(c=>(!dx.owner||(dx.owner==="FA"?!c.owner:c.owner===dx.owner))&&(!dx.rar||c.rar===dx.rar)&&(!q||c.p[0].toLowerCase().includes(q)));
+  document.getElementById("dex-grid").innerHTML=list.length?list.slice(0,dx.n).map(c=>cardHTML(c)).join(""):'<p class="tm-empty">沒有符合的球員。</p>';
+  document.getElementById("dex-count").textContent=`共 ${list.length} 張，顯示 ${Math.min(dx.n,list.length)} 張`;
+  document.getElementById("dex-more").hidden=list.length<=dx.n;
+}
+
+// ---------- FA 抽卡 ----------
+// FA 的實力大多比不上被持有的球員，所以抽卡的稀有度在 FA 裡面排：FA 前 3% 是 SSR、3–15% SR、15–50% R、其他 N
+// 每張 FA 被抽到的機會一樣，所以機率剛好是 SSR 3%、SR 12%、R 35%、N 50%；10 連抽保底一張 SR 以上
+const FA_TIERS=[["SSR",.03],["SR",.15],["R",.5],["N",1]];
+function faPool(){
+  const fa=DEX.filter(c=>!c.owner);
+  return fa.map((c,i)=>({...c,rar:FA_TIERS.find(([,q])=>(i+1)/fa.length<=q)[0],faRank:i+1}));
+}
+function drawFA(n,rnd=Math.random){
+  const pool=faPool();if(!pool.length)return [];
+  const out=[];for(let k=0;k<n;k++)out.push(pool[Math.floor(rnd()*pool.length)]);
+  if(n>=10&&!out.some(c=>c.rar==="SSR"||c.rar==="SR")){const hi=pool.filter(c=>c.rar==="SSR"||c.rar==="SR");if(hi.length)out[out.length-1]=hi[Math.floor(rnd()*hi.length)];}
+  return out;
+}
+const dexSeen=()=>{try{return new Set(JSON.parse(localStorage.getItem("lp-dex")||"[]"))}catch(e){return new Set()}};
+function renderGachaInfo(){
+  const fa=faPool(),seen=dexSeen(),got=fa.filter(c=>seen.has(c.p[0])).length;
+  const cnt=r=>fa.filter(c=>c.rar===r).length;
+  document.getElementById("g-info").textContent=`FA 卡池 ${fa.length} 張（SSR ${cnt("SSR")}、SR ${cnt("SR")}、R ${cnt("R")}、N ${cnt("N")}）。你已收集 ${got}／${fa.length} 張。`;
+}
+function gacha(n){
+  const got=drawFA(n),seen=dexSeen(),out=document.getElementById("g-out");
+  if(!got.length){out.innerHTML='<p class="tm-empty">目前的數據來源沒有可以抽的 FA。</p>';return;}
+  out.innerHTML=got.map((c,i)=>{const nw=!seen.has(c.p[0]);seen.add(c.p[0]);
+    return `<div class="g-card" style="animation-delay:${i*90}ms">${nw?'<span class="g-new">NEW!</span>':""}${cardHTML(c,`<button class="pxbtn g-try" type="button" data-n="${esc(c.p[0])}">▶ 撿撿看</button>`)}</div>`}).join("");
+  try{localStorage.setItem("lp-dex",JSON.stringify([...seen]))}catch(e){}
+  const best=got.some(c=>c.rar==="SSR")?"SSR":got.some(c=>c.rar==="SR")?"SR":"";
+  document.getElementById("g-msg").textContent=best==="SSR"?"✦ 抽到 SSR！✦":best==="SR"?"抽到 SR！":"";
+  out.querySelectorAll(".g-try").forEach(b=>b.onclick=()=>{fam.add=b.dataset.n;fam.drop=null;render();document.getElementById("h-fa").scrollIntoView({behavior:"smooth"});});
+  renderGachaInfo();
+}
+
+function initDex(){
+  document.getElementById("dex-owner").onchange=e=>{dx.owner=e.target.value;dx.n=24;renderDexGrid();};
+  document.getElementById("dex-rar").onchange=e=>{dx.rar=e.target.value;dx.n=24;renderDexGrid();};
+  document.getElementById("dex-q").oninput=e=>{dx.q=e.target.value;dx.n=24;renderDexGrid();};
+  document.getElementById("dex-more").onclick=()=>{dx.n+=24;renderDexGrid();};
+  document.getElementById("g-1").onclick=()=>gacha(1);
+  document.getElementById("g-10").onclick=()=>gacha(10);
+}
+
 // ---------- FA MACHINE：撿人（丟人後撿人、直接撿人）對名次的影響 ----------
 const ROSTER=13; // 正式名單上限（不含 IL）
 const fam={add:"",drop:null};
@@ -1350,6 +1594,7 @@ function initFA(){
 
 initTrade();
 initFA();
+initDex();
 render();
 initImport();
 </script>

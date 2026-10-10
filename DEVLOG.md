@@ -1,7 +1,7 @@
 # 杰西卡的AI實驗室 戰力表：開發紀錄
 
 > 這份文件給接手的人（或 Claude Code）看，記錄專案目的、檔案結構、資料來源、演算法、開發歷程和待辦事項。
-> 最後更新：2026-10-10（第 11 版：預測模型升級）
+> 最後更新：2026-10-10（第 12 版：本週對戰、網站共用資料、自動測試）
 
 ---
 
@@ -34,6 +34,13 @@ fantasy-power-table/
 │   ├── app.js           ← 主程式：計算、排名、VS、聯盟表、各隊表、開機畫面
 │   ├── trade.js         ← 交易分析器＋自動找交易
 │   └── fa.js            ← FA 分析器＋自動推薦，最後呼叫 initTrade()、initFA()、render()、initImport()
+├── data/
+│   └── latest.js        ← 網站共用資料：window.SHARED_DATA（null＝用內建）；網頁「下載網站資料檔」產生，上傳取代
+├── tests/
+│   ├── harness.js       ← 用 Node vm 載入 src/、假的 document/localStorage，加上固定的小聯盟資料
+│   └── model.test.js    ← 計算測試：npm test（node --test tests/*.test.js）
+├── package.json         ← npm test、npm run build
+├── .github/workflows/test.yml ← GitHub 自動測試：重新建置確認網頁檔有跟上，再跑 npm test
 ├── tools/
 │   ├── fetch-snippets.js← 在已登入 Yahoo 的瀏覽器 console 抓資料用的程式片段（舊，手動整理用）
 │   └── yahoo-update.js  ← 一鍵更新程式（書籤／console），build 時嵌進網頁
@@ -42,7 +49,7 @@ fantasy-power-table/
     └── league-power.artifact.html ← 發布到 claude.ai Artifact 用
 ```
 
-建置：`python3 build.py`
+建置：`python3 build.py`；測試：`npm test`（不用安裝任何套件，Node 22 以上）。兩個完整網頁會先用 `<script src>` 載入 `data/latest.js`（根目錄用 `data/latest.js`、dist 用 `../data/latest.js`），Artifact 版不載入
 
 **JS 載入順序很重要**：data.js → market.js → import.js → model.js → app.js → trade.js → fa.js。model.js 載入時就會讀 `IMP.SCHED`，所以要在 import.js 後面；它用到的 state、SI、CATS 等都是呼叫時才讀。import.js 必須在 app.js 前面（app.js 一載入就會用到 ME、IMP、hasCur）。trade.js、fa.js 裡有 `const`（tm、FA、fam 等），所以 `initTrade(); initFA(); render(); initImport();` 必須放在 fa.js 最後，不能放在前面的檔案，否則會遇到 TDZ 錯誤。
 
@@ -78,14 +85,15 @@ const MKT = { "球員名": [季前排名, 持有率%], ... };
 
 沒有資料的球員預設 `[260, 3]` 或 `[260, 5]`。
 
-### 匯入資料（localStorage `lp-data`）
+### 匯入資料（localStorage `lp-data`，或網站共用 `data/latest.js`）
 
-`tools/yahoo-update.js` 產生、`src/import.js` 讀取：
+`tools/yahoo-update.js` 產生、`src/import.js` 讀取。兩個來源都有效時用 `at` 比較新的那份（`IMP_FROM` 是 `"local"` 或 `"shared"`），標題下方會寫「只在這台電腦」或「網站共用」：
 
 ```js
 { v: 1, at: "ISO 時間", ME: "自己隊名", DATA: [...同上...], MKT: {...同上...},
   FA: [ ["球員名", "FA" 或 "W", "NBA球隊 - 位置", "狀態", proj, last, cur], ... ],   // 可撿的球員，W＝在 waiver 上
   SCHED: { base: "2026-10-01", teams: { "LAL": [19, 21, ...], ... } },   // 每隊比賽日（美東），距離 base 的天數；可能是 null
+  MATCH: { at, week, opp: "對手隊名", me: {fg,ft,tpm,pts,reb,ast,stl,blk,to}|null, op: {...}|null },   // Yahoo 本週對戰；還沒開打時 me/op 是 null
   PREV: { pr: {隊名: [9項名次, 不算AST名次]}, ls: {...}, cur: {...} } }   // PREV 是套用時網頁自己算的
 ```
 
@@ -109,7 +117,8 @@ Yahoo 聯盟頁面需要登入，所以資料是在**已登入 Yahoo 的瀏覽�
 4. 預測＝Yahoo 和 ESPN 場均平均（**沒有 FantasyPros**，因為它不能從 Yahoo 頁面跨站抓）
 5. 自己的隊伍用 team id 13 找（`MY_TEAM_ID`），所以改隊名也沒關係
 6. 抓 ESPN 整季賽程：`/seasons/2027?view=proTeamSchedules_wl`，`settings.proTeams[].proGamesByScoringPeriod` 裡每場的 `date`（毫秒）換成美東日期。ESPN 縮寫對到 Yahoo：GS→GSW、NO→NOP、NY→NYK、SA→SAS、UTAH→UTA、WSH→WAS；抓到少於 28 隊就不用
-7. 右下角視窗按「▶ 打開戰力表」→ 開 `league-power.html#import=<JSON>`，網頁確認後套用；或「複製結果」貼到網頁的框框
+7. 抓 Yahoo 本週對戰：依序試 `/nba/1031/matchup?mid1=13`、`/nba/1031/13/matchup`。找表頭有 FG%、PTS、TO 的表格，欄位名稱對照 `CAT_HEAD`（3PTM／3PM、ST／STL），每列用隊伍連結 `/nba/1031/<id>` 認出是哪一隊；7 項以上有數字才算有比分。頁面文字裡的 `Week N` 當週次。**還沒在真的 Yahoo 頁面測過**
+8. 右下角視窗按「▶ 打開戰力表」→ 開 `league-power.html#import=<JSON>`，網頁確認後套用；或「複製結果」貼到網頁的框框
 
 書籤是網頁把 `#yahoo-script`（build 時嵌入的 tools/yahoo-update.js）去掉整行註解後做成 `javascript:` 網址。**程式裡不能有行尾 `//` 註解**，也不能有 `</script`（build.py 會檢查後者）。
 
@@ -239,6 +248,25 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 - FA 分析器：選了週次時，FA 選單顯示本週場數，結果多一行「本週對 VS 對手的預測比分和勝率：撿人前 → 撿人後」
 - 各隊球員表：選了週次時多一欄該週場數
 
+### 5.12 本週對戰（v12，`matchNow()`、`liveScore()`）
+
+- `matchNow()`：MATCH 抓的那天所在的週（開季前算第 1 週）＝現在這週才用；沒有賽程時 7 天內有效；對手不在聯盟裡就不用
+- VS 對手：自己選的優先（`state.opp`），沒選（null）就用 Yahoo 本週對手，選單標「（本週對手）」；套用新資料時會把 `opp`、`week` 改回自動
+- 看的是本週對手、而且有比分時，VS 下方顯示「本週實際比分」表；否則顯示提示
+
+### 5.13 網站共用資料（v12）
+
+- 「資料更新」面板的「下載網站資料檔」把目前用的資料（含 PREV）存成 `latest.js`：`window.SHARED_DATA={...};`
+- 使用者到 `https://github.com/afroisgood/NBA2627/upload/main/data` 上傳取代，GitHub Pages 更新後所有人都用它（GitHub Pages 可能快取約 10 分鐘）
+- 「清除這台電腦的資料」只刪 localStorage，網站共用資料不受影響
+
+### 5.14 自動測試（v12）
+
+- `tests/harness.js`：照 build.py 的順序把 src/ 載入 Node vm，document、localStorage 等用假的；`run("運算式")` 拿得到 const/let 變數，回傳的物件會轉成一般資料
+- `fixtureLeague()`：4 隊的固定小聯盟（A 最強、B 最弱），結果可以手算
+- 測試範圍：compute（IL、傷兵）、rankAll、H2H 勝率、addMix、先發陣容、賽程週次與一週總數、匯入資料優先順序與格式檢查、本週對戰有效期、交易模擬、撿人模擬、build.py 檔案順序、更新程式不能有行尾 `//` 註解
+- 改了計算方式，記得同步更新測試的預期值
+
 ---
 
 ## 6. 介面功能（第 10 版）
@@ -283,6 +311,7 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 | v7 | 交易分析器＋自動找交易；修正 IL 球員佔名單位的誤判、2 換 1 比較基準 |
 | v8 | 網頁內一鍵更新資料：書籤／console 在 Yahoo 頁面抓名單和數據，自動帶回網頁套用；新增「2026-27 本季實際」數據來源；FA 補位改成完整 FA 清單，自動找交易的 2 換 1 不再固定補 Thybulle |
 | v9 | FA 分析器：撿人／丟人後撿人的名次模擬，加上自動推薦 |
+| v12 | VS 自動帶入 Yahoo 本週對手並顯示實際比分；網站共用資料（data/latest.js）；自動測試（npm test、GitHub Actions） |
 | v11 | 預測模型升級：傷兵扣除、預測＋本季混合、H2H 勝率（聯盟表、VS 贏面）、ESPN 賽程＋每天先發陣容的每週預測（VS、FA 分析器、各隊球員表） |
 | v10 | 掌機 Pro 版面：像素字只留給英文小標籤，內文改 Noto Sans TC、數字放大、淡色字加深；新增「我的隊伍摘要」；選中的按鈕改成反白（設計比較稿在 Claude Design 畫布，另有運動報、夜場記分板、美式漫畫三個方向） |
 
@@ -301,7 +330,7 @@ Artifact 網址：https://claude.ai/artifact/S6yNHmWyFfDDAvJ3guEij2
 
 ## 9. 已知限制
 
-1. **內建資料是靜態快照**。網頁內更新的資料只存在使用者自己的瀏覽器，要讓網站本身更新，得把結果寫進 `src/data.js`、`src/market.js` 再 build
+1. **內建資料是靜態快照**。網頁內更新的資料先存在使用者自己的瀏覽器；要讓網站本身更新，用「下載網站資料檔」上傳到 `data/latest.js`
 2. 聯盟表的名次和 H2H 勝率看的是每場平均，不考慮出賽場次；每週預測（VS 選週次）才有算賽程和先發名額。內建資料沒有賽程，要從 Yahoo 更新過才能選週次
 3. 季前排名開季後會失效，要換成 Yahoo「目前排名」（`c[7]`）
 4. 成交機率只是參考，沒辦法算到對方的個人喜好

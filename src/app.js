@@ -96,10 +96,12 @@ function renderLeague(rows){
 
 function renderVS(rows){
   const sel=document.getElementById("opp");
-  const others=rows.filter(r=>r.name!==ME).sort((a,b)=>a.ovr-b.ovr);
-  if(!state.opp||!others.find(r=>r.name===state.opp))state.opp=others[0].name;
-  sel.innerHTML=others.map(r=>`<option value="${esc(r.name)}" ${r.name===state.opp?"selected":""}>#${r.ovr} ${esc(r.name)}</option>`).join("");
-  const A=rows.find(r=>r.name===ME),B=rows.find(r=>r.name===state.opp);
+  const others=rows.filter(r=>r.name!==ME).sort((a,b)=>a.ovr-b.ovr),mt=matchNow();
+  // 對手：自己選的優先；沒選（null）就用 Yahoo 本週對手，再沒有就用排名第一的隊
+  if(state.opp&&!others.find(r=>r.name===state.opp))state.opp=null;
+  const opp=state.opp||(mt?mt.opp:others[0].name);
+  sel.innerHTML=others.map(r=>`<option value="${esc(r.name)}" ${r.name===opp?"selected":""}>#${r.ovr} ${esc(r.name)}${mt&&r.name===mt.opp?"（本週對手）":""}</option>`).join("");
+  const A=rows.find(r=>r.name===ME),B=rows.find(r=>r.name===opp);
   const wk=vsWeek(),ws=document.getElementById("vs-week");
   ws.innerHTML=`<option value="pg">每場平均（不看賽程）</option>`+WEEKS.map(x=>`<option value="${x.key}">第 ${x.i} 週 ${md(x.s)}–${md(x.e)}</option>`).join("");
   ws.value=wk?wk.key:"pg";ws.disabled=!WEEKS.length;
@@ -108,6 +110,7 @@ function renderVS(rows){
   if(wk){const val=playerValues(),ta=weekTotals(A.ps,wk,val),tb=weekTotals(B.ps,wk,val);va=ta.v;vb=tb.v;
     info=`第 ${wk.i} 週（${md(wk.s)}–${md(wk.e)}）預測總數：${esc(ME)} 先發 ${ta.starts} 場次${ta.benched?`（另有 ${ta.benched} 場次排不進先發）`:""}；${esc(B.name)} 先發 ${tb.starts} 場次${tb.benched?`（另有 ${tb.benched} 場次排不進先發）`:""}。每天最多 10 人上場，依位置排出最好的陣容${state.inj?"，缺陣不算、存疑打 75 折":""}。`;}
   document.getElementById("vs-info").innerHTML=info;
+  document.getElementById("vs-live").innerHTML=liveScore(B.name,mt);
   const M=matchup(va,vb);
   let w=0,l=0,t=0;
   const rowsH=CATS.map((c,ci)=>{
@@ -124,6 +127,21 @@ function renderVS(rows){
     <div class="vs-side">${emblem(B.name,40)}<span class="nm">${esc(B.name)}</span></div>`;
   document.getElementById("vs-rows").innerHTML=rowsH;
   sel.onchange=()=>{state.opp=sel.value;save();render();};
+}
+
+// Yahoo 本週實際比分（只在看的是本週對手時顯示）
+function liveScore(opp,mt){
+  if(!IMP||!IMP.MATCH)return "";
+  if(!mt)return `<p class="note">上次抓到的 Yahoo 對戰是之前的週次。按上方「↻ 更新資料」抓本週對手和目前比分。</p>`;
+  if(opp!==mt.opp)return `<p class="note">Yahoo 本週對手是 ${esc(mt.opp)}，你現在看的是別隊。</p>`;
+  if(!mt.me||!mt.op)return `<p class="note">本週對手：${esc(mt.opp)}（Yahoo）。比賽開始後再更新資料，就會顯示目前的實際比分。</p>`;
+  let w=0,l=0;
+  const cells=CATS.map(c=>{const a=mt.me[c.k],b=mt.op[c.k];if(a==null||b==null)return {c,a,b,s:0};const s=a===b?0:(c.low?a<b:a>b)?1:-1;if(s>0)w++;if(s<0)l++;return {c,a,b,s}});
+  const v=(x,c,win)=>x==null?'<span class="dash">—</span>':`${win?"♛":""}${c.pct?f3(x):Number.isInteger(x)?x:f1(x)}`;
+  return `<div class="vs-live"><p><b>本週實際比分</b>（Yahoo${mt.week?` 第 ${mt.week} 週`:""}，${fmtAt(mt.at)} 抓取）：${esc(ME)} <b>${w} : ${l}</b> ${esc(mt.opp)}</p>
+    <div class="scroll"><table><thead><tr><th class="name">實際</th>${cells.map(x=>`<th>${x.c.l}${x.c.low?"↓":""}</th>`).join("")}</tr></thead><tbody>
+    <tr><td class="name">${esc(ME)}</td>${cells.map(x=>`<td class="${x.s>0?"h1":""}">${v(x.a,x.c,x.s>0)}</td>`).join("")}</tr>
+    <tr><td class="name">${esc(mt.opp)}</td>${cells.map(x=>`<td class="${x.s<0?"h1":""}">${v(x.b,x.c,x.s<0)}</td>`).join("")}</tr></tbody></table></div></div>`;
 }
 
 // VS 的週次：state.week 為 null＝自動（本週）、"pg"＝每場平均、"wN"＝第 N 週

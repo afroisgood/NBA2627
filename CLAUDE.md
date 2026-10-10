@@ -17,5 +17,9 @@
 - IL 球員不計入球隊數據、不佔名單位
 - 保持 90 年代掌機風格（掌機 Pro 版）：顏色只用 layout.html `:root` 裡的 token；像素字 `--f-pix` 只能用在英文標籤（沒有中文字），中文標籤和按鈕用 `--f-txt`，數字用 `--f-dot`
 
+- 網站共用資料在 `data/latest.js`（`window.SHARED_DATA`）；使用者給你新的 `latest.js` 時，直接取代這個檔案即可，不用重新建置
+
 ## 驗證
-- 改完跑 `python3 build.py`，再用瀏覽器打開 `dist/league-power.html`，確認 console 沒有錯誤、手機寬度（400px）沒有橫向捲動
+- 改完跑 `python3 build.py` 和 `npm test`（GitHub 也會自動跑，而且會檢查網頁檔有沒有重新建置）
+- 用瀏覽器打開 `dist/league-power.html`，確認 console 沒有錯誤、手機寬度（400px）沒有橫向捲動
+- 改了計算方式，記得同步更新 `tests/model.test.js` 的預期值

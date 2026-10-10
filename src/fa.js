@@ -100,5 +100,6 @@ function initFA(){
 
 initTrade();
 initFA();
+initDex();
 render();
 initImport();

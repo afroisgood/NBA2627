@@ -226,3 +226,54 @@ test("其他隊之間交易：兩隊交換球員；收到人比較多的那隊�
   near(r.cPts, 13 * 1.1 + 13 * 1.0);
   assert.equal(r.hasWin, "number", "有算 H2H 勝率");
 });
+
+test("隊伍職業：放棄的項目（比平均差一個標準差以上）、職業看強項", () => {
+  const { run } = load();
+  fixtureLeague(run);
+  // D 隊：助攻全部歸零、籃板和阻攻變 3 倍 → 重裝坦克・放棄助攻流
+  run(`DATA[3][1].forEach(p=>{p[4]=p[4].slice();p[4][8]=0;p[4][7]*=3;p[4][10]*=3;})`);
+  const t = run(`(()=>{const r=compute();rankAll(r,true);return teamClass(r);})()`);
+  assert.deepEqual(t.D.punts, ["ast"]);
+  assert.equal(t.D.cls.n, "重裝坦克");
+  assert.equal(t.D.title, "重裝坦克・放棄助攻流");
+  // A 隊每項都是 1.3 倍，失誤也最多 → 放棄失誤
+  assert.ok(t.A.punts.includes("to"), JSON.stringify(t.A.punts));
+  assert.ok(!t.D.best.includes("ast"));
+  assert.equal(t.B.cls.n, "聖騎士", "B 每項都少，只有失誤最少");
+  for (const k in t) t[k].ax.forEach(x => assert.ok(Number.isFinite(x)));
+});
+
+test("球員卡：稀有度看價值排名；被持有和 FA 一起排；價值和 FA 分析器一樣", () => {
+  const { run } = load();
+  fixtureLeague(run);
+  assert.deepEqual([1, 12, 13, 40, 41, 110, 111].map(n => run(`rarOf(${n})`)), ["SSR", "SSR", "SR", "SR", "R", "R", "N"]);
+  const d = run(`(()=>{const v=vfunc();return dexAll().map(c=>({n:c.p[0],o:c.owner,v:c.v,ok:Math.abs(c.v-v(c.p))<1e-9,rar:c.rar,rank:c.rank,ax:c.ax}))})()`);
+  assert.equal(d.length, 13 + 2, "4 隊 × 3 人＋A 的 IL＋內建 2 位 FA");
+  d.forEach((c, i) => { assert.ok(c.ok); assert.equal(c.rank, i + 1); if (i) assert.ok(d[i - 1].v >= c.v); c.ax.forEach(x => assert.ok(x >= 0 && x <= 1)); });
+  assert.equal(d.filter(c => !c.o).length, 2);
+  // playerValues 拆成 catZ 之後結果不變：z 分數加總
+  near(run(`(()=>{const z=catZ()(DATA[0][1][0][4]);return CATS.reduce((a,c)=>a+z[c.k],0)})()`), run(`playerValues()(DATA[0][1][0][4])`), 1e-9);
+  // 頭像：同一個名字一樣、左右對稱
+  assert.equal(run(`pixAvatar("Joel Embiid")`), run(`pixAvatar("Joel Embiid")`));
+});
+
+test("FA 抽卡：稀有度在 FA 裡面排、每張機會一樣、10 連抽保底 SR 以上", () => {
+  const { run } = load();
+  fixtureLeague(run);
+  // 造 40 位 FA，價值由高到低
+  run(`for(const k in FA)delete FA[k];
+    for(let i=0;i<40;i++){const n="F"+String(i).padStart(2,"0");FA[n]=[n,"FA","LAL - PG","",[70,4,9,1,1.3,1,10-i*0.2,3,2,1,0.3,1.2],null,null];}
+    renderDex();`);
+  const pool = run(`faPool().map(c=>[c.p[0],c.rar,c.faRank])`);
+  assert.equal(pool.length, 40);
+  assert.deepEqual(pool[0], ["F00", "SSR", 1], "40 × 3% = 1.2 → 只有第 1 名是 SSR");
+  assert.equal(pool.filter(c => c[1] === "SR").length, 5, "第 2–6 名（≤ 15%）");
+  assert.equal(pool.filter(c => c[1] === "R").length, 14, "第 7–20 名（≤ 50%）");
+  // 亂數 0 → 第 1 張；亂數接近 1 → 最後一張
+  assert.equal(run(`drawFA(1,()=>0)[0].p[0]`), "F00");
+  assert.equal(run(`drawFA(1,()=>0.999)[0].p[0]`), "F39");
+  const ten = run(`drawFA(10,()=>0.999).map(c=>c.rar)`);
+  assert.equal(ten.length, 10);
+  assert.equal(ten.filter(r => r === "N").length, 9);
+  assert.ok(["SSR", "SR"].includes(ten[9]), "保底");
+});

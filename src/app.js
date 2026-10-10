@@ -53,15 +53,20 @@ function rankAll(rows,full){
   rows.forEach(r=>{r.ovr=state.punt?r.ovrNA:r.ovr9;r.avgUse=state.punt?r.avgNA:r.avg;});
   if(full)h2hAll(rows);
 }
-// player value (z-score sum vs all active rostered players)
-function playerValues(){
+// 每位球員九項的 z 分數（跟全聯盟被持有的非 IL 球員比較）；FG%、FT% 用「命中數 − 聯盟命中率 × 出手數」換算
+function catZ(){
   const si=SI(),pool=[];DATA.forEach(t=>t[1].forEach(p=>{if(active(p)&&p[si])pool.push(p[si])}));
   const sum=(f)=>pool.reduce((a,s)=>a+f(s),0);
   const lfg=sum(s=>s[1])/sum(s=>s[2]),lft=sum(s=>s[3])/sum(s=>s[4]);
   const raw=s=>({fg:s[1]-lfg*s[2],ft:s[3]-lft*s[4],tpm:s[5],pts:s[6],reb:s[7],ast:s[8],stl:s[9],blk:s[10],to:-s[11]});
   const R=pool.map(raw),mu={},sd={};
   CATS.forEach(c=>{const a=R.map(r=>r[c.k]);mu[c.k]=a.reduce((x,y)=>x+y,0)/a.length;sd[c.k]=Math.sqrt(a.reduce((x,y)=>x+(y-mu[c.k])**2,0)/a.length)||1});
-  return s=>{if(!s)return null;const r=raw(s);return CATS.reduce((a,c)=>a+(state.punt&&c.k==="ast"?0:(r[c.k]-mu[c.k])/sd[c.k]),0)};
+  return s=>{if(!s)return null;const r=raw(s),z={};CATS.forEach(c=>z[c.k]=(r[c.k]-mu[c.k])/sd[c.k]);return z};
+}
+// player value (z-score sum vs all active rostered players)
+function playerValues(){
+  const cz=catZ();
+  return s=>{const z=cz(s);return z&&CATS.reduce((a,c)=>a+(state.punt&&c.k==="ast"?0:z[c.k]),0)};
 }
 const tier=n=>n<=4?"h1":n<=8?"h2":n<=12?"h3":"h4";
 function rk(n){return `<span class="rk ${n<=3?"top":n>=14?"low":""}">${n}</span>`}
@@ -183,15 +188,16 @@ function renderMe(rows){
   const r=rows.find(x=>x.name===ME),prev=PREV[state.src][ME]||[];
   const dl=(now,before)=>{const d=before?before-now:0;return d>0?`▲${d}`:d<0?`▼${-d}`:"–"};
   const cats=visCats().map(c=>({l:c.l,n:r.r[c.k]})).sort((a,b)=>a.n-b.n);
-  const list=a=>a.map(c=>`${c.l} ${c.n}`).join(" · ");
+  const list=a=>a.map(c=>`${c.l} ${c.n}`).join(" · "),tc=teamClass(rows)[ME];
   document.getElementById("me-sum").innerHTML=`
     <div class="ms-card"><span class="k">${esc(ME)} 1P · 9 CAT</span><div class="v"><b>第 ${r.ovr9} 名</b><span>${dl(r.ovr9,prev[0])}</span></div><span class="s">H2H 預期勝率 ${pctTxt(r.win)}（第 ${r.winRk}）</span></div>
     <div class="ms-card"><span class="k">${esc(ME)} 1P · PUNT AST</span><div class="v"><b>第 ${r.ovrNA} 名</b><span>${dl(r.ovrNA,prev[1])}${r.ovrNA===1?" ♛":""}</span></div></div>
-    <div class="ms-card line"><span class="k">強項 ／ 弱項</span><p>♛ ${list(cats.slice(0,3))}</p><p>☠ ${list(cats.slice(-2).reverse())}</p></div>`;
+    <div class="ms-card line"><span class="k">強項 ／ 弱項</span><p>♛ ${list(cats.slice(0,3))}</p><p>☠ ${list(cats.slice(-2).reverse())}</p></div>
+    <div class="ms-card line"><span class="k">職業鑑定 · Lv.${Math.round(r.win*98)+1}</span><p>${tc.cls.i} ${tc.title}</p><p class="s">${tc.cls.d}</p></div>`;
 }
 
 function render(){
-  const rows=compute();rankAll(rows,true);renderMe(rows);renderVS(rows);renderTrade(rows);renderFA(rows);renderLeague(rows);renderTeams(rows);
+  const rows=compute();rankAll(rows,true);renderMe(rows);renderVS(rows);renderTrade(rows);renderFA(rows);renderLeague(rows);renderClass(rows);renderTeams(rows);renderDex();
   const set=(id,on)=>document.getElementById(id).setAttribute("aria-pressed",on);
   set("src-pr",state.src==="pr");set("src-ls",state.src==="ls");set("src-cur",state.src==="cur");set("src-mix",state.src==="mix");set("inj-on",state.inj);set("inj-off",!state.inj);set("gp-on",state.gp);set("gp-off",!state.gp);set("mode-9",!state.punt);set("mode-p",state.punt);
 }

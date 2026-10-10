@@ -5,7 +5,7 @@ const path = require("path");
 const vm = require("vm");
 
 const ROOT = path.join(__dirname, "..");
-const JS_ORDER = ["data.js", "market.js", "import.js", "model.js", "app.js", "trade.js", "fa.js"];
+const JS_ORDER = ["data.js", "market.js", "import.js", "model.js", "app.js", "trade.js", "cards.js", "fa.js"];
 
 function fakeEl() {
   return {

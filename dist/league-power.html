@@ -254,6 +254,13 @@ a.pxbtn{display:inline-block;text-decoration:none}
         <button class="menu-btn" id="inj-off" type="button" aria-pressed="false">全部照算</button>
       </div>
     </div>
+    <div class="ctl">
+      <span class="ctl-label" id="lbl-gp">GP</span>
+      <div class="seg" aria-labelledby="lbl-gp">
+        <button class="menu-btn" id="gp-on" type="button" aria-pressed="true">考慮出賽率</button>
+        <button class="menu-btn" id="gp-off" type="button" aria-pressed="false">每場都上</button>
+      </div>
+    </div>
   </div>
 
   <section aria-labelledby="h-upd" class="upd" id="upd" hidden>
@@ -745,6 +752,13 @@ function initImport(){
 // 傷兵：O（缺陣）不算，Q（出賽存疑）打 75 折；「全部照算」時都算 1
 const Q_RATE=0.75;
 const injW=p=>!state.inj?1:p[3]==="O"?0:p[3]==="Q"?Q_RATE:1;
+// 出賽率：預測出賽場數 ÷ 全聯盟最多的預測場數（季前大約 82；開季後預測只算剩下的比賽，會跟著變少）
+// 沒有預測就用上季場數 ÷ 82；容易受傷、輪休的球員打折；「不考慮」時都算 1
+let GP_FULL=0;
+const gpFull=()=>{if(!GP_FULL){const m=Math.max(0,...DATA.flatMap(t=>t[1].map(p=>p[4]?p[4][0]:0)));GP_FULL=m>=20?m:82;}return GP_FULL};
+const gpRate=p=>{const r=p[4]?p[4][0]/gpFull():p[5]?p[5][0]/82:1;return Math.min(1,r||1)};
+// 球員在加總時的權重＝傷兵 × 出賽率
+const playW=p=>injW(p)*(state.gp?gpRate(p):1);
 
 // 預測＋本季混合（存在 index 7）：本季打 g 場時，本季佔 g/(g+K)、預測佔 K/(g+K)
 const MIX_K=20;
@@ -821,14 +835,14 @@ function lineup(players){
   players.forEach((p,i)=>tryPlace(i,[]));
   return new Set(slot.filter(i=>i>=0));
 }
-// 一隊在某一週的預測總數：每天只算排得進先發的人，傷兵打折
+// 一隊在某一週的預測總數：每天只算排得進先發的人，傷兵和出賽率打折
 function weekTotals(ps,w,val){
   const si=SI(),t={fgm:0,fga:0,ftm:0,fta:0,tpm:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0};let starts=0,benched=0;
-  const pool=ps.filter(p=>active(p)&&p[si]&&injW(p)>0).map(p=>({p,v:val(p[si])??-99,g:GAMES[nbaTeam(p)]})).sort((a,b)=>b.v-a.v);
+  const pool=ps.filter(p=>active(p)&&p[si]&&playW(p)>0).map(p=>({p,v:val(p[si])??-99,g:GAMES[nbaTeam(p)]})).sort((a,b)=>b.v-a.v);
   for(let d=w.s;d<=w.e;d++){
     const today=pool.filter(x=>x.g&&x.g.has(d));if(!today.length)continue;
     const on=lineup(today.map(x=>x.p));
-    today.forEach((x,i)=>{if(!on.has(i)){benched++;return;}starts++;const s=x.p[si],k=injW(x.p);for(const key in t)t[key]+=s[IDX[key]]*k;});
+    today.forEach((x,i)=>{if(!on.has(i)){benched++;return;}starts++;const s=x.p[si],k=playW(x.p);for(const key in t)t[key]+=s[IDX[key]]*k;});
   }
   const v={fg:t.fga?t.fgm/t.fga:0,ft:t.fta?t.ftm/t.fta:0,tpm:t.tpm,pts:t.pts,reb:t.reb,ast:t.ast,stl:t.stl,blk:t.blk,to:t.to};
   return {v,starts,benched};
@@ -861,10 +875,11 @@ const EMB={
 "坂木老大：賣全身球員求合成":["01100110","11000011","11000011","11000011","11000011","01100110","01100110","00000000"]};
 function emblem(name,size=20){const b=EMB[name];if(!b)return "";let r="";b.forEach((row,y)=>[...row].forEach((c,x)=>{if(c==="1")r+=`<rect x="${x}" y="${y}" width="1" height="1"/>`}));return `<svg class="emb" width="${size}" height="${size}" viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true">${r}</svg>`}
 
-let state={src:"pr",punt:false,inj:true,week:null,sort:{k:"ovr",dir:1},team:ME,opp:null};
+let state={src:"pr",punt:false,inj:true,gp:true,week:null,sort:{k:"ovr",dir:1},team:ME,opp:null};
 try{const s=JSON.parse(localStorage.getItem("lp-state2")||"null");if(s)state={...state,...s};}catch(e){}
+if(typeof state.gp!=="boolean")state.gp=true;
 if(!["pr","ls","cur","mix"].includes(state.src)||(["cur","mix"].includes(state.src)&&!hasCur()))state.src="pr";
-function save(){try{localStorage.setItem("lp-state2",JSON.stringify({src:state.src,punt:state.punt,inj:state.inj,week:state.week,team:state.team,opp:state.opp}))}catch(e){}}
+function save(){try{localStorage.setItem("lp-state2",JSON.stringify({src:state.src,punt:state.punt,inj:state.inj,gp:state.gp,week:state.week,team:state.team,opp:state.opp}))}catch(e){}}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
 const f1=x=>x.toFixed(1), f3=x=>x.toFixed(3).replace(/^0/,"");
 const SI=()=>({pr:4,ls:5,cur:6,mix:7})[state.src];
@@ -874,7 +889,7 @@ function compute(data=DATA){
   const si=SI();
   return data.map(team=>{
     const t={fgm:0,fga:0,ftm:0,fta:0,tpm:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0};let n=0,miss=0;
-    team[1].forEach(p=>{if(!active(p))return;const s=p[si];if(!s){miss++;return;}n++;const w=injW(p);for(const k in t)t[k]+=s[IDX[k]]*w;});
+    team[1].forEach(p=>{if(!active(p))return;const s=p[si];if(!s){miss++;return;}n++;const w=playW(p);for(const k in t)t[k]+=s[IDX[k]]*w;});
     const v={fg:t.fga?t.fgm/t.fga:0,ft:t.fta?t.ftm/t.fta:0,tpm:t.tpm,pts:t.pts,reb:t.reb,ast:t.ast,stl:t.stl,blk:t.blk,to:t.to};
     return {name:team[0],ps:team[1],v,n,miss};
   });
@@ -921,7 +936,7 @@ function renderLeague(rows){
   document.getElementById("league").innerHTML=h+"</tbody>";
   const missT=rows.reduce((a,r)=>a+r.miss,0);
   document.getElementById("league-note").textContent=
-    "數字是全隊（不含 IL）每場數據加總"+(state.inj?"，缺陣（O）不算、出賽存疑（Q）打 75 折":"")+"。♛ 前 3 名、☠ 第 14–16 名；格子越深名次越前（1–4、5–8、9–12、13–16 四階）。點欄位標題可排序。H2H 勝率＝跟其他 15 隊各對戰一次、9 項贏 5 項以上的平均機率（放棄助攻也是 9 項都比）。"
+    "數字是全隊（不含 IL）每場數據加總"+(state.inj?"，缺陣（O）不算、出賽存疑（Q）打 75 折":"")+(state.gp?"，每人再乘上出賽率（預測出賽場數 ÷ 整季場數）":"")+"。♛ 前 3 名、☠ 第 14–16 名；格子越深名次越前（1–4、5–8、9–12、13–16 四階）。點欄位標題可排序。H2H 勝率＝跟其他 15 隊各對戰一次、9 項贏 5 項以上的平均機率（放棄助攻也是 9 項都比）。"
     +(!["pr","mix"].includes(state.src)&&missT?` ${state.src==="ls"?"上季":"本季"}版有 ${missT} 位球員沒有${state.src==="ls"?"上季":"本季"}數據，不計入加總。`:"");
   document.querySelectorAll("#league th.sortable").forEach(el=>{
     const go=()=>{const k=el.dataset.k;state.sort=state.sort.k===k?{k,dir:-state.sort.dir}:{k,dir:1};render();};
@@ -943,7 +958,7 @@ function renderVS(rows){
   ws.onchange=()=>{state.week=ws.value;save();render();};
   let va=A.v,vb=B.v,info=SCHED?"":"從 Yahoo 更新過資料後，可以選週次，依每隊這週的出賽場數和每天的先發名額預測。";
   if(wk){const val=playerValues(),ta=weekTotals(A.ps,wk,val),tb=weekTotals(B.ps,wk,val);va=ta.v;vb=tb.v;
-    info=`第 ${wk.i} 週（${md(wk.s)}–${md(wk.e)}）預測總數：${esc(ME)} 先發 ${ta.starts} 場次${ta.benched?`（另有 ${ta.benched} 場次排不進先發）`:""}；${esc(B.name)} 先發 ${tb.starts} 場次${tb.benched?`（另有 ${tb.benched} 場次排不進先發）`:""}。每天最多 10 人上場，依位置排出最好的陣容${state.inj?"，缺陣不算、存疑打 75 折":""}。`;}
+    info=`第 ${wk.i} 週（${md(wk.s)}–${md(wk.e)}）預測總數：${esc(ME)} 先發 ${ta.starts} 場次${ta.benched?`（另有 ${ta.benched} 場次排不進先發）`:""}；${esc(B.name)} 先發 ${tb.starts} 場次${tb.benched?`（另有 ${tb.benched} 場次排不進先發）`:""}。每天最多 10 人上場，依位置排出最好的陣容${state.inj?"，缺陣不算、存疑打 75 折":""}${state.gp?"，再乘上出賽率":""}。`;}
   document.getElementById("vs-info").innerHTML=info;
   document.getElementById("vs-live").innerHTML=liveScore(B.name,mt);
   const M=matchup(va,vb);
@@ -1027,7 +1042,7 @@ function renderMe(rows){
 function render(){
   const rows=compute();rankAll(rows,true);renderMe(rows);renderVS(rows);renderTrade(rows);renderFA(rows);renderLeague(rows);renderTeams(rows);
   const set=(id,on)=>document.getElementById(id).setAttribute("aria-pressed",on);
-  set("src-pr",state.src==="pr");set("src-ls",state.src==="ls");set("src-cur",state.src==="cur");set("src-mix",state.src==="mix");set("inj-on",state.inj);set("inj-off",!state.inj);set("mode-9",!state.punt);set("mode-p",state.punt);
+  set("src-pr",state.src==="pr");set("src-ls",state.src==="ls");set("src-cur",state.src==="cur");set("src-mix",state.src==="mix");set("inj-on",state.inj);set("inj-off",!state.inj);set("gp-on",state.gp);set("gp-off",!state.gp);set("mode-9",!state.punt);set("mode-p",state.punt);
 }
 document.getElementById("src-pr").onclick=()=>{state.src="pr";save();render()};
 document.getElementById("src-ls").onclick=()=>{state.src="ls";save();render()};
@@ -1037,6 +1052,8 @@ document.getElementById("src-mix").onclick=()=>{state.src="mix";save();render()}
 document.getElementById("src-mix").hidden=!hasCur();
 document.getElementById("inj-on").onclick=()=>{state.inj=true;save();render()};
 document.getElementById("inj-off").onclick=()=>{state.inj=false;save();render()};
+document.getElementById("gp-on").onclick=()=>{state.gp=true;save();render()};
+document.getElementById("gp-off").onclick=()=>{state.gp=false;save();render()};
 document.getElementById("mode-9").onclick=()=>{state.punt=false;save();render()};
 document.getElementById("mode-p").onclick=()=>{state.punt=true;save();render()};
 

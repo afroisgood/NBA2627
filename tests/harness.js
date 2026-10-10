@@ -84,7 +84,7 @@ function fixtureLeague(run) {
   ];
   run(`DATA.splice(0, DATA.length, ...${JSON.stringify(league)}); ME = "A";
     for (const k in MKT) delete MKT[k];
-    state.src = "pr"; state.punt = false; state.inj = true;`);
+    state.src = "pr"; state.punt = false; state.inj = true; state.gp = false; GP_FULL = 82;`);
   return league;
 }
 

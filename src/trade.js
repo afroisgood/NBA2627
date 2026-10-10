@@ -4,7 +4,8 @@ const FA={"Matisse Thybulle":["Matisse Thybulle","BN","LAL - SG,SF","",[55,2.06,
 "Isaiah Joe":["Isaiah Joe","BN","DET - SG,SF","",[73,3.49,7.75,1.23,1.4,2.49,10.57,2.55,1.44,0.69,0.19,0.62],[71,3.55,7.79,1.18,1.34,2.53,11.08,2.48,1.34,0.68,0.2,0.6]]};
 if(IMP&&IMP.FA){for(const k in FA)delete FA[k];IMP.FA.forEach(p=>FA[p[0]]=p.slice(0,7));}
 DATA.forEach(t=>t[1].forEach(addMix));Object.values(FA).forEach(addMix);
-const tm={give:[],get:[],opp:null,fill:""};
+const tm={mode:"mine",give:[],get:[],opp:null,fill:""};
+const tx={a:null,b:null,ga:[],gb:[]};   // 其他隊之間的交易：A 隊送出 ga、B 隊送出 gb
 const mval=n=>{const m=MKT[n]||[260,3];return .7*100*Math.exp(-(m[0]-1)/70)+.3*m[1]};
 const pkg=list=>list.reduce((a,n)=>a+Math.pow(mval(n),1.4),0);
 const actCount=(team,names)=>names.filter(n=>{const p=DATA.find(t=>t[0]===team)[1].find(p=>p[0]===n);return p&&p[1]!=="IL"}).length;
@@ -14,18 +15,21 @@ function vfunc(){const v=playerValues(),si=SI();return p=>{const s=p&&p[si];cons
 function faList(){const val=vfunc();return Object.values(FA).map(p=>({p,v:val(p)})).filter(x=>x.v!=null).sort((a,b)=>b.v-a.v)}
 const scoutFill=()=>tm.fill&&FA[tm.fill]?tm.fill:(faList()[0]||{p:[""]}).p[0];
 
+// 收到的人比送出的多：從 arr 釋出 k 位價值最低的非 IL 球員，回傳釋出的名字
+function trimLowest(arr,k,val){const out=[];for(let i=0;i<k;i++){const act=arr.filter(p=>p[1]!=="IL");act.sort((a,b)=>(val(a)??-99)-(val(b)??-99));const w=act[0];arr.splice(arr.indexOf(w),1);out.push(w[0]);}return out}
+const takeP=(arr,n)=>{const i=arr.findIndex(p=>p[0]===n);return i<0?null:arr.splice(i,1)[0]};
+const actN=a=>a.filter(p=>p[1]!=="IL").length;
+
 function simulate(give,get,opp,fill){
   const data=DATA.map(t=>[t[0],t[1].slice()]);
   const me=data.find(t=>t[0]===ME)[1],ot=data.find(t=>t[0]===opp)[1];
-  const take=(arr,n)=>{const i=arr.findIndex(p=>p[0]===n);return i<0?null:arr.splice(i,1)[0]};
-  const g1=give.map(n=>take(me,n)).filter(Boolean),g2=get.map(n=>take(ot,n)).filter(Boolean);
+  const g1=give.map(n=>takeP(me,n)).filter(Boolean),g2=get.map(n=>takeP(ot,n)).filter(Boolean);
   me.push(...g2);ot.push(...g1);
   const val=vfunc();let dropped=[],added=[];
-  const trim=(arr,k)=>{const out=[];for(let i=0;i<k;i++){const act=arr.filter(p=>p[1]!=="IL");act.sort((a,b)=>(val(a)??-99)-(val(b)??-99));const w=act[0];arr.splice(arr.indexOf(w),1);out.push(w[0]);}return out};
-  const actN=a=>a.filter(p=>p[1]!=="IL").length;const diff=actN(g1)-actN(g2);
-  if(diff<0)dropped=trim(me,-diff);
+  const diff=actN(g1)-actN(g2);
+  if(diff<0)dropped=trimLowest(me,-diff,val);
   if(diff>0&&fill&&FA[fill]){me.push(FA[fill]);added.push(fill);}
-  if(diff>0)trim(ot,diff);
+  if(diff>0)trimLowest(ot,diff,val);
   const rows=compute(data);rankAll(rows);
   return {rows,dropped,added};
 }
@@ -48,7 +52,24 @@ function judge(give,get,opp,fill,base){
   return {sim,b0,b1,o0,o1,vGain:vGet-vGive,fair,acc,myAvg:b0.avgUse-b1.avgUse,oppAvg:o0.avgUse-o1.avgUse};
 }
 
+// 其他隊之間的交易：A 送出 ga、B 送出 gb；收到人比較多的一方釋出價值最低的人。也算 H2H 勝率（看對大家的影響）
+function simulateBetween(a,ga,b,gb){
+  const data=DATA.map(t=>[t[0],t[1].slice()]);
+  const A=data.find(t=>t[0]===a)[1],B=data.find(t=>t[0]===b)[1];
+  const pa=ga.map(n=>takeP(A,n)).filter(Boolean),pb=gb.map(n=>takeP(B,n)).filter(Boolean);
+  A.push(...pb);B.push(...pa);
+  const val=vfunc(),diff=actN(pa)-actN(pb);
+  const dropA=diff<0?trimLowest(A,-diff,val):[],dropB=diff>0?trimLowest(B,diff,val):[];
+  const rows=compute(data);rankAll(rows,true);
+  return {rows,dropA,dropB};
+}
+
 function initTrade(){
+  document.getElementById("tm-mode-mine").onclick=()=>{tm.mode="mine";render();};
+  document.getElementById("tm-mode-others").onclick=()=>{tm.mode="others";render();};
+  document.getElementById("tx-a").onchange=e=>{tx.a=e.target.value;tx.ga=[];if(tx.b===tx.a){tx.b=null;tx.gb=[];}render();};
+  document.getElementById("tx-b").onchange=e=>{tx.b=e.target.value;tx.gb=[];render();};
+  document.getElementById("tx-clear").onclick=()=>{tx.ga=[];tx.gb=[];render();};
   document.getElementById("tm-opp").onchange=e=>{tm.opp=e.target.value;tm.get=[];render();};
   document.getElementById("tm-fill").onchange=e=>{tm.fill=e.target.value;render();};
   document.getElementById("tm-clear").onclick=()=>{tm.give=[];tm.get=[];render();};
@@ -64,6 +85,12 @@ function itemList(team,sel,elId){
 const sgn=x=>(x>0?"+":"")+x.toFixed(1);
 function moveTxt(a,b){const d=a-b;return d>0?`<span class="pos-up">${d}</span>`:d<0?`<span class="pos-dn">${-d}</span>`:"–"}
 function renderTrade(rows){
+  const mine=tm.mode==="mine";
+  document.getElementById("tm-mode-mine").setAttribute("aria-pressed",mine);
+  document.getElementById("tm-mode-others").setAttribute("aria-pressed",!mine);
+  document.getElementById("tm-mine").hidden=!mine;
+  document.getElementById("tm-others").hidden=mine;
+  if(!mine){renderTx(rows);return;}
   const others=rows.filter(r=>r.name!==ME).map(r=>r.name);
   if(!tm.opp||!others.includes(tm.opp))tm.opp=others[0];
   const so=document.getElementById("tm-opp");
@@ -95,6 +122,42 @@ function renderTrade(rows){
     <div class="tm-card"><span class="k">成交機率</span><span class="v">${J.acc}</span><span class="s">帳面公平度＋對方名次變化</span></div>
   </div>${extra}
   <div class="scroll"><table><thead><tr><th class="name">各項名次</th>${cats.map(c=>`<th>${c.l}</th>`).join("")}</tr></thead><tbody>${cRow(esc(ME)+"（交易後）",J.b0,J.b1)}${cRow(esc(tm.opp)+"（交易後）",J.o0,J.o1)}</tbody></table></div>`;
+}
+
+function renderTx(rows){
+  const names=rows.filter(r=>r.name!==ME).sort((x,y)=>x.ovr-y.ovr).map(r=>r.name);
+  if(!names.includes(tx.a)){tx.a=names[0];tx.ga=[];}
+  if(!names.includes(tx.b)||tx.b===tx.a){tx.b=names.find(n=>n!==tx.a);tx.gb=[];}
+  const opt=(sel,v,skip)=>{sel.innerHTML=names.filter(n=>n!==skip).map(n=>{const r=rows.find(x=>x.name===n);return `<option value="${esc(n)}" ${n===v?"selected":""}>#${r.ovr} ${esc(n)}</option>`}).join("");};
+  opt(document.getElementById("tx-a"),tx.a,null);opt(document.getElementById("tx-b"),tx.b,tx.a);
+  document.getElementById("tx-lbl-a").textContent=`${tx.a} 送出（最多 3 人）`;
+  document.getElementById("tx-lbl-b").textContent=`${tx.b} 送出（最多 3 人）`;
+  itemList(tx.a,tx.ga,"tx-give-a");itemList(tx.b,tx.gb,"tx-give-b");
+  const out=document.getElementById("tx-result");
+  if(!tx.ga.length||!tx.gb.length){out.innerHTML='<p class="tm-empty">▶ 選兩隊，再分別點選兩邊要送出的球員，就會顯示這筆交易對兩隊、以及對你的影響。</p>';return;}
+  const sim=simulateBetween(tx.a,tx.ga,tx.b,tx.gb),val=vfunc();
+  const get=(rs,n)=>rs.find(r=>r.name===n);
+  const A0=get(rows,tx.a),A1=get(sim.rows,tx.a),B0=get(rows,tx.b),B1=get(sim.rows,tx.b),M0=get(rows,ME),M1=get(sim.rows,ME);
+  const vA=tx.gb.reduce((s,n)=>s+(val(findP(tx.b,n))||0),0)-tx.ga.reduce((s,n)=>s+(val(findP(tx.a,n))||0),0);
+  const fair=pkg(tx.gb)/Math.max(pkg(tx.ga),1),pos=Math.max(0,Math.min(100,(fair-0.5)*100));
+  const dA=A0.avgUse-A1.avgUse,dB=B0.avgUse-B1.avgUse,ea=esc(tx.a),eb=esc(tx.b);
+  const tag=(n,d)=>d>0.05?`${n} 變強`:d<-0.05?`${n} 變弱`:`${n} 差不多`;
+  const verdict=(dA-dB>0.1?`${ea} 贏了這筆交易`:dB-dA>0.1?`${eb} 贏了這筆交易`:"兩隊得失差不多")+`（${tag(ea,dA)}、${tag(eb,dB)}）`;
+  const paper=fair>=1.05?"帳面賺":fair>=0.95?"帳面公平":"帳面虧";
+  const card=(k,r0,r1)=>`<div class="tm-card"><span class="k">${k}</span><span class="v">${r0.ovr} → ${r1.ovr} ${moveTxt(r0.ovr,r1.ovr)}</span><span class="s">平均名次 ${f1(r0.avgUse)} → ${f1(r1.avgUse)} · H2H 勝率 ${pctTxt(r0.win)} → ${pctTxt(r1.win)}</span></div>`;
+  const cats=visCats();
+  const cRow=(lab,r0,r1)=>`<tr><td class="name">${lab}</td>${cats.map(c=>{const a=r0.r[c.k],b=r1.r[c.k];return `<td class="${tier(b)}">${b}<span class="delta">${a===b?"–":moveTxt(a,b)}</span></td>`}).join("")}</tr>`;
+  const extra=[sim.dropA.length?`${ea} 要釋出：${sim.dropA.map(esc).join("、")}（收到的人比較多，釋出隊上價值最低的）`:"",sim.dropB.length?`${eb} 要釋出：${sim.dropB.map(esc).join("、")}（收到的人比較多，釋出隊上價值最低的）`:"",
+    M1.ovr!==M0.ovr?`對你的影響：${esc(ME)} 的${state.punt?"不算 AST ":""}綜合名次 ${M0.ovr} → ${M1.ovr}。名次是 16 隊互相比較，別隊變強或變弱都會影響你。`:`對你的影響：${esc(ME)} 的綜合名次不變（第 ${M0.ovr}），H2H 勝率 ${pctTxt(M0.win)} → ${pctTxt(M1.win)}。`].filter(Boolean).map(x=>`<p class="note">${x}</p>`).join("");
+  out.innerHTML=`<div class="tm-verdict"><b>RESULT</b>${verdict}</div>
+  <div class="tm-grid">
+    ${card(`${ea} 名次（${state.punt?"不算 AST":"9 項"}）`,A0,A1)}
+    ${card(`${eb} 名次`,B0,B1)}
+    ${card(`${esc(ME)}（你）的名次`,M0,M1)}
+    <div class="tm-card"><span class="k">${ea} 的數據價值淨增</span><span class="v">${sgn(vA)}</span><span class="s">${eb} ${sgn(-vA)} · z 分數，已依出賽場次打折</span></div>
+    <div class="tm-card"><span class="k">公平度（${ea} 角度）</span><span class="v">${Math.round(fair*100)}% · ${paper}</span><div class="meter"><i style="left:calc(${pos}% - 2px)"></i></div><div class="meter-l"><span>虧</span><span>公平</span><span>賺</span></div></div>
+  </div>${extra}
+  <div class="scroll"><table><thead><tr><th class="name">各項名次（交易後）</th>${cats.map(c=>`<th>${c.l}</th>`).join("")}</tr></thead><tbody>${cRow(ea,A0,A1)}${cRow(eb,B0,B1)}${cRow(esc(ME)+"（你）",M0,M1)}</tbody></table></div>`;
 }
 
 async function autoScout(){

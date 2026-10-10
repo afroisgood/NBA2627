@@ -180,3 +180,21 @@ test("更新程式：不能有行尾 // 註解（書籤會壞）、不能有 </s
   const bad = src.split("\n").filter(l => !/^\s*\/\//.test(l) && /\/\//.test(l.replace(/https?:\/\//g, "")));
   assert.deepEqual(bad, []);
 });
+
+test("其他隊之間交易：兩隊交換球員；收到人比較多的那隊釋出價值最低的人；你的隊伍數據不變", () => {
+  const { run } = load();
+  fixtureLeague(run);
+  const r = run(`(()=>{const b=compute();rankAll(b);const sim=simulateBetween("C",["C1","C2"],"D",["D1"]);
+    const g=n=>sim.rows.find(x=>x.name===n);
+    return {cN:g("C").n,dN:g("D").n,dNames:g("D").ps.map(p=>p[0]),dropB:sim.dropB,dropA:sim.dropA,
+      aPts:g("A").v.pts,aPts0:b.find(x=>x.name==="A").v.pts,cPts:g("C").v.pts,hasWin:typeof g("C").win};})()`);
+  assert.equal(r.cN, 2, "C 送出 2 人、收到 1 人");
+  assert.equal(r.dN, 3, "D 收到 2 人、送出 1 人，再釋出 1 人");
+  assert.deepEqual(r.dropA, []);
+  assert.equal(r.dropB.length, 1);
+  assert.ok(!r.dNames.includes(r.dropB[0]));
+  assert.ok(r.dNames.includes("C1") || r.dNames.includes("C2"));
+  near(r.aPts, r.aPts0, 1e-9);
+  near(r.cPts, 13 * 1.1 + 13 * 1.0);
+  assert.equal(r.hasWin, "number", "有算 H2H 勝率");
+});

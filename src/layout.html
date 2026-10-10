@@ -164,6 +164,9 @@ select{font-family:var(--f-txt);font-size:16px;min-height:40px;background:var(--
 .meter-l{display:flex;justify-content:space-between;font-size:11px;color:var(--mid)}
 .pos-up{color:var(--ink)}.pos-up::before{content:"▲"}
 .pos-dn{color:var(--mid)}.pos-dn::before{content:"▼"}
+.tm-pane{display:flex;flex-direction:column;gap:12px}
+.tm-pane[hidden]{display:none}
+.tm-mode{margin-bottom:2px}
 .tm-h3{font-family:var(--f-txt);font-size:16px;font-weight:700;gap:10px;margin-top:6px}
 .tm-h3 .en{font-family:var(--f-pix);font-weight:400;font-size:11px}
 .as-out{display:flex;flex-direction:column;gap:8px}
@@ -288,6 +291,11 @@ a.pxbtn{display:inline-block;text-decoration:none}
 
   <section aria-labelledby="h-trade">
     <h2 id="h-trade"><span class="en">TRADE MACHINE</span>交易分析器</h2>
+    <div class="seg tm-mode" role="group" aria-label="交易類型">
+      <button class="menu-btn" id="tm-mode-mine" type="button" aria-pressed="true">我和別隊交易</button>
+      <button class="menu-btn" id="tm-mode-others" type="button" aria-pressed="false">其他隊之間交易</button>
+    </div>
+    <div id="tm-mine" class="tm-pane">
     <div class="tm">
       <div class="tm-cols">
         <div class="tm-col">
@@ -319,6 +327,28 @@ a.pxbtn{display:inline-block;text-decoration:none}
       </div>
       <p class="note" id="as-status">條件：對方以排名＋持有率看不吃虧（≥ 95%），且交易後對方名次不會掉超過 1 名；依你的名次提升排序。2 換 1 會用上方「名單空位補 FA」選的球員補位，沒選就補價值最高的 FA。</p>
       <div id="as-out" class="as-out"></div>
+    </div>
+    </div>
+    <div id="tm-others" class="tm-pane" hidden>
+    <div class="tm">
+      <div class="tm-cols">
+        <div class="tm-col">
+          <div class="tm-label"><label for="tx-a">隊伍 A</label></div>
+          <select id="tx-a"></select>
+          <div class="tm-label" id="tx-lbl-a">A 送出（最多 3 人）</div>
+          <div class="tm-list" id="tx-give-a"></div>
+        </div>
+        <div class="tm-col">
+          <div class="tm-label"><label for="tx-b">隊伍 B</label></div>
+          <select id="tx-b"></select>
+          <div class="tm-label" id="tx-lbl-b">B 送出（最多 3 人）</div>
+          <div class="tm-list" id="tx-give-b"></div>
+        </div>
+      </div>
+      <div class="tm-opts"><button class="pxbtn" id="tx-clear" type="button">清除</button></div>
+      <div id="tx-result" class="tm-result"></div>
+    </div>
+    <p class="note">分析聯盟裡其他兩隊之間的交易（例如有人談好、或你想預測的交易）：看誰變強、誰帳面賺，以及對你的名次有什麼影響。收到人比較多的那隊，會自動釋出隊上價值最低的球員。</p>
     </div>
     <p class="note">市場價值 = 季前排名分數 × 70% ＋ Yahoo 持有率 × 30%；多人打包時，單一好球員權重較高（避免 2 個普通球員就換到明星）。數據價值會依預測出賽場次打折。名次模擬沿用聯盟表的算法（各項名次平均）。</p>
   </section>

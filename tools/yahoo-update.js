@@ -92,13 +92,14 @@
       .replace(/[^a-z ]/g, ' ').replace(/\b(jr|sr|ii|iii|iv)\b/g, ' ').replace(/\s+/g, ' ').trim();
     const ALIAS = { 'n alexander walker': 'nickeil alexander walker' };
     const key = n => { const k = norm(n); return ALIAS[k] || k; };
-    const espn = {};
+    const espn = {}, espnId = {};
     try {
       say('抓 ESPN 預測…');
       const f = { players: { limit: 800, sortDraftRanks: { sortPriority: 100, sortAsc: true, value: 'STANDARD' } } };
       const j = await (await fetch(`https://lm-api-reads.fantasy.espn.com/apis/v3/games/fba/seasons/${ESPN_YEAR}/segments/0/leaguedefaults/1?view=kona_player_info`,
         { headers: { 'X-Fantasy-Filter': JSON.stringify(f) } })).json();
       for (const p of j.players) {
+        if (p.player.id) espnId[key(p.player.fullName)] = p.player.id;
         const st = (p.player.stats || []).find(s => s.id === '10' + ESPN_YEAR);
         if (!st || !st.stats || !st.stats['42']) continue;
         const a = st.stats, gp = a['42'], g = k => r2((a[k] || 0) / gp);
@@ -188,11 +189,14 @@
       if (!proj && !last && !cur) continue;
       FA.push([n, /^W/.test(r.own) ? 'W' : 'FA', r.tp, status(r.st), proj, last, cur]);
     }
+    // 球員卡頭像用的 ESPN 球員編號（名字 → 編號）
+    const IDS = {};
+    [...DATA.flatMap(t => t[1]), ...FA].forEach(p => { const id = espnId[key(p[0])]; if (id) IDS[p[0]] = id; });
     const me = rosters.find(t => t.id === MY_TEAM_ID);
-    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA, SCHED, MATCH });
+    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA, SCHED, MATCH, IDS });
     window._LP_UPDATE = json;
     const curN = DATA.reduce((a, t) => a + t[1].filter(p => p[6]).length, 0);
-    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到；賽程${SCHED ? '有' : '沒有'}抓到；本週對手：${MATCH ? MATCH.opp + (MATCH.me ? '（含目前比分）' : '（還沒有比分）') : '沒有抓到'}。`);
+    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到；賽程${SCHED ? '有' : '沒有'}抓到；頭像編號 ${Object.keys(IDS).length} 位；本週對手：${MATCH ? MATCH.opp + (MATCH.me ? '（含目前比分）' : '（還沒有比分）') : '沒有抓到'}。`);
     btns.innerHTML = '';
     button('▶ 打開戰力表', () => window.open(SITE + '#import=' + encodeURIComponent(json), '_blank'));
     button('複製結果', async () => {

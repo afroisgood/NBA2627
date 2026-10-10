@@ -19,6 +19,7 @@ function checkImport(o){
   if(o.MATCH!=null){const m=o.MATCH,okV=v=>v==null||(typeof v==="object"&&["fg","ft","tpm","pts","reb","ast","stl","blk","to"].every(k=>v[k]==null||isNum(v[k])));
     if(!m||!isStr(m.opp)||!isStr(m.at)||!(m.week==null||isNum(m.week))||!okV(m.me)||!okV(m.op))return "本週對戰資料格式不對。";}
   if(o.SCHED!=null){const S=o.SCHED;if(!S||!/^\d{4}-\d{2}-\d{2}$/.test(S.base)||!S.teams||typeof S.teams!=="object"||!Object.values(S.teams).every(a=>Array.isArray(a)&&a.every(d=>Number.isInteger(d)&&d>=0&&d<400)))return "賽程資料格式不對。";}
+  if(o.IDS!=null){if(typeof o.IDS!=="object"||Array.isArray(o.IDS)||!Object.values(o.IDS).every(x=>Number.isInteger(x)&&x>0))return "球員編號資料格式不對。";}
   for(const k in o.MKT){const m=o.MKT[k];if(!Array.isArray(m)||m.length!==2||!m.every(isNum))return "排名／持有率資料格式不對。";}
   return "";
 }

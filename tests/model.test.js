@@ -158,6 +158,9 @@ test("checkImport：格式不對的資料會被擋下", () => {
   assert.notEqual(check({ ...good, SCHED: { base: "2026-10-01", teams: { LAL: [500] } } }), "");
   assert.notEqual(check({ ...good, MATCH: { at: "x", opp: "B", week: 1, me: { pts: "1" }, op: null } }), "");
   assert.notEqual(check({ ...good, ME: "沒有這隊" }), "");
+  assert.equal(check({ ...good, IDS: { A1: 3992, B2: 4065648 } }), "");
+  assert.notEqual(check({ ...good, IDS: { A1: "3992" } }), "");
+  assert.notEqual(check({ ...good, IDS: [3992] }), "");
 });
 
 test("本週對戰：抓的那週就是現在這週才用；對手不在聯盟裡就不用", () => {
@@ -276,4 +279,29 @@ test("FA 抽卡：稀有度在 FA 裡面排、每張機會一樣、10 連抽保�
   assert.equal(ten.length, 10);
   assert.equal(ten.filter(r => r === "N").length, 9);
   assert.ok(["SSR", "SR"].includes(ten[9]), "保底");
+});
+
+test("球員照片頭像：亮度分四階、透明的不畫；有編號才去抓，抓到前用名字圖案", () => {
+  const tmp = load();
+  const imp = importFixture(tmp.run, { IDS: { A1: 3992 } });
+  const { run } = load({ local: { "lp-data": JSON.stringify(imp) } });
+  // 4×1：黑、白、透明、中間灰
+  const px = [0, 0, 0, 255, 255, 255, 255, 255, 9, 9, 9, 0, 128, 128, 128, 255];
+  const lv = run(`lcdLevels(${JSON.stringify(px)},4,1)`);
+  assert.equal(lv[0], 0, "最暗");
+  assert.equal(lv[1], 3, "最亮");
+  assert.equal(lv[2], -1, "透明");
+  assert.ok(lv[3] >= 1 && lv[3] <= 2, `中間灰 ${lv[3]}`);
+  // 漸層：明暗等級大致跟著變亮（網點只會差一階）
+  const g = []; for (let i = 0; i < 16; i++) g.push(i * 17, i * 17, i * 17, 255);
+  const gl = run(`lcdLevels(${JSON.stringify(g)},16,1)`);
+  assert.equal(gl[0], 0); assert.equal(gl[15], 3);
+  gl.forEach((x, i) => { if (i) assert.ok(x >= gl[i - 1] - 1); });
+  // 有編號：先放名字圖案、標上編號等著換照片；沒編號：只有名字圖案
+  assert.match(run(`avatarHTML("A1")`), /data-pid="3992"/);
+  assert.doesNotMatch(run(`avatarHTML("B1")`), /data-pid/);
+  run(`PHOTO[3992]="data:image/png;base64,AAAA"`);
+  assert.match(run(`avatarHTML("A1")`), /<img class="pav" src="data:image\/png;base64,AAAA"/);
+  run(`PHOTO[3992]="fail"`);
+  assert.doesNotMatch(run(`avatarHTML("A1")`), /data-pid|<img/);
 });

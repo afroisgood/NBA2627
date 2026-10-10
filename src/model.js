@@ -38,8 +38,10 @@ function matchup(va,vb){
   return {ps,exp:ps.reduce((a,b)=>a+b,0),win:dist.slice(5).reduce((a,b)=>a+b,0)};
 }
 // 每隊對其他 15 隊的平均勝率、平均贏幾項，並排名
+// 有賽程時用「整季平均每週」的預測（每天排先發、板凳補位）；沒有賽程就用每場平均加總
 function h2hAll(rows){
-  rows.forEach(r=>{let w=0,e=0;rows.forEach(o=>{if(o===r)return;const m=matchup(r.v,o.v);w+=m.win;e+=m.exp;});r.win=w/(rows.length-1);r.expCats=e/(rows.length-1);});
+  if(WEEKS.length){const val=playerValues();rows.forEach(r=>r.hv=seasonWeek(r.ps,val));}else rows.forEach(r=>r.hv=r.v);
+  rows.forEach(r=>{let w=0,e=0;rows.forEach(o=>{if(o===r)return;const m=matchup(r.hv,o.hv);w+=m.win;e+=m.exp;});r.win=w/(rows.length-1);r.expCats=e/(rows.length-1);});
   [...rows].sort((a,b)=>b.win-a.win).forEach((r,i)=>r.winRk=i+1);
 }
 const pctTxt=x=>`${Math.round(x*100)}%`;
@@ -79,22 +81,43 @@ const gamesIn=(p,w)=>{const g=GAMES[nbaTeam(p)];if(!g||!w)return 0;let n=0;for(l
 
 // 每天的先發位置：PG、SG、G、SF、PF、F、C、C、Util、Util
 const SLOTS=[["PG"],["SG"],["PG","SG"],["SF"],["PF"],["SF","PF"],["C"],["C"],null,null];
-// 依價值由高到低排人，排得進去就上場（這種「位置配對」用貪婪法就是最佳解）
-function lineup(players){
+const SLOT_L=["PG","SG","G","SF","PF","F","C","C","Util","Util"];
+// 依價值由高到低排人，排得進去就上場（這種「位置配對」用貪婪法就是最佳解）；回傳每個先發位置排到第幾個人（−1＝空著）
+function lineupSlots(players){
   const slot=Array(SLOTS.length).fill(-1),fits=players.map(p=>{const ps=posOf(p);return SLOTS.map(s=>!s||s.some(x=>ps.includes(x)))});
   const tryPlace=(i,seen)=>{for(let k=0;k<SLOTS.length;k++){if(!fits[i][k]||seen[k])continue;seen[k]=1;if(slot[k]<0||tryPlace(slot[k],seen)){slot[k]=i;return true;}}return false};
   players.forEach((p,i)=>tryPlace(i,[]));
-  return new Set(slot.filter(i=>i>=0));
+  return slot;
 }
-// 一隊在某一週的預測總數：每天只算排得進先發的人，傷兵和出賽率打折
-function weekTotals(ps,w,val){
+const lineup=players=>new Set(lineupSlots(players).filter(i=>i>=0));
+// 板凳補位：每個人能上場的機率是 a（傷兵 × 出賽率）。順位＝全員到齊時排得進先發的人優先、再依價值；
+// 前面能上場的人還不到 C 人（全員到齊時排得進的人數）時就輪到他。回傳每個人的先發機率
+function startProbs(players,avail){
+  const on=lineup(players),C=on.size,ord=players.map((p,i)=>i).sort((x,y)=>on.has(y)-on.has(x)||x-y),out=Array(players.length).fill(0);
+  let dist=Array(C+1).fill(0);dist[0]=1;   // 前面能上場的人數（最後一格＝已滿 C 人）
+  ord.forEach(i=>{const a=avail[i],open=dist.slice(0,C).reduce((x,y)=>x+y,0);out[i]=a*open;
+    const n=Array(C+1).fill(0);dist.forEach((x,k)=>{n[k]+=x*(1-a);n[Math.min(C,k+1)]+=x*a});dist=n;});
+  return out;
+}
+const toV=t=>({fg:t.fga?t.fgm/t.fga:0,ft:t.fta?t.ftm/t.fta:0,tpm:t.tpm,pts:t.pts,reb:t.reb,ast:t.ast,stl:t.stl,blk:t.blk,to:t.to});
+const addRaw=(a,b)=>{const t={};for(const k in a.t)t[k]=a.t[k]+b.t[k];return {t,starts:a.starts+b.starts,benched:a.benched+b.benched}};
+// 一隊在第 s～e 天的預測總數（期望值）：每天依位置排先發，缺陣（傷兵、出賽率）時由板凳補上
+function weekRaw(ps,s,e,val){
   const si=SI(),t={fgm:0,fga:0,ftm:0,fta:0,tpm:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0};let starts=0,benched=0;
-  const pool=ps.filter(p=>active(p)&&p[si]&&playW(p)>0).map(p=>({p,v:val(p[si])??-99,g:GAMES[nbaTeam(p)]})).sort((a,b)=>b.v-a.v);
-  for(let d=w.s;d<=w.e;d++){
+  const pool=ps.filter(p=>active(p)&&p[si]&&playW(p)>0).map(p=>({p,v:val(p[si])??-99,a:playW(p),g:GAMES[nbaTeam(p)]})).sort((a,b)=>b.v-a.v);
+  for(let d=s;d<=e;d++){
     const today=pool.filter(x=>x.g&&x.g.has(d));if(!today.length)continue;
-    const on=lineup(today.map(x=>x.p));
-    today.forEach((x,i)=>{if(!on.has(i)){benched++;return;}starts++;const s=x.p[si],k=playW(x.p);for(const key in t)t[key]+=s[IDX[key]]*k;});
+    const pr=startProbs(today.map(x=>x.p),today.map(x=>x.a));
+    today.forEach((x,i)=>{starts+=pr[i];benched+=x.a-pr[i];const st=x.p[si];for(const key in t)t[key]+=st[IDX[key]]*pr[i];});
   }
-  const v={fg:t.fga?t.fgm/t.fga:0,ft:t.fta?t.ftm/t.fta:0,tpm:t.tpm,pts:t.pts,reb:t.reb,ast:t.ast,stl:t.stl,blk:t.blk,to:t.to};
-  return {v,starts,benched};
+  return {t,starts,benched};
+}
+function weekTotals(ps,w,val){const r=weekRaw(ps,w.s,w.e,val);return {v:toV(r.t),starts:r.starts,benched:r.benched}}
+// 整季（從本週到最後一週）平均每週的預測，H2H 勝率用；同一份名單、同樣設定只算一次
+const seasonCache=new WeakMap();
+function seasonWeek(ps,val){
+  const key=`${state.src}|${state.inj}|${state.gp}|${state.punt}`,c=seasonCache.get(ps);if(c&&c.key===key)return c.v;
+  const cw=curWeek(),i0=WEEKS.indexOf(cw),ws=WEEKS.slice(i0<0?0:i0),r=weekRaw(ps,ws[0].s,ws[ws.length-1].e,val);
+  const v=toV(r.t);for(const k in v)if(!["fg","ft"].includes(k))v[k]/=ws.length;
+  seasonCache.set(ps,{key,v});return v;
 }

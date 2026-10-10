@@ -261,6 +261,21 @@ input[type=search]{font-family:var(--f-txt);font-size:16px;min-height:40px;backg
 input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
 .dex-more{align-self:center}
 @media (prefers-reduced-motion: reduce){.g-card{animation:none}.card.r-SSR .c-rar::before,.card.r-SSR .c-rar::after{animation:none}}
+/* daily lineup */
+.day-out{display:flex;flex-direction:column;gap:10px}
+.day-sum{margin:0;font-size:16px;font-weight:700}
+.day-lists p{margin:0;font-size:14px;color:var(--mid)}
+.day-lists b{color:var(--ink)}
+.day-tbl td{white-space:normal}
+.day-tbl td:last-child{white-space:nowrap;font-size:14px}
+/* quick menu */
+.nav-btn{position:fixed;right:max(14px,env(safe-area-inset-right));bottom:max(14px,env(safe-area-inset-bottom));z-index:30;width:62px;height:62px;border-radius:50%;border:0;background:var(--btn);color:var(--btn-ink);box-shadow:0 5px 0 var(--btn-dark);font-family:var(--f-pix);font-size:9px;cursor:pointer}
+.nav-btn:active{transform:translateY(3px);box-shadow:0 2px 0 var(--btn-dark)}
+.nav-btn:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.nav-menu{position:fixed;right:max(14px,env(safe-area-inset-right));bottom:calc(max(14px,env(safe-area-inset-bottom)) + 76px);z-index:30;display:flex;flex-direction:column;min-width:200px;max-height:calc(100vh - 120px);overflow-y:auto;background:var(--lcd);border:4px solid var(--ink);box-shadow:4px 4px 0 var(--ink);padding:6px}
+.nav-menu .menu-btn{width:100%;min-height:42px}
+.nav-menu .menu-btn:hover,.nav-menu .menu-btn:focus-visible{background:var(--ink);color:var(--lcd)}
+.nav-menu .menu-btn:hover::before,.nav-menu .menu-btn:focus-visible::before{visibility:visible}
 @media (max-width:560px){
   .vs-row{grid-template-columns:44px 1fr 40px 1fr 44px;font-size:13px;gap:5px}
   .hp-track{width:64px}
@@ -357,6 +372,15 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
     <p class="note">「贏面」和「勝率」是把每項數據一週的正常起伏算進去後的估計：差距越大，贏面越接近 100%。勝率＝9 項贏 5 項以上的機率。選了週次會依那週每隊的出賽場數、每天最多 10 人先發來預測；選「每場平均」則只比每場數據。</p>
   </section>
 
+  <section aria-labelledby="h-today">
+    <h2 id="h-today"><span class="en">DAILY LINEUP</span>每日先發</h2>
+    <div class="tm">
+      <div class="tm-opts"><label class="tm-label" for="day-sel">日期</label><select id="day-sel"></select></div>
+      <div id="day-out" class="day-out"></div>
+    </div>
+    <p class="note">依那天有比賽的球員，用價值由高到低排進 10 個先發位置（PG、SG、G、SF、PF、F、C、C、Util、Util），缺陣（O）的人不排。「Yahoo 目前」是上次更新資料時你在 Yahoo 排的位置；「換上場」「換下來」是跟它比的建議，到 Yahoo 調整後記得儲存。</p>
+  </section>
+
   <section aria-labelledby="h-trade">
     <h2 id="h-trade"><span class="en">TRADE MACHINE</span>交易分析器</h2>
     <div class="seg tm-mode" role="group" aria-label="交易類型">
@@ -446,6 +470,16 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
       <p class="note" id="fa-status">每位 FA 都跟你隊上每一位可以丟的人配一次（名單有空位時也試「不丟人」），列出讓你平均名次進步最多的前 10 位。</p>
       <div id="fa-out" class="as-out"></div>
     </div>
+    <h3 class="tm-h3"><span class="en">STREAMING</span>本週串流</h3>
+    <div class="tm">
+      <p class="note" id="st-info"></p>
+      <div class="tm-opts">
+        <label class="chk"><input type="checkbox" id="st-nowaiver">排除 waiver（要等幾天才撿得到）</label>
+        <button class="pxbtn" id="st-go" type="button">▶ 找本週串流</button>
+      </div>
+      <p class="note" id="st-status">H2H 一週一週比：撿這週還有很多場比賽的 FA，可以多拿幾場先發的數據。</p>
+      <div id="st-out" class="as-out"></div>
+    </div>
     <p class="note">名次用跟聯盟表一樣的算法（非 IL 球員場均加總、各項名次平均），只有你的隊伍改變。FA 依目前數據來源的價值排序，括號裡是價值。不檢查先發位置；出賽率跟著上方 GP 的設定。</p>
   </section>
   <section aria-labelledby="h-league">
@@ -497,6 +531,8 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
 
   <p class="note" id="foot-note">預測來源：Yahoo（Rotowire）、ESPN、FantasyPros 共識預測，三家場均取平均；FantasyPros 只提供命中率，出手數沿用另外兩家。上季數據取自 Yahoo 2025-26 場均，新秀及上季未出賽者無數據，以「—」表示且不計入。▲▼ 是跟上次更新（交易前，10/9 waiver 後）相比的名次變化。名單更新於 2026/10/9（含石與大小小丑的交易）。</p>
   </div>
+  <button class="nav-btn" id="nav-btn" type="button" aria-expanded="false" aria-controls="nav-menu">MENU</button>
+  <nav class="nav-menu" id="nav-menu" aria-label="快速選單" hidden></nav>
   <div class="foot"><span class="sel">SELECT  START</span><div class="ab"><i>B</i><i>A</i></div></div>
  </div>
 </div>

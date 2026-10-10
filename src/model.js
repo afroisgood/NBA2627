@@ -17,7 +17,7 @@ function addMix(p){
 // H2H 勝率：每項當成常態分布估計贏面。計數項用「變異係數」（每週總數大約上下浮動幾 %），命中率用固定標準差
 const CV={tpm:.16,pts:.09,reb:.09,ast:.11,stl:.20,blk:.25,to:.13};
 const PCT_SD={fg:.013,ft:.025};
-function normCdf(z){const t=1/(1+.2316419*Math.abs(z)),d=.3989423*Math.exp(-z*z/2);
+function normCdf(z){if(!z)return .5;const t=1/(1+.2316419*Math.abs(z)),d=.3989423*Math.exp(-z*z/2);
   const p=d*t*(.3193815+t*(-.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));return z>0?1-p:p}
 function catProb(c,a,b){
   const sd=c.pct?Math.SQRT2*PCT_SD[c.k]:Math.hypot(CV[c.k]*a,CV[c.k]*b);
@@ -53,9 +53,19 @@ const WEEKS=(()=>{
   while(s<=last){const dow=(dayDate(s).getUTCDay()+6)%7,e=s+(6-dow);out.push({i:out.length+1,s,e,key:`w${out.length+1}`});s=e+1;}
   return out;
 })();
-const todayDay=()=>{const now=new Date();const et=new Date(now.toLocaleString("en-US",{timeZone:"America/New_York"}));return Math.floor((Date.UTC(et.getFullYear(),et.getMonth(),et.getDate())-baseUTC)/dayMs)};
+// 某個時間點在美東是第幾天（距離 SCHED.base）
+const dayOf=t=>{const et=new Date(new Date(t).toLocaleString("en-US",{timeZone:"America/New_York"}));return Math.floor((Date.UTC(et.getFullYear(),et.getMonth(),et.getDate())-baseUTC)/dayMs)};
+const todayDay=()=>dayOf(Date.now());
 const curWeek=()=>{if(!WEEKS.length)return null;const t=todayDay();return WEEKS.find(w=>t<=w.e)||WEEKS[WEEKS.length-1]};
 const weekOf=key=>WEEKS.find(w=>w.key===key)||null;
+// Yahoo 本週對戰（更新時抓的）：只有抓的那週就是現在這週才算數
+const MATCH=IMP&&IMP.MATCH?IMP.MATCH:null;
+function matchNow(){
+  if(!MATCH||!DATA.some(t=>t[0]===MATCH.opp))return null;
+  if(!WEEKS.length)return Date.now()-Date.parse(MATCH.at)<7*dayMs?MATCH:null;
+  const d=dayOf(MATCH.at),w=d<WEEKS[0].s?WEEKS[0]:WEEKS.find(x=>d>=x.s&&d<=x.e),c=curWeek();
+  return w&&c&&w.key===c.key?MATCH:null;
+}
 const nbaTeam=p=>(p[2]||"").split(" - ")[0].trim();
 const posOf=p=>((p[2]||"").split(" - ")[1]||"").split(",").map(x=>x.trim()).filter(Boolean);
 const gamesIn=(p,w)=>{const g=GAMES[nbaTeam(p)];if(!g||!w)return 0;let n=0;for(let d=w.s;d<=w.e;d++)if(g.has(d))n++;return n};

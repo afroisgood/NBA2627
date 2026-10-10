@@ -6,6 +6,7 @@
 <style>body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
 </head>
 <body>
+<script src="data/latest.js"></script>
 <title>杰西卡的AI實驗室 戰力表</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -123,6 +124,9 @@ select{font-family:var(--f-txt);font-size:16px;min-height:40px;background:var(--
 .vs-row .cat{font-family:var(--f-pix);font-size:9px;text-align:center}
 .vs-row .cat small{display:block;margin-top:4px;font-family:var(--f-txt);font-size:12px;font-weight:700;color:var(--mid);white-space:nowrap}
 .ms-card .s{font-size:14px;font-weight:700}
+.vs-live{display:flex;flex-direction:column;gap:8px}
+.vs-live p{margin:0;font-size:15px}
+.vs-live b{font-family:var(--f-dot);font-weight:400;font-size:20px}
 .ms-card.line .s{color:var(--mid)}
 .vs-bar{height:14px;border:2px solid var(--ink);position:relative;background:var(--lcd)}
 .vs-bar i{position:absolute;top:0;bottom:0;background:var(--lo)}
@@ -266,9 +270,17 @@ a.pxbtn{display:inline-block;text-decoration:none}
         <li>跑完按「▶ 打開戰力表」；或按「複製結果」，貼到下面的框框，再按「套用」。</li>
       </ol>
       <textarea id="upd-text" rows="3" placeholder="把「複製結果」的內容貼在這裡" aria-label="更新結果"></textarea>
-      <div class="tm-opts"><button class="pxbtn" id="upd-apply" type="button">▶ 套用</button><button class="pxbtn" id="upd-reset" type="button">還原內建資料</button></div>
+      <div class="tm-opts"><button class="pxbtn" id="upd-apply" type="button">▶ 套用</button><button class="pxbtn" id="upd-reset" type="button">清除這台電腦的資料</button></div>
       <p class="note" id="upd-msg" role="status"></p>
-      <p class="note">更新後的資料只存在你這台電腦的這個瀏覽器，別人打開網站看到的還是內建資料。想讓網站本身也更新，按「複製結果」後把內容交給 Claude 寫進專案。</p>
+      <p class="note">套用後的資料先存在你這台電腦的這個瀏覽器。想讓所有人打開網站都看到新資料，用下面的「讓網站也更新」。</p>
+      <div class="tm-label">讓網站也更新（所有人都看得到）</div>
+      <ol>
+        <li>先用上面的方法更新、套用，確認資料沒問題。</li>
+        <li><button class="pxbtn" id="upd-dl" type="button">下載網站資料檔</button>（會下載一個 <code>latest.js</code>）</li>
+        <li>打開 <a href="https://github.com/afroisgood/NBA2627/upload/main/data" target="_blank" rel="noopener">GitHub 上傳頁面</a>（要登入 GitHub），把 <code>latest.js</code> 拖進去，按最下面的綠色「Commit changes」。如果問要不要取代舊檔案，選取代。</li>
+        <li>大約 1–2 分鐘後，所有人打開網站都會看到新資料。標題下方會寫「網站共用」。</li>
+      </ol>
+      <p class="note">也可以把 <code>latest.js</code> 交給 Claude，請它放進專案的 <code>data</code> 資料夾。</p>
     </div>
   </section>
   <section aria-labelledby="h-vs">
@@ -276,6 +288,7 @@ a.pxbtn{display:inline-block;text-decoration:none}
     <div class="vs">
       <div class="vs-pick"><label for="opp">對手</label><select id="opp"></select><label for="vs-week">週次</label><select id="vs-week"></select></div>
       <p class="note" id="vs-info"></p>
+      <div id="vs-live"></div>
       <div class="vs-top" id="vs-top"></div>
       <div class="vs-rows" id="vs-rows"></div>
     </div>
@@ -369,7 +382,7 @@ a.pxbtn{display:inline-block;text-decoration:none}
 // 一鍵更新程式：在「已登入 Yahoo」的聯盟頁面（https://basketball.fantasysports.yahoo.com/nba/1031）執行。
 // 用法一：戰力表網頁的「更新資料」書籤（建議）。用法二：F12 → Console，整段貼上後按 Enter。
 // 抓的內容：16 隊名單、Yahoo 本季剩餘預測、ESPN 預測、2025-26 上季數據、2026-27 本季數據、季前排名、持有率，
-// 以及季前排名前 400 名裡所有沒被持有的球員（FA／waiver）、ESPN 的整季 NBA 賽程。
+// 以及季前排名前 400 名裡所有沒被持有的球員（FA／waiver）、ESPN 的整季 NBA 賽程、Yahoo 本週對戰（對手和目前比分）。
 // 跑完會出現視窗，按「打開戰力表」就會帶著新資料打開網頁。
 (async () => {
   const LEAGUE = 1031, TEAMS = 16, MY_TEAM_ID = 13, MAX_PAGES = 32, FA_PAGES = 16;
@@ -498,6 +511,45 @@ a.pxbtn{display:inline-block;text-decoration:none}
       console.warn('[戰力表更新] 賽程抓取失敗：', e);
     }
 
+    // 3-2) 本週對戰：Yahoo 對戰頁裡有 FG%、PTS 等欄位的表格，用隊伍連結找出自己和對手那兩列
+    const CAT_HEAD = { fg: ['FG%'], ft: ['FT%'], tpm: ['3PTM', '3PM'], pts: ['PTS'], reb: ['REB'], ast: ['AST'], stl: ['ST', 'STL'], blk: ['BLK'], to: ['TO'] };
+    const teamIdOf = el => { const a = [...el.querySelectorAll('a[href]')].map(x => (x.getAttribute('href') || '').match(new RegExp('/nba/' + LEAGUE + '/(\\d+)(?:[/?#]|$)'))).find(Boolean); return a ? +a[1] : 0; };
+    const parseMatch = d => {
+      for (const table of d.querySelectorAll('table')) {
+        const headRow = table.querySelector('thead tr') || table.querySelector('tr');
+        if (!headRow) continue;
+        const head = [...headRow.children].map(x => x.textContent.replace(/\s+/g, ' ').trim());
+        const col = {};
+        for (const k in CAT_HEAD) col[k] = head.findIndex(h => CAT_HEAD[k].includes(h));
+        if (col.fg < 0 || col.pts < 0 || col.to < 0) continue;
+        const rows = {};
+        [...table.querySelectorAll('tr')].filter(tr => tr !== headRow).forEach(tr => {
+          const id = teamIdOf(tr); if (!id) return;
+          const cells = [...tr.children].map(x => x.textContent.trim());
+          const v = {};
+          for (const k in col) { const x = parseFloat((cells[col[k]] || '').replace(/,/g, '')); v[k] = Number.isFinite(x) ? x : null; }
+          rows[id] = v;
+        });
+        const ids = Object.keys(rows).map(Number);
+        if (ids.includes(MY_TEAM_ID) && ids.length >= 2) {
+          const oid = ids.find(i => i !== MY_TEAM_ID), ok = v => Object.values(v).filter(x => x != null).length >= 7;
+          return { oppId: oid, me: ok(rows[MY_TEAM_ID]) ? rows[MY_TEAM_ID] : null, op: ok(rows[oid]) ? rows[oid] : null, week: +((d.body.textContent.match(/Week\s+(\d+)/) || [])[1]) || null };
+        }
+      }
+      return null;
+    };
+    let MATCH = null;
+    for (const url of [`/nba/${LEAGUE}/matchup?mid1=${MY_TEAM_ID}`, `/nba/${LEAGUE}/${MY_TEAM_ID}/matchup`]) {
+      try {
+        say('抓本週對戰…');
+        const m = parseMatch(await getDoc(url));
+        const opp = m && rosters.find(t => t.id === m.oppId);
+        if (opp) { MATCH = { at: new Date().toISOString(), week: m.week, opp: opp.name, me: m.me, op: m.op }; break; }
+      } catch (e) {
+        console.warn('[戰力表更新] 對戰頁讀取失敗：', url, e);
+      }
+    }
+
     // 4) 合併：預測 = Yahoo 和 ESPN 場均平均（只有一家就用那一家）
     const avg = (a, b) => a && b ? a.map((x, i) => r2((x + b[i]) / 2)) : a || b || null;
     let noProj = 0;
@@ -518,10 +570,10 @@ a.pxbtn{display:inline-block;text-decoration:none}
       FA.push([n, /^W/.test(r.own) ? 'W' : 'FA', r.tp, status(r.st), proj, last, cur]);
     }
     const me = rosters.find(t => t.id === MY_TEAM_ID);
-    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA, SCHED });
+    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA, SCHED, MATCH });
     window._LP_UPDATE = json;
     const curN = DATA.reduce((a, t) => a + t[1].filter(p => p[6]).length, 0);
-    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到；賽程${SCHED ? '有' : '沒有'}抓到。`);
+    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到；賽程${SCHED ? '有' : '沒有'}抓到；本週對手：${MATCH ? MATCH.opp + (MATCH.me ? '（含目前比分）' : '（還沒有比分）') : '沒有抓到'}。`);
     btns.innerHTML = '';
     button('▶ 打開戰力表', () => window.open(SITE + '#import=' + encodeURIComponent(json), '_blank'));
     button('複製結果', async () => {
@@ -556,9 +608,12 @@ const DATA=[
 ["坂木老大：賣全身球員求合成", [["Amen Thompson", "PG", "HOU - PG,SG", "", [76, 6.89, 12.75, 3.77, 4.91, 0.33, 17.42, 7.67, 4.95, 1.52, 0.81, 2.23], [79, 7.05, 13.22, 3.85, 4.94, 0.32, 18.27, 7.77, 5.32, 1.51, 0.61, 2.41]], ["Stephon Castle", "SG", "SAS - PG,SG", "", [73, 6.13, 13.07, 4.5, 6.11, 1.32, 17.91, 5.34, 7.07, 1.23, 0.31, 3.18], [68, 5.66, 12.01, 4.15, 5.65, 1.19, 16.66, 5.32, 7.38, 1.15, 0.28, 3.19]], ["VJ Edgecombe", "G", "PHI - PG,SG", "", [74, 5.86, 13.32, 2, 2.46, 1.88, 15.39, 5.69, 4.16, 1.43, 0.52, 1.8], [75, 6.01, 13.73, 1.97, 2.41, 1.99, 15.99, 5.64, 4.2, 1.43, 0.52, 1.83]], ["Jalen Johnson", "SF", "ATL - SF,PF", "Q", [71, 8.33, 16.97, 4.22, 5.37, 1.62, 22.14, 10.06, 7.58, 1.29, 0.55, 3.22], [72, 8.33, 17.06, 4.18, 5.31, 1.67, 22.51, 10.28, 7.86, 1.24, 0.43, 3.39]], ["LeBron James", "PF", "PHI - SF,PF", "", [66, 7.58, 14.68, 3.43, 4.53, 1.55, 20.62, 6.31, 6.82, 1.01, 0.53, 2.95], [60, 7.88, 15.32, 3.88, 5.27, 1.28, 20.93, 6.07, 7.2, 1.2, 0.58, 2.98]], ["Quentin Grimes", "F", "LAL - SG,SF", "", [73, 5.28, 11.61, 2.6, 3.24, 2.12, 14.75, 4, 3.25, 0.97, 0.36, 1.91], [75, 4.53, 10.07, 2.65, 3.16, 1.69, 13.41, 3.64, 3.25, 0.85, 0.37, 1.77]], ["Walker Kessler", "C", "LAL - C", "Q", [67, 5.29, 7.99, 2.04, 3.55, 0.27, 12.38, 11.93, 1.7, 0.73, 2.5, 1.58], [5, 5.2, 7.4, 2.8, 4, 1.2, 14.4, 10.8, 3, 1.4, 1.8, 3.2]], ["Nikola Vučević", "C", "ORL - C", "", [72, 4.62, 9.21, 0.92, 1.14, 0.98, 11.24, 6.38, 2.2, 0.52, 0.49, 0.98], [64, 6.16, 12.48, 1.2, 1.45, 1.56, 15.08, 8.39, 3.33, 0.61, 0.64, 1.33]], ["Collin Gillespie", "Util", "PHX - PG,SG", "", [73, 4.14, 9.87, 0.9, 1.04, 2.52, 11.14, 3.72, 4.15, 1.16, 0.19, 1.32], [80, 4.4, 10.53, 0.95, 1.09, 2.9, 12.65, 4.09, 4.64, 1.24, 0.2, 1.56]], ["Moussa Diabaté", "Util", "CHA - C", "", [70, 2.9, 4.69, 1.44, 2.21, 0.01, 6.84, 7.61, 1.61, 0.67, 0.84, 0.98], [73, 3.14, 4.97, 1.59, 2.41, 0.01, 7.88, 8.7, 1.93, 0.77, 0.99, 1]], ["Steven Adams", "BN", "HOU - C", "", [58, 1.5, 2.95, 1.01, 1.7, 0, 3.74, 5.44, 1.27, 0.44, 0.41, 0.86], [32, 2.19, 4.34, 1.47, 2.53, 0, 5.84, 8.63, 1.5, 0.69, 0.63, 1.09]], ["Mitchell Robinson", "BN", "BOS - C", "Q", [64, 2.82, 4, 0.81, 1.94, 0, 6.48, 9.76, 0.95, 1.05, 1.34, 0.8], [60, 2.48, 3.43, 0.7, 1.72, 0, 5.67, 8.75, 0.87, 0.93, 1.17, 0.68]], ["Jrue Holiday", "BN", "POR - PG,SG", "", [69, 4.57, 10.05, 1.13, 1.32, 1.83, 11.78, 4.16, 4.35, 0.91, 0.31, 1.76], [53, 6.04, 13.38, 1.66, 1.98, 2.58, 16.32, 4.62, 6.08, 1.02, 0.11, 2.75]]]]
 ];
 const MKT={"Tyrese Maxey":[8,100],"Darryn Peterson":[114,80],"LaMelo Ball":[23,100],"Matas Buzelis":[64,91],"Derik Queen":[100,86],"Josh Hart":[98,85],"Zach Edey":[66,91],"Kel'el Ware":[74,90],"Day'Ron Sharpe":[90,82],"Fred VanVleet":[150,42],"Rui Hachimura":[119,39],"Jalen Smith":[165,7],"Naji Marshall":[197,9],"Trae Young":[18,99],"N. Alexander-Walker":[58,94],"Darius Garland":[53,94],"Dillon Brooks":[140,35],"John Collins":[97,69],"Jabari Smith Jr.":[96,80],"Evan Mobley":[27,99],"Myles Turner":[118,76],"CJ McCollum":[106,74],"Ty Jerome":[88,70],"Miles Bridges":[101,80],"RJ Barrett":[132,69],"GG Jackson":[221,4],"Brandon Ingram":[83,91],"De'Aaron Fox":[70,90],"Jaylen Brown":[47,100],"Collin Sexton":[205,16],"Franz Wagner":[50,96],"Kyle Filipowski":[204,12],"Grayson Allen":[177,18],"Nikola Jokić":[1,100],"Alperen Şengün":[22,100],"Jake LaRavia":[164,7],"Noah Clowney":[232,3],"Nikola Jović":[235,2],"Paul Reed":[181,15],"Jordan Poole":[190,8],"Reed Sheppard":[141,40],"Cooper Flagg":[11,100],"Immanuel Quickley":[87,85],"Peyton Watson":[120,67],"Saddiq Bey":[151,36],"Victor Wembanyama":[2,100],"Adem Bona":[284,3],"Payton Pritchard":[80,90],"Scotty Pippen Jr.":[166,12],"Christian Braun":[155,27],"Davion Mitchell":[112,58],"Dylan Cardwell":[202,4],"Brayden Burries":[242,7],"Y. Konan Niederhäuser":[425,6],"Jamal Murray":[17,100],"Kevin Durant":[14,100],"Cedric Coward":[75,86],"Brandon Miller":[35,98],"Jaren Jackson Jr.":[40,97],"Caleb Wilson":[82,89],"Yves Missi":[131,15],"Wendell Carter Jr.":[125,37],"Paolo Banchero":[51,98],"Paul George":[76,90],"Ajay Mitchell":[126,29],"P.J. Washington":[137,29],"Devin Vassell":[163,36],"Derrick White":[39,98],"Dylan Harper":[85,90],"Dejounte Murray":[57,92],"Scottie Barnes":[15,100],"Bam Adebayo":[26,100],"Andrew Wiggins":[91,82],"Donovan Clingan":[44,98],"Khaman Maluach":[113,55],"Jalen Suggs":[95,75],"Egor Dëmin":[143,26],"Tari Eason":[159,19],"Carter Bryant":[385,2],"Joan Beringer":[182,8],"Ryan Rollins":[60,91],"Keyonte George":[46,96],"Ja Morant":[94,88],"Jalen Williams":[37,99],"Zion Williamson":[81,92],"Domantas Sabonis":[34,99],"Rudy Gobert":[78,91],"Nic Claxton":[110,83],"Damian Lillard":[67,93],"Klay Thompson":[213,14],"Jalen Green":[122,80],"Jonathan Kuminga":[136,28],"Ryan Kalkbrenner":[246,5],"Luka Dončić":[3,100],"Kevin Porter Jr.":[128,41],"Mikel Brown Jr.":[157,13],"Jayson Tatum":[7,100],"Naz Reid":[65,94],"AJ Dybantsa":[93,90],"Jakob Poeltl":[117,46],"Neemias Queta":[107,65],"Andrew Nembhard":[111,65],"Keaton Wagler":[203,20],"Anthony Black":[148,35],"Morez Johnson Jr.":[214,9],"Pelle Larsson":[153,12],"Josh Giddey":[19,99],"Trey Murphy III":[28,99],"Dyson Daniels":[62,93],"Michael Porter Jr.":[61,94],"Chet Holmgren":[31,100],"OG Anunoby":[69,94],"Collin Murray-Boyles":[102,67],"Bobby Portis Jr.":[172,19],"Jeremiah Fears":[185,33],"Aday Mara":[248,14],"Miles McBride":[194,4],"Alex Caruso":[200,9],"Jusuf Nurkić":[115,67],"Devin Booker":[24,100],"Austin Reaves":[21,100],"Coby White":[86,87],"Kon Knueppel":[63,97],"Kawhi Leonard":[36,100],"Norman Powell":[89,87],"Jalen Duren":[32,99],"Ivica Zubac":[54,93],"Cam Spencer":[226,6],"Kristaps Porziņģis":[154,53],"Tre Jones":[138,17],"Tobias Harris":[158,17],"Brook Lopez":[171,12],"Jalen Brunson":[29,100],"James Harden":[33,99],"Stephen Curry":[25,100],"Keegan Murray":[99,60],"Giannis Antetokounmpo":[6,100],"Kyshawn George":[121,59],"Isaiah Hartenstein":[104,74],"Oso Ighodaro":[178,8],"Bennedict Mathurin":[160,17],"Jerami Grant":[168,15],"Isaiah Jackson":[169,9],"Ben Simmons":[227,7],"Bilal Coulibaly":[208,6],"Mark Williams":[206,23],"Donovan Mitchell":[13,100],"Tyrese Haliburton":[10,100],"Desmond Bane":[48,97],"Lauri Markkanen":[30,99],"DeMar DeRozan":[142,62],"Jaime Jaquez Jr.":[135,68],"Onyeka Okongwu":[49,95],"Jarrett Allen":[72,92],"Ayo Dosunmu":[108,70],"Ace Bailey":[147,29],"Draymond Green":[152,28],"Jaylon Tyson":[231,4],"Scoot Henderson":[180,8],"Donte DiVincenzo":[252,7],"Max Strus":[228,6],"Anthony Edwards":[9,100],"Aaron Nesmith":[156,15],"Kyrie Irving":[41,98],"Herbert Jones":[162,17],"Gui Santos":[149,13],"Anthony Davis":[45,99],"Joel Embiid":[52,97],"Alex Sarr":[56,92],"Daniel Gafford":[130,30],"Tyler Herro":[68,93],"Keldon Johnson":[212,9],"Kelly Oubre Jr.":[179,14],"Sam Merrill":[270,2],"Jimmy Butler III":[145,53],"Shai Gilgeous-Alexander":[4,100],"Cade Cunningham":[5,100],"Brandin Podziemski":[105,67],"Zaccharie Risacher":[273,6],"Cameron Boozer":[55,94],"Sandro Mamukelashvili":[129,39],"Aaron Gordon":[124,63],"Marvin Bagley III":[245,2],"Darius Acuff Jr.":[127,69],"Julian Champagnie":[173,16],"Will Riley":[224,2],"Deandre Ayton":[187,13],"Dennis Schröder":[188,6],"Zach LaVine":[103,79],"Deni Avdija":[42,98],"Ausar Thompson":[73,89],"Mikal Bridges":[79,90],"Karl-Anthony Towns":[16,100],"Toumani Camara":[109,69],"Pascal Siakam":[59,96],"Maxime Raynaud":[161,26],"Julius Randle":[71,93],"Jaden McDaniels":[92,88],"Cason Wallace":[123,43],"Yaxel Lendeborg":[133,52],"Cameron Johnson":[146,21],"Shaedon Sharpe":[218,11],"Amen Thompson":[20,99],"Stephon Castle":[77,95],"VJ Edgecombe":[84,92],"Jalen Johnson":[12,100],"LeBron James":[43,99],"Quentin Grimes":[134,32],"Walker Kessler":[38,99],"Nikola Vučević":[167,25],"Collin Gillespie":[116,29],"Moussa Diabaté":[144,21],"Steven Adams":[397,1],"Mitchell Robinson":[176,19],"Jrue Holiday":[139,28],"Hannes Steinbach":[260,5]};
-// ---------- 匯入的資料：tools/yahoo-update.js 產生，存在 localStorage "lp-data" ----------
+// ---------- 匯入的資料：tools/yahoo-update.js 產生 ----------
+// 兩個來源，用比較新的那一份：
+//   1. 這台電腦：localStorage "lp-data"（按「套用」或從 Yahoo 視窗打開時存的）
+//   2. 網站共用：data/latest.js 裡的 window.SHARED_DATA（「下載網站資料檔」產生，上傳到專案的 data 資料夾）
 const BUILTIN_AT="2026/10/9";
-let IMP=null;
+let IMP=null,IMP_FROM="";
 function checkImport(o){
   const isStr=x=>typeof x==="string",isNum=x=>typeof x==="number"&&Number.isFinite(x);
   const isStats=s=>s==null||(Array.isArray(s)&&s.length===12&&s.every(isNum));
@@ -571,14 +626,21 @@ function checkImport(o){
   }
   if(!o.DATA.some(t=>t[0]===o.ME))return "名單裡找不到你的隊伍。";
   if(o.FA!=null&&(!Array.isArray(o.FA)||!o.FA.every(okP)))return "FA 資料格式不對。";
+  if(o.MATCH!=null){const m=o.MATCH,okV=v=>v==null||(typeof v==="object"&&["fg","ft","tpm","pts","reb","ast","stl","blk","to"].every(k=>v[k]==null||isNum(v[k])));
+    if(!m||!isStr(m.opp)||!isStr(m.at)||!(m.week==null||isNum(m.week))||!okV(m.me)||!okV(m.op))return "本週對戰資料格式不對。";}
   if(o.SCHED!=null){const S=o.SCHED;if(!S||!/^\d{4}-\d{2}-\d{2}$/.test(S.base)||!S.teams||typeof S.teams!=="object"||!Object.values(S.teams).every(a=>Array.isArray(a)&&a.every(d=>Number.isInteger(d)&&d>=0&&d<400)))return "賽程資料格式不對。";}
   for(const k in o.MKT){const m=o.MKT[k];if(!Array.isArray(m)||m.length!==2||!m.every(isNum))return "排名／持有率資料格式不對。";}
   return "";
 }
 try{
-  const o=JSON.parse(localStorage.getItem("lp-data")||"null");
-  if(o&&!checkImport(o)){
-    IMP=o;ME=o.ME;
+  let local=null,shared=null;
+  try{local=JSON.parse(localStorage.getItem("lp-data")||"null");}catch(e){}
+  if(local&&checkImport(local))local=null;
+  if(typeof window!=="undefined"&&window.SHARED_DATA&&!checkImport(window.SHARED_DATA))shared=window.SHARED_DATA;
+  const t=x=>x?Date.parse(x.at)||0:-1;
+  const o=t(local)>=t(shared)?local:shared;
+  if(o){
+    IMP=o;IMP_FROM=o===local?"local":"shared";ME=o.ME;
     DATA.splice(0,DATA.length,...o.DATA.map(t=>[t[0],t[1].map(p=>p.slice(0,7))]));
     for(const k in MKT)delete MKT[k];
     Object.assign(MKT,o.MKT);
@@ -601,6 +663,8 @@ function applyImport(text){
   state.src=keep;
   o.PREV=prev;
   try{localStorage.setItem("lp-data",JSON.stringify(o));}catch(e){return "瀏覽器不允許儲存資料（可能是無痕模式），沒辦法套用。";}
+  // 新資料的本週對手可能不一樣：VS 的對手和週次改回自動
+  try{const s=JSON.parse(localStorage.getItem("lp-state2")||"{}");s.opp=null;s.week=null;localStorage.setItem("lp-state2",JSON.stringify(s));}catch(e){}
   location.reload();
   return "";
 }
@@ -608,7 +672,7 @@ function applyImport(text){
 function initImport(){
   const panel=document.getElementById("upd"),msg=document.getElementById("upd-msg"),ta=document.getElementById("upd-text");
   const src=document.getElementById("yahoo-script").textContent.trim();
-  document.getElementById("upd-status").textContent=IMP?`資料：${fmtAt(IMP.at)} 從 Yahoo 更新`:`資料：${BUILTIN_AT} 內建`;
+  document.getElementById("upd-status").textContent=IMP?`資料：${fmtAt(IMP.at)} 從 Yahoo 更新（${IMP_FROM==="shared"?"網站共用":"只在這台電腦"}）`:`資料：${BUILTIN_AT} 內建`;
   if(IMP)document.getElementById("src-pr").textContent="2026-27 預測";
   if(IMP)document.getElementById("foot-note").textContent=`預測來源：Yahoo（Rotowire）、ESPN，兩家場均取平均。上季數據取自 Yahoo 2025-26 場均，本季數據取自 Yahoo 2026-27 場均；沒有數據的球員以「—」表示且不計入。▲▼ 是跟這次更新前的資料相比的名次變化。名單更新於 ${fmtAt(IMP.at)}。`;
   document.getElementById("upd-open").onclick=()=>{panel.hidden=!panel.hidden;if(!panel.hidden)panel.scrollIntoView({behavior:"smooth",block:"start"});};
@@ -620,9 +684,18 @@ function initImport(){
     catch(e){ta.value=src;ta.select();msg.textContent="沒辦法自動複製，已把程式放進下面的框框，請自己全選複製。";}
   };
   document.getElementById("upd-apply").onclick=()=>{msg.textContent=applyImport(ta.value)||"套用中…";};
+  // 網站資料檔：把目前用的資料存成 latest.js，上傳到專案的 data 資料夾後，所有人打開網站都會用它
+  document.getElementById("upd-dl").onclick=()=>{
+    if(!IMP){msg.textContent="目前是內建資料，請先從 Yahoo 更新一次，再下載網站資料檔。";return;}
+    const blob=new Blob([`window.SHARED_DATA=${JSON.stringify(IMP)};\n`],{type:"text/javascript"});
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="latest.js";document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+    msg.textContent="已下載 latest.js。照下面的步驟上傳到 GitHub 的 data 資料夾，大約 1–2 分鐘後所有人都會看到新資料。";
+  };
   document.getElementById("upd-reset").onclick=()=>{
-    if(!IMP){msg.textContent="目前用的就是內建資料。";return;}
-    if(!confirm("要刪除匯入的資料，改回內建資料嗎？"))return;
+    let has=false;try{has=!!localStorage.getItem("lp-data");}catch(e){}
+    if(!has){msg.textContent=IMP_FROM==="shared"?"這台電腦沒有自己匯入的資料，目前用的是網站共用資料。":"目前用的就是內建資料。";return;}
+    if(!confirm("要刪除這台電腦匯入的資料嗎？（網站共用資料不受影響）"))return;
     try{localStorage.removeItem("lp-data");}catch(e){}
     location.reload();
   };
@@ -656,7 +729,7 @@ function addMix(p){
 // H2H 勝率：每項當成常態分布估計贏面。計數項用「變異係數」（每週總數大約上下浮動幾 %），命中率用固定標準差
 const CV={tpm:.16,pts:.09,reb:.09,ast:.11,stl:.20,blk:.25,to:.13};
 const PCT_SD={fg:.013,ft:.025};
-function normCdf(z){const t=1/(1+.2316419*Math.abs(z)),d=.3989423*Math.exp(-z*z/2);
+function normCdf(z){if(!z)return .5;const t=1/(1+.2316419*Math.abs(z)),d=.3989423*Math.exp(-z*z/2);
   const p=d*t*(.3193815+t*(-.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));return z>0?1-p:p}
 function catProb(c,a,b){
   const sd=c.pct?Math.SQRT2*PCT_SD[c.k]:Math.hypot(CV[c.k]*a,CV[c.k]*b);
@@ -692,9 +765,19 @@ const WEEKS=(()=>{
   while(s<=last){const dow=(dayDate(s).getUTCDay()+6)%7,e=s+(6-dow);out.push({i:out.length+1,s,e,key:`w${out.length+1}`});s=e+1;}
   return out;
 })();
-const todayDay=()=>{const now=new Date();const et=new Date(now.toLocaleString("en-US",{timeZone:"America/New_York"}));return Math.floor((Date.UTC(et.getFullYear(),et.getMonth(),et.getDate())-baseUTC)/dayMs)};
+// 某個時間點在美東是第幾天（距離 SCHED.base）
+const dayOf=t=>{const et=new Date(new Date(t).toLocaleString("en-US",{timeZone:"America/New_York"}));return Math.floor((Date.UTC(et.getFullYear(),et.getMonth(),et.getDate())-baseUTC)/dayMs)};
+const todayDay=()=>dayOf(Date.now());
 const curWeek=()=>{if(!WEEKS.length)return null;const t=todayDay();return WEEKS.find(w=>t<=w.e)||WEEKS[WEEKS.length-1]};
 const weekOf=key=>WEEKS.find(w=>w.key===key)||null;
+// Yahoo 本週對戰（更新時抓的）：只有抓的那週就是現在這週才算數
+const MATCH=IMP&&IMP.MATCH?IMP.MATCH:null;
+function matchNow(){
+  if(!MATCH||!DATA.some(t=>t[0]===MATCH.opp))return null;
+  if(!WEEKS.length)return Date.now()-Date.parse(MATCH.at)<7*dayMs?MATCH:null;
+  const d=dayOf(MATCH.at),w=d<WEEKS[0].s?WEEKS[0]:WEEKS.find(x=>d>=x.s&&d<=x.e),c=curWeek();
+  return w&&c&&w.key===c.key?MATCH:null;
+}
 const nbaTeam=p=>(p[2]||"").split(" - ")[0].trim();
 const posOf=p=>((p[2]||"").split(" - ")[1]||"").split(",").map(x=>x.trim()).filter(Boolean);
 const gamesIn=(p,w)=>{const g=GAMES[nbaTeam(p)];if(!g||!w)return 0;let n=0;for(let d=w.s;d<=w.e;d++)if(g.has(d))n++;return n};
@@ -818,10 +901,12 @@ function renderLeague(rows){
 
 function renderVS(rows){
   const sel=document.getElementById("opp");
-  const others=rows.filter(r=>r.name!==ME).sort((a,b)=>a.ovr-b.ovr);
-  if(!state.opp||!others.find(r=>r.name===state.opp))state.opp=others[0].name;
-  sel.innerHTML=others.map(r=>`<option value="${esc(r.name)}" ${r.name===state.opp?"selected":""}>#${r.ovr} ${esc(r.name)}</option>`).join("");
-  const A=rows.find(r=>r.name===ME),B=rows.find(r=>r.name===state.opp);
+  const others=rows.filter(r=>r.name!==ME).sort((a,b)=>a.ovr-b.ovr),mt=matchNow();
+  // 對手：自己選的優先；沒選（null）就用 Yahoo 本週對手，再沒有就用排名第一的隊
+  if(state.opp&&!others.find(r=>r.name===state.opp))state.opp=null;
+  const opp=state.opp||(mt?mt.opp:others[0].name);
+  sel.innerHTML=others.map(r=>`<option value="${esc(r.name)}" ${r.name===opp?"selected":""}>#${r.ovr} ${esc(r.name)}${mt&&r.name===mt.opp?"（本週對手）":""}</option>`).join("");
+  const A=rows.find(r=>r.name===ME),B=rows.find(r=>r.name===opp);
   const wk=vsWeek(),ws=document.getElementById("vs-week");
   ws.innerHTML=`<option value="pg">每場平均（不看賽程）</option>`+WEEKS.map(x=>`<option value="${x.key}">第 ${x.i} 週 ${md(x.s)}–${md(x.e)}</option>`).join("");
   ws.value=wk?wk.key:"pg";ws.disabled=!WEEKS.length;
@@ -830,6 +915,7 @@ function renderVS(rows){
   if(wk){const val=playerValues(),ta=weekTotals(A.ps,wk,val),tb=weekTotals(B.ps,wk,val);va=ta.v;vb=tb.v;
     info=`第 ${wk.i} 週（${md(wk.s)}–${md(wk.e)}）預測總數：${esc(ME)} 先發 ${ta.starts} 場次${ta.benched?`（另有 ${ta.benched} 場次排不進先發）`:""}；${esc(B.name)} 先發 ${tb.starts} 場次${tb.benched?`（另有 ${tb.benched} 場次排不進先發）`:""}。每天最多 10 人上場，依位置排出最好的陣容${state.inj?"，缺陣不算、存疑打 75 折":""}。`;}
   document.getElementById("vs-info").innerHTML=info;
+  document.getElementById("vs-live").innerHTML=liveScore(B.name,mt);
   const M=matchup(va,vb);
   let w=0,l=0,t=0;
   const rowsH=CATS.map((c,ci)=>{
@@ -846,6 +932,21 @@ function renderVS(rows){
     <div class="vs-side">${emblem(B.name,40)}<span class="nm">${esc(B.name)}</span></div>`;
   document.getElementById("vs-rows").innerHTML=rowsH;
   sel.onchange=()=>{state.opp=sel.value;save();render();};
+}
+
+// Yahoo 本週實際比分（只在看的是本週對手時顯示）
+function liveScore(opp,mt){
+  if(!IMP||!IMP.MATCH)return "";
+  if(!mt)return `<p class="note">上次抓到的 Yahoo 對戰是之前的週次。按上方「↻ 更新資料」抓本週對手和目前比分。</p>`;
+  if(opp!==mt.opp)return `<p class="note">Yahoo 本週對手是 ${esc(mt.opp)}，你現在看的是別隊。</p>`;
+  if(!mt.me||!mt.op)return `<p class="note">本週對手：${esc(mt.opp)}（Yahoo）。比賽開始後再更新資料，就會顯示目前的實際比分。</p>`;
+  let w=0,l=0;
+  const cells=CATS.map(c=>{const a=mt.me[c.k],b=mt.op[c.k];if(a==null||b==null)return {c,a,b,s:0};const s=a===b?0:(c.low?a<b:a>b)?1:-1;if(s>0)w++;if(s<0)l++;return {c,a,b,s}});
+  const v=(x,c,win)=>x==null?'<span class="dash">—</span>':`${win?"♛":""}${c.pct?f3(x):Number.isInteger(x)?x:f1(x)}`;
+  return `<div class="vs-live"><p><b>本週實際比分</b>（Yahoo${mt.week?` 第 ${mt.week} 週`:""}，${fmtAt(mt.at)} 抓取）：${esc(ME)} <b>${w} : ${l}</b> ${esc(mt.opp)}</p>
+    <div class="scroll"><table><thead><tr><th class="name">實際</th>${cells.map(x=>`<th>${x.c.l}${x.c.low?"↓":""}</th>`).join("")}</tr></thead><tbody>
+    <tr><td class="name">${esc(ME)}</td>${cells.map(x=>`<td class="${x.s>0?"h1":""}">${v(x.a,x.c,x.s>0)}</td>`).join("")}</tr>
+    <tr><td class="name">${esc(mt.opp)}</td>${cells.map(x=>`<td class="${x.s<0?"h1":""}">${v(x.b,x.c,x.s<0)}</td>`).join("")}</tr></tbody></table></div></div>`;
 }
 
 // VS 的週次：state.week 為 null＝自動（本週）、"pg"＝每場平均、"wN"＝第 N 週

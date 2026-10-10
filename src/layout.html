@@ -115,6 +115,9 @@ select{font-family:var(--f-txt);font-size:16px;min-height:40px;background:var(--
 .vs-row .cat{font-family:var(--f-pix);font-size:9px;text-align:center}
 .vs-row .cat small{display:block;margin-top:4px;font-family:var(--f-txt);font-size:12px;font-weight:700;color:var(--mid);white-space:nowrap}
 .ms-card .s{font-size:14px;font-weight:700}
+.vs-live{display:flex;flex-direction:column;gap:8px}
+.vs-live p{margin:0;font-size:15px}
+.vs-live b{font-family:var(--f-dot);font-weight:400;font-size:20px}
 .ms-card.line .s{color:var(--mid)}
 .vs-bar{height:14px;border:2px solid var(--ink);position:relative;background:var(--lcd)}
 .vs-bar i{position:absolute;top:0;bottom:0;background:var(--lo)}
@@ -258,9 +261,17 @@ a.pxbtn{display:inline-block;text-decoration:none}
         <li>跑完按「▶ 打開戰力表」；或按「複製結果」，貼到下面的框框，再按「套用」。</li>
       </ol>
       <textarea id="upd-text" rows="3" placeholder="把「複製結果」的內容貼在這裡" aria-label="更新結果"></textarea>
-      <div class="tm-opts"><button class="pxbtn" id="upd-apply" type="button">▶ 套用</button><button class="pxbtn" id="upd-reset" type="button">還原內建資料</button></div>
+      <div class="tm-opts"><button class="pxbtn" id="upd-apply" type="button">▶ 套用</button><button class="pxbtn" id="upd-reset" type="button">清除這台電腦的資料</button></div>
       <p class="note" id="upd-msg" role="status"></p>
-      <p class="note">更新後的資料只存在你這台電腦的這個瀏覽器，別人打開網站看到的還是內建資料。想讓網站本身也更新，按「複製結果」後把內容交給 Claude 寫進專案。</p>
+      <p class="note">套用後的資料先存在你這台電腦的這個瀏覽器。想讓所有人打開網站都看到新資料，用下面的「讓網站也更新」。</p>
+      <div class="tm-label">讓網站也更新（所有人都看得到）</div>
+      <ol>
+        <li>先用上面的方法更新、套用，確認資料沒問題。</li>
+        <li><button class="pxbtn" id="upd-dl" type="button">下載網站資料檔</button>（會下載一個 <code>latest.js</code>）</li>
+        <li>打開 <a href="https://github.com/afroisgood/NBA2627/upload/main/data" target="_blank" rel="noopener">GitHub 上傳頁面</a>（要登入 GitHub），把 <code>latest.js</code> 拖進去，按最下面的綠色「Commit changes」。如果問要不要取代舊檔案，選取代。</li>
+        <li>大約 1–2 分鐘後，所有人打開網站都會看到新資料。標題下方會寫「網站共用」。</li>
+      </ol>
+      <p class="note">也可以把 <code>latest.js</code> 交給 Claude，請它放進專案的 <code>data</code> 資料夾。</p>
     </div>
   </section>
   <section aria-labelledby="h-vs">
@@ -268,6 +279,7 @@ a.pxbtn{display:inline-block;text-decoration:none}
     <div class="vs">
       <div class="vs-pick"><label for="opp">對手</label><select id="opp"></select><label for="vs-week">週次</label><select id="vs-week"></select></div>
       <p class="note" id="vs-info"></p>
+      <div id="vs-live"></div>
       <div class="vs-top" id="vs-top"></div>
       <div class="vs-rows" id="vs-rows"></div>
     </div>

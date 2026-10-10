@@ -3,6 +3,7 @@
 - dist/league-power.html          → 完整獨立網頁（可直接用瀏覽器打開）
 - dist/league-power.artifact.html → 發布到 Claude Artifact 用（不含 <html>/<head> 外殼）
 - league-power.html（根目錄）       → GitHub Pages 顯示的網頁，和 dist/league-power.html 相同
+兩個完整網頁都會先載入 data/latest.js（網站共用資料，window.SHARED_DATA），Artifact 版不載入。
 """
 import pathlib
 root = pathlib.Path(__file__).parent
@@ -13,7 +14,8 @@ js = "".join((src / f).read_text(encoding="utf-8") for f in ["data.js", "market.
 upd = (root / "tools" / "yahoo-update.js").read_text(encoding="utf-8")
 assert "</script" not in upd.lower()
 artifact = f"{body}\n<script type=\"text/plain\" id=\"yahoo-script\">\n{upd}</script>\n<script>\n{js}</script>\n"
-standalone = f"""<!doctype html>
+def standalone(shared):
+    return f"""<!doctype html>
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
@@ -21,12 +23,13 @@ standalone = f"""<!doctype html>
 <style>body{{margin:0}}[hidden]{{display:none!important}}img{{max-width:100%}}</style>
 </head>
 <body>
+<script src="{shared}"></script>
 {artifact}
 </body>
 </html>
 """
 dist = root / "dist"; dist.mkdir(exist_ok=True)
 (dist / "league-power.artifact.html").write_text(artifact, encoding="utf-8")
-(dist / "league-power.html").write_text(standalone, encoding="utf-8")
-(root / "league-power.html").write_text(standalone, encoding="utf-8")
+(dist / "league-power.html").write_text(standalone("../data/latest.js"), encoding="utf-8")
+(root / "league-power.html").write_text(standalone("data/latest.js"), encoding="utf-8")
 print("built:", [p.name for p in dist.iterdir()])

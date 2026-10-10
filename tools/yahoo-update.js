@@ -1,7 +1,7 @@
 // 一鍵更新程式：在「已登入 Yahoo」的聯盟頁面（https://basketball.fantasysports.yahoo.com/nba/1031）執行。
 // 用法一：戰力表網頁的「更新資料」書籤（建議）。用法二：F12 → Console，整段貼上後按 Enter。
 // 抓的內容：16 隊名單、Yahoo 本季剩餘預測、ESPN 預測、2025-26 上季數據、2026-27 本季數據、季前排名、持有率，
-// 以及季前排名前 400 名裡所有沒被持有的球員（FA／waiver）、ESPN 的整季 NBA 賽程。
+// 以及季前排名前 400 名裡所有沒被持有的球員（FA／waiver）、ESPN 的整季 NBA 賽程、Yahoo 本週對戰（對手和目前比分）。
 // 跑完會出現視窗，按「打開戰力表」就會帶著新資料打開網頁。
 (async () => {
   const LEAGUE = 1031, TEAMS = 16, MY_TEAM_ID = 13, MAX_PAGES = 32, FA_PAGES = 16;
@@ -130,6 +130,45 @@
       console.warn('[戰力表更新] 賽程抓取失敗：', e);
     }
 
+    // 3-2) 本週對戰：Yahoo 對戰頁裡有 FG%、PTS 等欄位的表格，用隊伍連結找出自己和對手那兩列
+    const CAT_HEAD = { fg: ['FG%'], ft: ['FT%'], tpm: ['3PTM', '3PM'], pts: ['PTS'], reb: ['REB'], ast: ['AST'], stl: ['ST', 'STL'], blk: ['BLK'], to: ['TO'] };
+    const teamIdOf = el => { const a = [...el.querySelectorAll('a[href]')].map(x => (x.getAttribute('href') || '').match(new RegExp('/nba/' + LEAGUE + '/(\\d+)(?:[/?#]|$)'))).find(Boolean); return a ? +a[1] : 0; };
+    const parseMatch = d => {
+      for (const table of d.querySelectorAll('table')) {
+        const headRow = table.querySelector('thead tr') || table.querySelector('tr');
+        if (!headRow) continue;
+        const head = [...headRow.children].map(x => x.textContent.replace(/\s+/g, ' ').trim());
+        const col = {};
+        for (const k in CAT_HEAD) col[k] = head.findIndex(h => CAT_HEAD[k].includes(h));
+        if (col.fg < 0 || col.pts < 0 || col.to < 0) continue;
+        const rows = {};
+        [...table.querySelectorAll('tr')].filter(tr => tr !== headRow).forEach(tr => {
+          const id = teamIdOf(tr); if (!id) return;
+          const cells = [...tr.children].map(x => x.textContent.trim());
+          const v = {};
+          for (const k in col) { const x = parseFloat((cells[col[k]] || '').replace(/,/g, '')); v[k] = Number.isFinite(x) ? x : null; }
+          rows[id] = v;
+        });
+        const ids = Object.keys(rows).map(Number);
+        if (ids.includes(MY_TEAM_ID) && ids.length >= 2) {
+          const oid = ids.find(i => i !== MY_TEAM_ID), ok = v => Object.values(v).filter(x => x != null).length >= 7;
+          return { oppId: oid, me: ok(rows[MY_TEAM_ID]) ? rows[MY_TEAM_ID] : null, op: ok(rows[oid]) ? rows[oid] : null, week: +((d.body.textContent.match(/Week\s+(\d+)/) || [])[1]) || null };
+        }
+      }
+      return null;
+    };
+    let MATCH = null;
+    for (const url of [`/nba/${LEAGUE}/matchup?mid1=${MY_TEAM_ID}`, `/nba/${LEAGUE}/${MY_TEAM_ID}/matchup`]) {
+      try {
+        say('抓本週對戰…');
+        const m = parseMatch(await getDoc(url));
+        const opp = m && rosters.find(t => t.id === m.oppId);
+        if (opp) { MATCH = { at: new Date().toISOString(), week: m.week, opp: opp.name, me: m.me, op: m.op }; break; }
+      } catch (e) {
+        console.warn('[戰力表更新] 對戰頁讀取失敗：', url, e);
+      }
+    }
+
     // 4) 合併：預測 = Yahoo 和 ESPN 場均平均（只有一家就用那一家）
     const avg = (a, b) => a && b ? a.map((x, i) => r2((x + b[i]) / 2)) : a || b || null;
     let noProj = 0;
@@ -150,10 +189,10 @@
       FA.push([n, /^W/.test(r.own) ? 'W' : 'FA', r.tp, status(r.st), proj, last, cur]);
     }
     const me = rosters.find(t => t.id === MY_TEAM_ID);
-    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA, SCHED });
+    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA, SCHED, MATCH });
     window._LP_UPDATE = json;
     const curN = DATA.reduce((a, t) => a + t[1].filter(p => p[6]).length, 0);
-    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到；賽程${SCHED ? '有' : '沒有'}抓到。`);
+    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到；賽程${SCHED ? '有' : '沒有'}抓到；本週對手：${MATCH ? MATCH.opp + (MATCH.me ? '（含目前比分）' : '（還沒有比分）') : '沒有抓到'}。`);
     btns.innerHTML = '';
     button('▶ 打開戰力表', () => window.open(SITE + '#import=' + encodeURIComponent(json), '_blank'));
     button('複製結果', async () => {

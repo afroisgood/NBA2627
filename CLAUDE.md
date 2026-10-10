@@ -6,6 +6,7 @@
 - 一律用**繁體中文**回覆，介面文字也用繁體中文
 - 使用者沒有寫程式經驗：說明要白話，指令要能直接複製貼上
 - 隊伍是「石」，打法是放棄助攻（Punt AST）
+- 改完、測試通過後，**直接開 PR 合併到 `main`**（使用者要求，不用再問）；合併前先確認 GitHub 自動測試通過
 
 ## 開發
 - 原始碼在 `src/`，建置：`python3 build.py` → `dist/league-power.html`（直接用瀏覽器打開），同時更新根目錄的 `league-power.html`（GitHub Pages 顯示這個）

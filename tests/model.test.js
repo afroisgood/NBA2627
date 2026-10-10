@@ -305,3 +305,55 @@ test("球員照片頭像：亮度分四階、透明的不畫；有編號才去�
   run(`PHOTO[3992]="fail"`);
   assert.doesNotMatch(run(`avatarHTML("A1")`), /data-pid|<img/);
 });
+
+test("板凳補位：全員到齊時跟先發陣容一樣；主力可能缺陣時，排不進的人按機率補上", () => {
+  const { run } = load();
+  fixtureLeague(run);
+  // 11 個 Util 都能排的人（10 個位置），第 11 人平常排不進
+  const ps = Array.from({ length: 11 }, (_, i) => P(`X${i}`, "BN", "LAL - PG,SG,SF,PF,C", "", s(70, 5, 10, 2, 2.5, 1, 20 - i, 5, 3, 1, 0.5, 1.5)));
+  const all1 = run(`startProbs(${JSON.stringify(ps)},${JSON.stringify(Array(11).fill(1))})`);
+  assert.deepEqual(all1, [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0]);
+  // 最強的人只有一半機會上場 → 第 11 人有一半機會補上
+  const half = run(`startProbs(${JSON.stringify(ps)},${JSON.stringify([0.5, ...Array(10).fill(1)])})`);
+  near(half[0], 0.5); near(half[10], 0.5);
+  // 兩個人各 0.5 → 第 11 人補上的機率 = 至少一人缺陣 = 0.75
+  near(run(`startProbs(${JSON.stringify(ps)},${JSON.stringify([0.5, 0.5, ...Array(9).fill(1)])})`)[10], 0.75);
+  // 位置：5 個只能打 C 的人，只排得進 C、C、Util、Util，第 5 人排不進
+  const cs = Array.from({ length: 5 }, (_, i) => P(`c${i}`, "", "DEN - C", "", null));
+  const sl = run(`lineupSlots(${JSON.stringify(cs)})`);
+  assert.deepEqual(sl.slice(0, 6), [-1, -1, -1, -1, -1, -1]);
+  assert.deepEqual([...sl.slice(6)].sort(), [0, 1, 2, 3]);
+});
+
+test("每日先發：當天有比賽的人排進位置；沒比賽、缺陣分開列", () => {
+  const tmp = load();
+  const imp = importFixture(tmp.run);
+  const { run } = load({ local: { "lp-data": JSON.stringify(imp) } });
+  run(`DATA[0][1][0][3]="O"`); // A1（LAL）缺陣
+  const pl = run(`(()=>{const p=dayPlan(DATA[0][1],19,playerValues());return {start:p.start.filter(x=>x.p).map(x=>[x.slot,x.p[0]]),bench:p.bench.map(p=>p[0]),out:p.out.map(p=>p[0]),off:p.off.map(p=>p[0])}})()`);
+  assert.deepEqual(pl.start, [["SF", "A2"]], "第 19 天 LAL、BOS 有比賽；A1 缺陣不排");
+  assert.deepEqual(pl.out, ["A1"]);
+  assert.deepEqual(pl.off, ["A3"], "DEN 沒比賽；IL 不列");
+  assert.deepEqual(pl.bench, []);
+  assert.equal(run(`dayTxt(19)`), "10/20（二）");
+});
+
+test("本週串流：撿一位這週有比賽的 FA，先發場次變多、勝率不會下降；H2H 勝率用整季每週預測", () => {
+  const tmp = load();
+  const imp = importFixture(tmp.run);
+  const { run } = load({ local: { "lp-data": JSON.stringify(imp) } });
+  run("state.gp=false; GP_FULL=82");
+  // A 隊只留 1 人有比賽（A1，LAL 3 場）；FA 裡的 Thybulle 也是 LAL
+  const r = run(`(()=>{const wk=WEEKS[0],val=playerValues(),me=DATA[0][1];
+    const ctx={wk,from:wk.s,val,opp:"B",me,open:3,drops:["A3"],oppV:weekTotals(DATA[1][1],wk,val).v,pre:null};
+    const base=streamEval(ctx,null,null),add=streamEval(ctx,"Matisse Thybulle",null),swap=streamEval(ctx,"Matisse Thybulle","A3");
+    return {b:base.starts,a:add.starts,s:swap.starts,bw:base.m.win,aw:add.m.win,games:gamesIn(FA["Matisse Thybulle"],wk)}})()`);
+  assert.equal(r.games, 3);
+  near(r.a, r.b + 3, 1e-9);
+  near(r.s, r.b + 3, 1e-9, "A3（DEN）這週沒比賽，丟掉不影響");
+  assert.ok(r.aw >= r.bw);
+  // 有賽程時，H2H 勝率用整季平均每週（hv），A 隊還是最強
+  const h = run(`(()=>{const rows=compute();rankAll(rows,true);return rows.map(x=>({n:x.name,hv:!!x.hv,rk:x.winRk}))})()`);
+  assert.ok(h.every(x => x.hv));
+  assert.equal(h.find(x => x.n === "A").rk, 1);
+});

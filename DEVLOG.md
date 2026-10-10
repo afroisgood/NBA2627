@@ -34,7 +34,8 @@ fantasy-power-table/
 │   ├── app.js           ← 主程式：計算、排名、VS、聯盟表、各隊表、開機畫面
 │   ├── trade.js         ← 交易分析器＋自動找交易
 │   ├── cards.js         ← 隊伍職業鑑定、球員卡圖鑑、FA 抽卡
-│   └── fa.js            ← FA 分析器＋自動推薦，最後呼叫 initTrade()、initFA()、initDex()、render()、initImport()
+│   ├── plan.js          ← 每日先發、本週串流、右下角快速選單
+│   └── fa.js            ← FA 分析器＋自動推薦，最後呼叫 initTrade()、initFA()、initDex()、initPlan()、render()、initImport()
 ├── data/
 │   └── latest.js        ← 網站共用資料：window.SHARED_DATA（null＝用內建）；網頁「下載網站資料檔」產生，上傳取代
 ├── tests/
@@ -52,7 +53,7 @@ fantasy-power-table/
 
 建置：`python3 build.py`；測試：`npm test`（不用安裝任何套件，Node 22 以上）。兩個完整網頁會先用 `<script src>` 載入 `data/latest.js`（根目錄用 `data/latest.js`、dist 用 `../data/latest.js`），Artifact 版不載入
 
-**JS 載入順序很重要**：data.js → market.js → import.js → model.js → app.js → trade.js → cards.js → fa.js。model.js 載入時就會讀 `IMP.SCHED`，所以要在 import.js 後面；它用到的 state、SI、CATS 等都是呼叫時才讀。import.js 必須在 app.js 前面（app.js 一載入就會用到 ME、IMP、hasCur）。trade.js、cards.js、fa.js 裡有 `const`（tm、FA、dx、fam 等），所以 `initTrade(); initFA(); initDex(); render(); initImport();` 必須放在 fa.js 最後，不能放在前面的檔案，否則會遇到 TDZ 錯誤。
+**JS 載入順序很重要**：data.js → market.js → import.js → model.js → app.js → trade.js → cards.js → plan.js → fa.js。model.js 載入時就會讀 `IMP.SCHED`，所以要在 import.js 後面；它用到的 state、SI、CATS 等都是呼叫時才讀。import.js 必須在 app.js 前面（app.js 一載入就會用到 ME、IMP、hasCur）。trade.js、cards.js、plan.js、fa.js 裡有 `const`（tm、FA、dx、fam 等），所以 `initTrade(); initFA(); initDex(); initPlan(); render(); initImport();` 必須放在 fa.js 最後，不能放在前面的檔案，否則會遇到 TDZ 錯誤。
 
 ---
 
@@ -275,7 +276,7 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 
 - `tests/harness.js`：照 build.py 的順序把 src/ 載入 Node vm，document、localStorage 等用假的；`run("運算式")` 拿得到 const/let 變數，回傳的物件會轉成一般資料
 - `fixtureLeague()`：4 隊的固定小聯盟（A 最強、B 最弱），結果可以手算
-- 測試範圍：compute（IL、傷兵、出賽率）、隊伍職業、球員卡稀有度、FA 抽卡、rankAll、H2H 勝率、addMix、先發陣容、賽程週次與一週總數、匯入資料優先順序與格式檢查、本週對戰有效期、交易模擬、撿人模擬、build.py 檔案順序、更新程式不能有行尾 `//` 註解
+- 測試範圍：compute（IL、傷兵、出賽率）、隊伍職業、球員卡稀有度、FA 抽卡、照片頭像、板凳補位、每日先發、本週串流、rankAll、H2H 勝率、addMix、先發陣容、賽程週次與一週總數、匯入資料優先順序與格式檢查、本週對戰有效期、交易模擬、撿人模擬、build.py 檔案順序、更新程式不能有行尾 `//` 註解
 - 改了計算方式，記得同步更新測試的預期值
 
 
@@ -320,6 +321,35 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 - 圖鑑下方 `#dex-photo` 顯示有編號的人數、已換成照片幾張、抓不到幾張，用來確認是否成功
 - **還沒在真的 ESPN 網站上確認過**：開發環境連不到 ESPN。ESPN 的圖片伺服器如果沒有回 `Access-Control-Allow-Origin`，所有照片都會「抓不到」。到時候的備案：用 GitHub Actions 定時下載照片、轉成點陣存進專案（例如 `data/avatars.js`），網頁直接讀現成的點陣，不用跨網站讀圖
 
+
+### 5.19 板凳補位（v17，`startProbs()`、`weekRaw()`、`seasonWeek()`，src/model.js）
+
+- 每天：有比賽的人依價值排序，`lineupSlots()` 先算「全員到齊時」的先發陣容（C 人）；順位＝陣容裡的人優先、再依價值
+- 每個人能上場的機率 a＝`playW()`（傷兵 × 出賽率）。依順位算「前面能上場的人數」的分布（Poisson-binomial，最後一格＝已滿 C 人），某人的先發機率＝a × P(前面不到 C 人)。全員 a＝1 時結果跟原本的陣容完全一樣
+- 近似：補上的人不再檢查位置（排得進陣容的人被替換時，假設補上的人能打那個位置）
+- `weekRaw(ps,s,e,val)` 回傳期望總數（`t`）、先發場次、排不進的場次（都是期望值，可能有小數）；`weekTotals()` 包一層變成 9 項
+- **H2H 勝率**：有賽程時 `h2hAll()` 用 `seasonWeek()`＝本週到最後一週的平均每週預測（`hv`），沒有賽程才用每場平均加總。用 `WeakMap` 依名單陣列快取（設定改了會重算），16 隊約 0.1 秒
+- 實測（10/10 資料）：板凳補位對「石」的影響很小（Lv.55 → 56）。一週 13 人約 30 場先發，排不進先發的只有約 1 場，主力缺陣時能補上的場次不多。常受傷球員真正的補救是放 IL、撿 FA，模型還沒算
+
+### 5.20 每日先發（v17，`dayPlan()`、`renderToday()`，src/plan.js）
+
+- 日期選單：從今天（美東）起有 NBA 比賽的 7 天（`gameDays()`）
+- `dayPlan(ps,d,val)`：當天有比賽、不是 O 的人依價值排進 10 個位置（`lineupSlots()`），其他分成排不進（bench）、缺陣（out）、沒比賽（off）
+- 「Yahoo 目前」是匯入資料的 `p[1]`（更新資料當下的陣容）；換上場＝該先發但不在先發位置；換下來＝排不進或缺陣卻在先發位置。沒比賽佔著先發位置不算要動，只在有人要上場時提醒可以騰位置
+
+### 5.21 本週串流（v17，`streamCtx()`、`streamEval()`、`streamSearch()`，src/plan.js）
+
+- 週次、對手跟 VS 一樣（`vsWeek()`、`vsOppName()`）；撿人生效日＝max(週一, 明天)
+- 生效日之前用原本的名單（`pre`），之後用新名單，兩段 `weekRaw()` 加起來再算 `matchup()`
+- 每位 FA（排除 O、可選擇排除 waiver、生效日後有比賽）× 你價值最低的 8 人（`STREAM_DROPS`，有空位加「不丟人」），每位 FA 留勝率最高的丟法；提升 > 0.5% 才列，前 10 名
+- 分批計算（每 20 位 FA 讓畫面喘口氣），實測約 0.6 秒
+- 季前 Yahoo 所有 FA 都是 waiver（W），所以「排除 waiver」預設不勾
+
+### 5.22 快速選單（v17，`initPlan()`、`navGo()`）
+
+- 右下角圓形 MENU 按鈕（掌機按鍵樣式），點開 `#nav-menu` 列出 9 個區塊和「回到最上面」；捲動時扣掉上方黏住的控制列高度
+- Esc 關閉、焦點回到按鈕；`aria-expanded` 標示開關狀態
+
 ---
 
 ## 6. 介面功能（第 10 版）
@@ -341,6 +371,9 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 | TRADE MACHINE | 手動交易分析：最多 3 換 3、補 FA、公平度量表、成交機率、雙方各項名次變化 |
 | TRADE MACHINE（其他隊） | 分析兩支別隊之間的交易：誰贏、兩隊和你的名次／勝率變化、公平度 |
 | AUTO SCOUT | 自動找交易 |
+| DAILY LINEUP | 每日先發建議（`renderToday()`） |
+| STREAMING | FA 分析器下方的本週串流（`streamSearch()`） |
+| MENU | 右下角快速選單 |
 | TEAM CLASS | 每隊職業稱號、放棄的項目、Lv.、六角圖（`renderClass()`） |
 | CARD DEX | 球員卡圖鑑（隊伍、稀有度、名字篩選）＋ FA 抽卡（`renderDex()`、`gacha()`） |
 | FA MACHINE | 撿人模擬：選 FA＋丟掉的人（或直接撿），顯示名次、各項名次和每場數據的變化 |
@@ -367,6 +400,7 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 | v7 | 交易分析器＋自動找交易；修正 IL 球員佔名單位的誤判、2 換 1 比較基準 |
 | v8 | 網頁內一鍵更新資料：書籤／console 在 Yahoo 頁面抓名單和數據，自動帶回網頁套用；新增「2026-27 本季實際」數據來源；FA 補位改成完整 FA 清單，自動找交易的 2 換 1 不再固定補 Thybulle |
 | v9 | FA 分析器：撿人／丟人後撿人的名次模擬，加上自動推薦 |
+| v17 | 板凳補位（每週預測、H2H 勝率改用整季每週預測）、每日先發、本週串流、右下角快速選單 |
 | v16 | 球員卡照片頭像：ESPN 大頭照轉成四階 LCD 點陣（更新程式多存 ESPN 球員編號 `IDS`） |
 | v15 | 隊伍職業鑑定（TEAM CLASS）、球員卡圖鑑（CARD DEX）＋ FA 抽卡 |
 | v14 | 出賽率：控制列 GP「考慮出賽率」（預設），球員依預測出賽場數打折，避免高估常受傷的隊伍 |
@@ -391,7 +425,7 @@ Artifact 網址：https://claude.ai/artifact/S6yNHmWyFfDDAvJ3guEij2
 ## 9. 已知限制
 
 1. **內建資料是靜態快照**。網頁內更新的資料先存在使用者自己的瀏覽器；要讓網站本身更新，用「下載網站資料檔」上傳到 `data/latest.js`
-2. 聯盟表的名次和 H2H 勝率看的是每場平均（乘上出賽率），不考慮先發名額；每週預測（VS 選週次）才有算賽程和先發名額。內建資料沒有賽程，要從 Yahoo 更新過才能選週次
+2. 聯盟表的各項數據和名次看的是每場平均（乘上出賽率），不考慮先發名額；H2H 勝率（有賽程時）、VS 選週次、串流才有算賽程、先發名額和板凳補位。主力長期受傷時實際上會放 IL、另外撿 FA 補，這個「撿人補位」沒有算進去。內建資料沒有賽程，要從 Yahoo 更新過才能選週次
 3. 季前排名開季後會失效，要換成 Yahoo「目前排名」（`c[7]`）
 4. 成交機率只是參考，沒辦法算到對方的個人喜好
 5. 上季實際數據模式下，新秀和上季缺賽的球員沒有數據（例如 Kyrie），會低估這些隊伍

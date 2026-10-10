@@ -10,9 +10,9 @@
 
 ## 開發
 - 原始碼在 `src/`，建置：`python3 build.py` → `dist/league-power.html`（直接用瀏覽器打開），同時更新根目錄的 `league-power.html`（GitHub Pages 顯示這個）
-- JS 順序：data.js → market.js → import.js → model.js → app.js → trade.js → cards.js → fa.js；`initTrade(); initFA(); initDex(); render(); initImport();` 必須留在 fa.js 最後
+- JS 順序：data.js → market.js → import.js → model.js → app.js → trade.js → cards.js → plan.js → fa.js；`initTrade(); initFA(); initDex(); initPlan(); render(); initImport();` 必須留在 fa.js 最後
 - 正式名單上限 13 人（不含 IL），在 fa.js 的 `ROSTER`；每天先發 10 人（PG、SG、G、SF、PF、F、C、C、Util、Util），在 model.js 的 `SLOTS`
-- 預測模型（傷兵、出賽率、預測＋本季、H2H 勝率、每週賽程）都在 `src/model.js`，說明在 DEVLOG 5.8–5.11、5.15
+- 預測模型（傷兵、出賽率、預測＋本季、H2H 勝率、每週賽程）都在 `src/model.js`，說明在 DEVLOG 5.8–5.11、5.15、5.19
 - 網頁內一鍵更新：`tools/yahoo-update.js`（build 時嵌進網頁當書籤用，不能有行尾 `//` 註解）→ 匯入資料存在 localStorage `lp-data`，由 `src/import.js` 讀取
 - 數據陣列格式：`[gp, fgm, fga, ftm, fta, tpm, pts, reb, ast, stl, blk, to]`（場均）
 - IL 球員不計入球隊數據、不佔名單位

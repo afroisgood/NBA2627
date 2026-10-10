@@ -270,6 +270,21 @@ input[type=search]{font-family:var(--f-txt);font-size:16px;min-height:40px;backg
 input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
 .dex-more{align-self:center}
 @media (prefers-reduced-motion: reduce){.g-card{animation:none}.card.r-SSR .c-rar::before,.card.r-SSR .c-rar::after{animation:none}}
+/* daily lineup */
+.day-out{display:flex;flex-direction:column;gap:10px}
+.day-sum{margin:0;font-size:16px;font-weight:700}
+.day-lists p{margin:0;font-size:14px;color:var(--mid)}
+.day-lists b{color:var(--ink)}
+.day-tbl td{white-space:normal}
+.day-tbl td:last-child{white-space:nowrap;font-size:14px}
+/* quick menu */
+.nav-btn{position:fixed;right:max(14px,env(safe-area-inset-right));bottom:max(14px,env(safe-area-inset-bottom));z-index:30;width:62px;height:62px;border-radius:50%;border:0;background:var(--btn);color:var(--btn-ink);box-shadow:0 5px 0 var(--btn-dark);font-family:var(--f-pix);font-size:9px;cursor:pointer}
+.nav-btn:active{transform:translateY(3px);box-shadow:0 2px 0 var(--btn-dark)}
+.nav-btn:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.nav-menu{position:fixed;right:max(14px,env(safe-area-inset-right));bottom:calc(max(14px,env(safe-area-inset-bottom)) + 76px);z-index:30;display:flex;flex-direction:column;min-width:200px;max-height:calc(100vh - 120px);overflow-y:auto;background:var(--lcd);border:4px solid var(--ink);box-shadow:4px 4px 0 var(--ink);padding:6px}
+.nav-menu .menu-btn{width:100%;min-height:42px}
+.nav-menu .menu-btn:hover,.nav-menu .menu-btn:focus-visible{background:var(--ink);color:var(--lcd)}
+.nav-menu .menu-btn:hover::before,.nav-menu .menu-btn:focus-visible::before{visibility:visible}
 @media (max-width:560px){
   .vs-row{grid-template-columns:44px 1fr 40px 1fr 44px;font-size:13px;gap:5px}
   .hp-track{width:64px}
@@ -366,6 +381,15 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
     <p class="note">「贏面」和「勝率」是把每項數據一週的正常起伏算進去後的估計：差距越大，贏面越接近 100%。勝率＝9 項贏 5 項以上的機率。選了週次會依那週每隊的出賽場數、每天最多 10 人先發來預測；選「每場平均」則只比每場數據。</p>
   </section>
 
+  <section aria-labelledby="h-today">
+    <h2 id="h-today"><span class="en">DAILY LINEUP</span>每日先發</h2>
+    <div class="tm">
+      <div class="tm-opts"><label class="tm-label" for="day-sel">日期</label><select id="day-sel"></select></div>
+      <div id="day-out" class="day-out"></div>
+    </div>
+    <p class="note">依那天有比賽的球員，用價值由高到低排進 10 個先發位置（PG、SG、G、SF、PF、F、C、C、Util、Util），缺陣（O）的人不排。「Yahoo 目前」是上次更新資料時你在 Yahoo 排的位置；「換上場」「換下來」是跟它比的建議，到 Yahoo 調整後記得儲存。</p>
+  </section>
+
   <section aria-labelledby="h-trade">
     <h2 id="h-trade"><span class="en">TRADE MACHINE</span>交易分析器</h2>
     <div class="seg tm-mode" role="group" aria-label="交易類型">
@@ -455,6 +479,16 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
       <p class="note" id="fa-status">每位 FA 都跟你隊上每一位可以丟的人配一次（名單有空位時也試「不丟人」），列出讓你平均名次進步最多的前 10 位。</p>
       <div id="fa-out" class="as-out"></div>
     </div>
+    <h3 class="tm-h3"><span class="en">STREAMING</span>本週串流</h3>
+    <div class="tm">
+      <p class="note" id="st-info"></p>
+      <div class="tm-opts">
+        <label class="chk"><input type="checkbox" id="st-nowaiver">排除 waiver（要等幾天才撿得到）</label>
+        <button class="pxbtn" id="st-go" type="button">▶ 找本週串流</button>
+      </div>
+      <p class="note" id="st-status">H2H 一週一週比：撿這週還有很多場比賽的 FA，可以多拿幾場先發的數據。</p>
+      <div id="st-out" class="as-out"></div>
+    </div>
     <p class="note">名次用跟聯盟表一樣的算法（非 IL 球員場均加總、各項名次平均），只有你的隊伍改變。FA 依目前數據來源的價值排序，括號裡是價值。不檢查先發位置；出賽率跟著上方 GP 的設定。</p>
   </section>
   <section aria-labelledby="h-league">
@@ -506,6 +540,8 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
 
   <p class="note" id="foot-note">預測來源：Yahoo（Rotowire）、ESPN、FantasyPros 共識預測，三家場均取平均；FantasyPros 只提供命中率，出手數沿用另外兩家。上季數據取自 Yahoo 2025-26 場均，新秀及上季未出賽者無數據，以「—」表示且不計入。▲▼ 是跟上次更新（交易前，10/9 waiver 後）相比的名次變化。名單更新於 2026/10/9（含石與大小小丑的交易）。</p>
   </div>
+  <button class="nav-btn" id="nav-btn" type="button" aria-expanded="false" aria-controls="nav-menu">MENU</button>
+  <nav class="nav-menu" id="nav-menu" aria-label="快速選單" hidden></nav>
   <div class="foot"><span class="sel">SELECT  START</span><div class="ab"><i>B</i><i>A</i></div></div>
  </div>
 </div>
@@ -887,8 +923,10 @@ function matchup(va,vb){
   return {ps,exp:ps.reduce((a,b)=>a+b,0),win:dist.slice(5).reduce((a,b)=>a+b,0)};
 }
 // 每隊對其他 15 隊的平均勝率、平均贏幾項，並排名
+// 有賽程時用「整季平均每週」的預測（每天排先發、板凳補位）；沒有賽程就用每場平均加總
 function h2hAll(rows){
-  rows.forEach(r=>{let w=0,e=0;rows.forEach(o=>{if(o===r)return;const m=matchup(r.v,o.v);w+=m.win;e+=m.exp;});r.win=w/(rows.length-1);r.expCats=e/(rows.length-1);});
+  if(WEEKS.length){const val=playerValues();rows.forEach(r=>r.hv=seasonWeek(r.ps,val));}else rows.forEach(r=>r.hv=r.v);
+  rows.forEach(r=>{let w=0,e=0;rows.forEach(o=>{if(o===r)return;const m=matchup(r.hv,o.hv);w+=m.win;e+=m.exp;});r.win=w/(rows.length-1);r.expCats=e/(rows.length-1);});
   [...rows].sort((a,b)=>b.win-a.win).forEach((r,i)=>r.winRk=i+1);
 }
 const pctTxt=x=>`${Math.round(x*100)}%`;
@@ -928,24 +966,45 @@ const gamesIn=(p,w)=>{const g=GAMES[nbaTeam(p)];if(!g||!w)return 0;let n=0;for(l
 
 // 每天的先發位置：PG、SG、G、SF、PF、F、C、C、Util、Util
 const SLOTS=[["PG"],["SG"],["PG","SG"],["SF"],["PF"],["SF","PF"],["C"],["C"],null,null];
-// 依價值由高到低排人，排得進去就上場（這種「位置配對」用貪婪法就是最佳解）
-function lineup(players){
+const SLOT_L=["PG","SG","G","SF","PF","F","C","C","Util","Util"];
+// 依價值由高到低排人，排得進去就上場（這種「位置配對」用貪婪法就是最佳解）；回傳每個先發位置排到第幾個人（−1＝空著）
+function lineupSlots(players){
   const slot=Array(SLOTS.length).fill(-1),fits=players.map(p=>{const ps=posOf(p);return SLOTS.map(s=>!s||s.some(x=>ps.includes(x)))});
   const tryPlace=(i,seen)=>{for(let k=0;k<SLOTS.length;k++){if(!fits[i][k]||seen[k])continue;seen[k]=1;if(slot[k]<0||tryPlace(slot[k],seen)){slot[k]=i;return true;}}return false};
   players.forEach((p,i)=>tryPlace(i,[]));
-  return new Set(slot.filter(i=>i>=0));
+  return slot;
 }
-// 一隊在某一週的預測總數：每天只算排得進先發的人，傷兵和出賽率打折
-function weekTotals(ps,w,val){
+const lineup=players=>new Set(lineupSlots(players).filter(i=>i>=0));
+// 板凳補位：每個人能上場的機率是 a（傷兵 × 出賽率）。順位＝全員到齊時排得進先發的人優先、再依價值；
+// 前面能上場的人還不到 C 人（全員到齊時排得進的人數）時就輪到他。回傳每個人的先發機率
+function startProbs(players,avail){
+  const on=lineup(players),C=on.size,ord=players.map((p,i)=>i).sort((x,y)=>on.has(y)-on.has(x)||x-y),out=Array(players.length).fill(0);
+  let dist=Array(C+1).fill(0);dist[0]=1;   // 前面能上場的人數（最後一格＝已滿 C 人）
+  ord.forEach(i=>{const a=avail[i],open=dist.slice(0,C).reduce((x,y)=>x+y,0);out[i]=a*open;
+    const n=Array(C+1).fill(0);dist.forEach((x,k)=>{n[k]+=x*(1-a);n[Math.min(C,k+1)]+=x*a});dist=n;});
+  return out;
+}
+const toV=t=>({fg:t.fga?t.fgm/t.fga:0,ft:t.fta?t.ftm/t.fta:0,tpm:t.tpm,pts:t.pts,reb:t.reb,ast:t.ast,stl:t.stl,blk:t.blk,to:t.to});
+const addRaw=(a,b)=>{const t={};for(const k in a.t)t[k]=a.t[k]+b.t[k];return {t,starts:a.starts+b.starts,benched:a.benched+b.benched}};
+// 一隊在第 s～e 天的預測總數（期望值）：每天依位置排先發，缺陣（傷兵、出賽率）時由板凳補上
+function weekRaw(ps,s,e,val){
   const si=SI(),t={fgm:0,fga:0,ftm:0,fta:0,tpm:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0};let starts=0,benched=0;
-  const pool=ps.filter(p=>active(p)&&p[si]&&playW(p)>0).map(p=>({p,v:val(p[si])??-99,g:GAMES[nbaTeam(p)]})).sort((a,b)=>b.v-a.v);
-  for(let d=w.s;d<=w.e;d++){
+  const pool=ps.filter(p=>active(p)&&p[si]&&playW(p)>0).map(p=>({p,v:val(p[si])??-99,a:playW(p),g:GAMES[nbaTeam(p)]})).sort((a,b)=>b.v-a.v);
+  for(let d=s;d<=e;d++){
     const today=pool.filter(x=>x.g&&x.g.has(d));if(!today.length)continue;
-    const on=lineup(today.map(x=>x.p));
-    today.forEach((x,i)=>{if(!on.has(i)){benched++;return;}starts++;const s=x.p[si],k=playW(x.p);for(const key in t)t[key]+=s[IDX[key]]*k;});
+    const pr=startProbs(today.map(x=>x.p),today.map(x=>x.a));
+    today.forEach((x,i)=>{starts+=pr[i];benched+=x.a-pr[i];const st=x.p[si];for(const key in t)t[key]+=st[IDX[key]]*pr[i];});
   }
-  const v={fg:t.fga?t.fgm/t.fga:0,ft:t.fta?t.ftm/t.fta:0,tpm:t.tpm,pts:t.pts,reb:t.reb,ast:t.ast,stl:t.stl,blk:t.blk,to:t.to};
-  return {v,starts,benched};
+  return {t,starts,benched};
+}
+function weekTotals(ps,w,val){const r=weekRaw(ps,w.s,w.e,val);return {v:toV(r.t),starts:r.starts,benched:r.benched}}
+// 整季（從本週到最後一週）平均每週的預測，H2H 勝率用；同一份名單、同樣設定只算一次
+const seasonCache=new WeakMap();
+function seasonWeek(ps,val){
+  const key=`${state.src}|${state.inj}|${state.gp}|${state.punt}`,c=seasonCache.get(ps);if(c&&c.key===key)return c.v;
+  const cw=curWeek(),i0=WEEKS.indexOf(cw),ws=WEEKS.slice(i0<0?0:i0),r=weekRaw(ps,ws[0].s,ws[ws.length-1].e,val);
+  const v=toV(r.t);for(const k in v)if(!["fg","ft"].includes(k))v[k]/=ws.length;
+  seasonCache.set(ps,{key,v});return v;
 }
 
 const CATS=[
@@ -1041,7 +1100,7 @@ function renderLeague(rows){
   document.getElementById("league").innerHTML=h+"</tbody>";
   const missT=rows.reduce((a,r)=>a+r.miss,0);
   document.getElementById("league-note").textContent=
-    "數字是全隊（不含 IL）每場數據加總"+(state.inj?"，缺陣（O）不算、出賽存疑（Q）打 75 折":"")+(state.gp?"，每人再乘上出賽率（預測出賽場數 ÷ 整季場數）":"")+"。♛ 前 3 名、☠ 第 14–16 名；格子越深名次越前（1–4、5–8、9–12、13–16 四階）。點欄位標題可排序。H2H 勝率＝跟其他 15 隊各對戰一次、9 項贏 5 項以上的平均機率（放棄助攻也是 9 項都比）。"
+    "數字是全隊（不含 IL）每場數據加總"+(state.inj?"，缺陣（O）不算、出賽存疑（Q）打 75 折":"")+(state.gp?"，每人再乘上出賽率（預測出賽場數 ÷ 整季場數）":"")+"。♛ 前 3 名、☠ 第 14–16 名；格子越深名次越前（1–4、5–8、9–12、13–16 四階）。點欄位標題可排序。H2H 勝率＝跟其他 15 隊各對戰一次、9 項贏 5 項以上的平均機率（放棄助攻也是 9 項都比）；有賽程時用「整季平均每週」的預測（每天排 10 人先發、有人缺陣時板凳補上）。"
     +(!["pr","mix"].includes(state.src)&&missT?` ${state.src==="ls"?"上季":"本季"}版有 ${missT} 位球員沒有${state.src==="ls"?"上季":"本季"}數據，不計入加總。`:"");
   document.querySelectorAll("#league th.sortable").forEach(el=>{
     const go=()=>{const k=el.dataset.k;state.sort=state.sort.k===k?{k,dir:-state.sort.dir}:{k,dir:1};render();};
@@ -1063,7 +1122,8 @@ function renderVS(rows){
   ws.onchange=()=>{state.week=ws.value;save();render();};
   let va=A.v,vb=B.v,info=SCHED?"":"從 Yahoo 更新過資料後，可以選週次，依每隊這週的出賽場數和每天的先發名額預測。";
   if(wk){const val=playerValues(),ta=weekTotals(A.ps,wk,val),tb=weekTotals(B.ps,wk,val);va=ta.v;vb=tb.v;
-    info=`第 ${wk.i} 週（${md(wk.s)}–${md(wk.e)}）預測總數：${esc(ME)} 先發 ${ta.starts} 場次${ta.benched?`（另有 ${ta.benched} 場次排不進先發）`:""}；${esc(B.name)} 先發 ${tb.starts} 場次${tb.benched?`（另有 ${tb.benched} 場次排不進先發）`:""}。每天最多 10 人上場，依位置排出最好的陣容${state.inj?"，缺陣不算、存疑打 75 折":""}${state.gp?"，再乘上出賽率":""}。`;}
+    const sb=x=>`先發約 ${Math.round(x.starts)} 場次${x.benched>=.5?`（另有約 ${Math.round(x.benched)} 場次排不進先發）`:""}`;
+    info=`第 ${wk.i} 週（${md(wk.s)}–${md(wk.e)}）預測總數：${esc(ME)} ${sb(ta)}；${esc(B.name)} ${sb(tb)}。每天最多 10 人上場，依位置排出最好的陣容${state.inj?"，缺陣不算、存疑打 75 折":""}${state.gp?"，再乘上出賽率":""}；有人缺陣時由板凳補上。`;}
   document.getElementById("vs-info").innerHTML=info;
   document.getElementById("vs-live").innerHTML=liveScore(B.name,mt);
   const M=matchup(va,vb);
@@ -1146,7 +1206,7 @@ function renderMe(rows){
 }
 
 function render(){
-  const rows=compute();rankAll(rows,true);renderMe(rows);renderVS(rows);renderTrade(rows);renderFA(rows);renderLeague(rows);renderClass(rows);renderTeams(rows);renderDex();
+  const rows=compute();rankAll(rows,true);renderMe(rows);renderVS(rows);renderTrade(rows);renderFA(rows);renderToday();renderStreamInfo(rows);renderLeague(rows);renderClass(rows);renderTeams(rows);renderDex();
   const set=(id,on)=>document.getElementById(id).setAttribute("aria-pressed",on);
   set("src-pr",state.src==="pr");set("src-ls",state.src==="ls");set("src-cur",state.src==="cur");set("src-mix",state.src==="mix");set("inj-on",state.inj);set("inj-off",!state.inj);set("gp-on",state.gp);set("gp-off",!state.gp);set("mode-9",!state.punt);set("mode-p",state.punt);
 }
@@ -1561,6 +1621,123 @@ function initDex(){
   document.getElementById("g-10").onclick=()=>gacha(10);
 }
 
+// ---------- 每日先發（DAILY LINEUP）、本週串流（STREAMING）、快速選單（MENU） ----------
+const WD="日一二三四五六";
+const dayTxt=d=>`${md(d)}（${WD[dayDate(d).getUTCDay()]}）`;
+const START_SLOTS=new Set(["PG","SG","G","SF","PF","F","C","Util"]);
+
+// 某一天的先發建議：有比賽、沒缺陣（O）的人依價值排進 10 個位置；其他人分成排不進、缺陣、沒比賽
+function dayPlan(ps,d,val){
+  const si=SI(),act=ps.filter(p=>active(p)),has=p=>{const g=GAMES[nbaTeam(p)];return !!(g&&g.has(d))};
+  const play=act.filter(p=>has(p)&&p[3]!=="O").sort((a,b)=>(val(b[si])??-99)-(val(a[si])??-99));
+  const sl=lineupSlots(play),on=new Set(sl.filter(i=>i>=0).map(i=>play[i]));
+  return {start:sl.map((i,k)=>({slot:SLOT_L[k],p:i>=0?play[i]:null})),bench:play.filter(p=>!on.has(p)),
+    out:act.filter(p=>has(p)&&p[3]==="O"),off:act.filter(p=>!has(p))};
+}
+// 從今天起有 NBA 比賽的日子（最多 7 天）
+function gameDays(){
+  if(!SCHED)return [];
+  const all=[...new Set(Object.values(SCHED.teams).flat())].sort((a,b)=>a-b),t=todayDay();
+  return all.filter(d=>d>=t).slice(0,7);
+}
+let planDay=null;
+function renderToday(){
+  const out=document.getElementById("day-out"),sel=document.getElementById("day-sel"),days=gameDays();
+  if(!days.length){sel.innerHTML="";sel.disabled=true;out.innerHTML=`<p class="tm-empty">${SCHED?"接下來沒有 NBA 比賽。":"從 Yahoo 更新過資料（含賽程）後，這裡會告訴你每天該排哪 10 個人先發。"}</p>`;return;}
+  if(!days.includes(planDay))planDay=days[0];
+  sel.disabled=false;
+  sel.innerHTML=days.map(d=>`<option value="${d}">${dayTxt(d)}${d===todayDay()?" 今天":""}</option>`).join("");
+  sel.value=String(planDay);
+  const val=playerValues(),si=SI(),ps=DATA.find(t=>t[0]===ME)[1],pl=dayPlan(ps,planDay,val);
+  const n=pl.start.filter(x=>x.p).length,vTxt=p=>{const v=val(p[si]);return v==null?"—":sgn(v)};
+  const hint=(p,should)=>{const now=START_SLOTS.has(p[1]);return should&&!now?'<span class="pos-up">換上場</span>':!should&&now?'<span class="pos-dn">換下來</span>':""};
+  const offTxt=p=>esc(p[0])+(ups&&START_SLOTS.has(p[1])?"（佔著先發位置，可以換給要上場的人）":"");
+  const row=(slot,p,should)=>p?`<tr><td class="name"><span class="slot">${slot}</span></td><td class="name">${esc(p[0])}${p[3]?`<span class="badge">${esc(p[3])}</span>`:""}<span class="pos">${esc(nbaTeam(p))} · 價值 ${vTxt(p)} · Yahoo 目前 ${esc(p[1])}</span></td><td class="name">${hint(p,should)}</td></tr>`
+    :`<tr class="out"><td class="name"><span class="slot">${slot}</span></td><td class="name" colspan="2">（空著）</td></tr>`;
+  // 要動的人：該上場卻在板凳、有比賽卻排不進（或缺陣）卻佔著先發；沒比賽的人佔先發不影響，只在需要騰位置時提醒
+  const ups=pl.start.filter(x=>x.p&&!START_SLOTS.has(x.p[1])).length,moves=ups+[...pl.bench,...pl.out].filter(p=>START_SLOTS.has(p[1])).length;
+  const q=pl.start.filter(x=>x.p&&x.p[3]==="Q").map(x=>x.p[0]);
+  const list=(k,a,f=p=>esc(p[0]))=>a.length?`<p><b>${k}</b>：${a.map(f).join("、")}</p>`:"";
+  out.innerHTML=`<p class="day-sum">${dayTxt(planDay)}：你有 ${n+pl.bench.length} 人有比賽${pl.bench.length?`，${pl.bench.length} 人排不進先發`:"，全部排得進先發"}${10-n?`，${10-n} 個位置空著`:""}。${moves?`跟更新資料時 Yahoo 的陣容比，要調整 ${moves} 個人。`:"跟更新資料時 Yahoo 的陣容一樣。"}</p>
+    ${q.length?`<p class="note">⚠ ${q.map(esc).join("、")} 出賽存疑（Q），開賽前到 Yahoo 確認。</p>`:""}
+    <div class="scroll"><table class="day-tbl"><thead><tr><th class="name">位置</th><th class="name">球員</th><th class="name">建議</th></tr></thead><tbody>
+    ${pl.start.map(x=>row(x.slot,x.p,true)).join("")}${pl.bench.map(p=>row("BN",p,false)).join("")}</tbody></table></div>
+    <div class="day-lists">${list("缺陣（O）",pl.out)}${list("沒比賽",pl.off,offTxt)}</div>`;
+}
+
+// ---------- 本週串流：撿一位這週還有比賽的 FA（丟一個人或直接撿），看對 VS 對手的勝率提升多少 ----------
+const STREAM_DROPS=8;
+function vsOppName(rows){
+  const mt=matchNow(),others=rows.filter(r=>r.name!==ME).sort((a,b)=>a.ovr-b.ovr);
+  return state.opp&&others.some(r=>r.name===state.opp)?state.opp:mt?mt.opp:others[0].name;
+}
+// 撿人當天不能上場，從明天起算；開季前從那週第一天起算。丟掉的人在那之前的比賽照算
+function streamCtx(rows){
+  const wk=vsWeek()||curWeek();if(!wk)return null;
+  const from=Math.max(wk.s,todayDay()+1),val=playerValues(),si=SI(),opp=vsOppName(rows);
+  const me=DATA.find(t=>t[0]===ME)[1],act=me.filter(p=>active(p)),open=ROSTER-act.length;
+  const drops=act.map(p=>({p,v:val(p[si])??-99})).sort((a,b)=>a.v-b.v).slice(0,STREAM_DROPS).map(x=>x.p[0]);
+  const oppV=weekTotals(DATA.find(t=>t[0]===opp)[1],wk,val).v,pre=from>wk.s?weekRaw(me,wk.s,Math.min(from-1,wk.e),val):null;
+  const ctx={wk,from,val,opp,me,open,drops,oppV,pre};
+  ctx.base=streamEval(ctx,null,null);
+  return ctx;
+}
+function streamEval(ctx,add,drop){
+  const ps=ctx.me.filter(p=>p[0]!==drop);if(add)ps.push([add,"BN",...FA[add].slice(2)]);
+  let r=ctx.from<=ctx.wk.e?weekRaw(ps,ctx.from,ctx.wk.e,ctx.val):{t:{fgm:0,fga:0,ftm:0,fta:0,tpm:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0},starts:0,benched:0};
+  if(ctx.pre)r=addRaw(ctx.pre,r);
+  return {m:matchup(toV(r.t),ctx.oppV),starts:r.starts};
+}
+function renderStreamInfo(rows){
+  const el=document.getElementById("st-info"),ctx=WEEKS.length?streamCtx(rows):null;
+  document.getElementById("st-go").disabled=!ctx||ctx.from>ctx.wk.e;
+  if(!ctx){el.textContent="從 Yahoo 更新過資料（含賽程）後才能用：會依這週每隊的比賽場數，找出撿誰最能提高你對本週對手的勝率。";return;}
+  el.textContent=ctx.from>ctx.wk.e?`第 ${ctx.wk.i} 週已經沒有剩下的比賽，請在上方 VS 選下一週。`
+    :`第 ${ctx.wk.i} 週（${md(ctx.wk.s)}–${md(ctx.wk.e)}）對 ${ctx.opp}：目前預測勝率 ${pctTxt(ctx.base.m.win)}。撿進來的人從 ${dayTxt(ctx.from)} 起算（撿人當天不能上場）。每位 FA 都跟你價值最低的 ${STREAM_DROPS} 人${ctx.open>0?"和「不丟人」":""}配一次，列出勝率提升最多的前 10 個。週次和對手跟著上方 VS 的選擇。`;
+}
+async function streamSearch(){
+  const rows=compute();rankAll(rows);
+  const ctx=streamCtx(rows),out=document.getElementById("st-out"),st=document.getElementById("st-status"),btn=document.getElementById("st-go");
+  if(!ctx||ctx.from>ctx.wk.e)return;
+  const noW=document.getElementById("st-nowaiver").checked,rng={s:ctx.from,e:ctx.wk.e};
+  const fas=Object.values(FA).filter(p=>p[3]!=="O"&&!(noW&&p[1]==="W")&&p[SI()]&&gamesIn(p,rng)>0);
+  const opts=[...(ctx.open>0?[null]:[]),...ctx.drops],res=[];
+  btn.disabled=true;out.innerHTML="";
+  for(let i=0;i<fas.length;i++){
+    if(i%20===0){st.textContent=`計算中… ${i}／${fas.length} 位 FA`;await new Promise(r=>setTimeout(r,0));}
+    let best=null;
+    for(const d of opts){const e=streamEval(ctx,fas[i][0],d);if(!best||e.m.win>best.m.win)best={...e,drop:d};}
+    if(best.m.win-ctx.base.m.win>.005)res.push({p:fas[i],...best});
+  }
+  res.sort((a,b)=>b.m.win-a.m.win);
+  btn.disabled=false;
+  st.textContent=res.length?`找到 ${res.length} 種會提高勝率的撿法，列出前 10 名。`:"沒有找到能提高本週勝率的撿法。";
+  const g=(p)=>gamesIn(p,rng),cats=r=>CATS.map((c,i)=>({c,d:r.m.ps[i]-ctx.base.m.ps[i]})).filter(x=>Math.abs(x.d)>=.05);
+  out.innerHTML=res.slice(0,10).map((r,i)=>{const D=r.drop?ctx.me.find(p=>p[0]===r.drop):null,cm=cats(r);
+    return `<div class="as-row"><span class="n">${i+1}</span><div class="d">撿 <b>${esc(r.p[0])}</b>（${esc(nbaTeam(r.p))}，剩 ${g(r.p)} 場${r.p[1]==="W"?" · waiver":""}${r.p[3]?" · "+esc(r.p[3]):""}）${D?`，丟 ${esc(D[0])}（剩 ${g(D)} 場）`:"，不丟人"}
+      <small>勝率 ${pctTxt(ctx.base.m.win)} → <b>${pctTxt(r.m.win)}</b>（+${Math.round((r.m.win-ctx.base.m.win)*100)}%）；先發場次 ${f1(ctx.base.starts)} → ${f1(r.starts)}${cm.length?`；${cm.map(x=>`${x.c.l} ${pctTxt(ctx.base.m.ps[CATS.indexOf(x.c)])}→${pctTxt(r.m.ps[CATS.indexOf(x.c)])}`).join("、")}`:""}</small></div>
+      <button class="pxbtn st-apply" type="button" data-a="${esc(r.p[0])}" data-d="${esc(r.drop||"")}">套用</button></div>`}).join("");
+  out.querySelectorAll(".st-apply").forEach(b=>b.onclick=()=>{fam.add=b.dataset.a;fam.drop=b.dataset.d;render();document.getElementById("h-fa").scrollIntoView({behavior:"smooth"});});
+}
+
+// ---------- 快速選單：右下角 MENU 按鈕，點了跳到各區塊 ----------
+const NAV=[["me-sum","我的隊伍"],["h-vs","對戰預測"],["h-today","每日先發"],["h-trade","交易分析"],["h-fa","FA 分析／串流"],["h-league","聯盟排名"],["h-class","職業鑑定"],["h-teams","各隊球員"],["h-dex","球員卡圖鑑"]];
+function navGo(id){
+  const el=document.getElementById(id),bar=document.querySelector(".controls");if(!el)return;
+  const off=(bar?bar.getBoundingClientRect().height:0)+12;
+  window.scrollTo({top:el.getBoundingClientRect().top+window.scrollY-off,behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
+}
+function initPlan(){
+  document.getElementById("day-sel").onchange=e=>{planDay=+e.target.value;renderToday();};
+  document.getElementById("st-go").onclick=streamSearch;
+  const btn=document.getElementById("nav-btn"),menu=document.getElementById("nav-menu");
+  menu.innerHTML=NAV.map(([id,l])=>`<button class="menu-btn" type="button" data-go="${id}">${l}</button>`).join("")+`<button class="menu-btn" type="button" data-go="top">▲ 回到最上面</button>`;
+  const close=()=>{menu.hidden=true;btn.setAttribute("aria-expanded","false");};
+  btn.onclick=()=>{const open=menu.hidden;menu.hidden=!open;btn.setAttribute("aria-expanded",String(open));if(open)menu.querySelector("button").focus();};
+  menu.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{close();if(b.dataset.go==="top")window.scrollTo({top:0});else navGo(b.dataset.go);btn.focus();});
+  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!menu.hidden){close();btn.focus();}});
+}
+
 // ---------- FA MACHINE：撿人（丟人後撿人、直接撿人）對名次的影響 ----------
 const ROSTER=13; // 正式名單上限（不含 IL）
 const fam={add:"",drop:null};
@@ -1663,6 +1840,7 @@ function initFA(){
 initTrade();
 initFA();
 initDex();
+initPlan();
 render();
 initImport();
 </script>

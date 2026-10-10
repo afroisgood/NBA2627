@@ -113,6 +113,9 @@ select{font-family:var(--f-txt);font-size:16px;min-height:40px;background:var(--
 .vs-row{display:grid;grid-template-columns:minmax(64px,auto) 1fr 56px 1fr minmax(64px,auto);align-items:center;gap:10px;font-family:var(--f-dot);font-size:19px}
 .vs-row .val{text-align:center}
 .vs-row .cat{font-family:var(--f-pix);font-size:9px;text-align:center}
+.vs-row .cat small{display:block;margin-top:4px;font-family:var(--f-txt);font-size:12px;font-weight:700;color:var(--mid);white-space:nowrap}
+.ms-card .s{font-size:14px;font-weight:700}
+.ms-card.line .s{color:var(--mid)}
 .vs-bar{height:14px;border:2px solid var(--ink);position:relative;background:var(--lcd)}
 .vs-bar i{position:absolute;top:0;bottom:0;background:var(--lo)}
 .vs-bar.l i{right:0}.vs-bar.r i{left:0}
@@ -219,6 +222,7 @@ a.pxbtn{display:inline-block;text-decoration:none}
         <button class="menu-btn" id="src-pr" type="button" aria-pressed="true">2026-27 三家預測</button>
         <button class="menu-btn" id="src-ls" type="button" aria-pressed="false">2025-26 上季實際</button>
         <button class="menu-btn" id="src-cur" type="button" aria-pressed="false" hidden>2026-27 本季實際</button>
+        <button class="menu-btn" id="src-mix" type="button" aria-pressed="false" hidden>預測＋本季</button>
       </div>
     </div>
     <div class="ctl">
@@ -226,6 +230,13 @@ a.pxbtn{display:inline-block;text-decoration:none}
       <div class="seg" aria-labelledby="lbl-mode">
         <button class="menu-btn" id="mode-9" type="button" aria-pressed="true">9 項全算</button>
         <button class="menu-btn" id="mode-p" type="button" aria-pressed="false">放棄助攻</button>
+      </div>
+    </div>
+    <div class="ctl">
+      <span class="ctl-label" id="lbl-inj">INJ</span>
+      <div class="seg" aria-labelledby="lbl-inj">
+        <button class="menu-btn" id="inj-on" type="button" aria-pressed="true">扣除傷兵</button>
+        <button class="menu-btn" id="inj-off" type="button" aria-pressed="false">全部照算</button>
       </div>
     </div>
   </div>
@@ -255,11 +266,12 @@ a.pxbtn{display:inline-block;text-decoration:none}
   <section aria-labelledby="h-vs">
     <h2 id="h-vs"><span class="en">VS MODE</span>對戰預測</h2>
     <div class="vs">
-      <div class="vs-pick"><label for="opp">對手</label><select id="opp"></select></div>
+      <div class="vs-pick"><label for="opp">對手</label><select id="opp"></select><label for="vs-week">週次</label><select id="vs-week"></select></div>
+      <p class="note" id="vs-info"></p>
       <div class="vs-top" id="vs-top"></div>
       <div class="vs-rows" id="vs-rows"></div>
     </div>
-    <p class="note">用雙方每場數據加總比較九項，多者勝；FG%、FT% 比命中率，失誤少者勝。H2H 一週的實際結果還會受出賽場次影響。</p>
+    <p class="note">「贏面」和「勝率」是把每項數據一週的正常起伏算進去後的估計：差距越大，贏面越接近 100%。勝率＝9 項贏 5 項以上的機率。選了週次會依那週每隊的出賽場數、每天最多 10 人先發來預測；選「每場平均」則只比每場數據。</p>
   </section>
 
   <section aria-labelledby="h-trade">
@@ -349,7 +361,7 @@ a.pxbtn{display:inline-block;text-decoration:none}
 // 一鍵更新程式：在「已登入 Yahoo」的聯盟頁面（https://basketball.fantasysports.yahoo.com/nba/1031）執行。
 // 用法一：戰力表網頁的「更新資料」書籤（建議）。用法二：F12 → Console，整段貼上後按 Enter。
 // 抓的內容：16 隊名單、Yahoo 本季剩餘預測、ESPN 預測、2025-26 上季數據、2026-27 本季數據、季前排名、持有率，
-// 以及季前排名前 400 名裡所有沒被持有的球員（FA／waiver）。
+// 以及季前排名前 400 名裡所有沒被持有的球員（FA／waiver）、ESPN 的整季 NBA 賽程。
 // 跑完會出現視窗，按「打開戰力表」就會帶著新資料打開網頁。
 (async () => {
   const LEAGUE = 1031, TEAMS = 16, MY_TEAM_ID = 13, MAX_PAGES = 32, FA_PAGES = 16;
@@ -456,6 +468,28 @@ a.pxbtn{display:inline-block;text-decoration:none}
       console.warn('[戰力表更新] ESPN 預測抓取失敗，只用 Yahoo 預測：', e);
     }
 
+    // 3-1) NBA 賽程（ESPN）：每隊打球的日期（美東時間），存成距離 SCHED_BASE 的天數
+    const SCHED_BASE = '2026-10-01';
+    const ABBR = { GS: 'GSW', NO: 'NOP', NY: 'NYK', SA: 'SAS', UTAH: 'UTA', WSH: 'WAS', PHO: 'PHX', NOR: 'NOP', BRK: 'BKN' };
+    let SCHED = null;
+    try {
+      say('抓 NBA 賽程…');
+      const j = await (await fetch(`https://lm-api-reads.fantasy.espn.com/apis/v3/games/fba/seasons/${ESPN_YEAR}?view=proTeamSchedules_wl`)).json();
+      const base = Date.parse(SCHED_BASE + 'T00:00:00Z'), teams = {};
+      const etDay = ms => { const s = new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); return Math.round((Date.parse(s + 'T00:00:00Z') - base) / 864e5); };
+      for (const t of (j.settings && j.settings.proTeams) || []) {
+        if (!t.abbrev || !t.proGamesByScoringPeriod || t.id === 0) continue;
+        const ab = ABBR[t.abbrev.toUpperCase()] || t.abbrev.toUpperCase();
+        const days = new Set();
+        Object.values(t.proGamesByScoringPeriod).flat().forEach(g => { if (g && g.date) { const d = etDay(g.date); if (d >= 0 && d < 400) days.add(d); } });
+        if (days.size) teams[ab] = [...days].sort((a, b) => a - b);
+      }
+      if (Object.keys(teams).length >= 28) SCHED = { base: SCHED_BASE, teams };
+      else console.warn('[戰力表更新] 賽程只抓到', Object.keys(teams).length, '隊，不使用');
+    } catch (e) {
+      console.warn('[戰力表更新] 賽程抓取失敗：', e);
+    }
+
     // 4) 合併：預測 = Yahoo 和 ESPN 場均平均（只有一家就用那一家）
     const avg = (a, b) => a && b ? a.map((x, i) => r2((x + b[i]) / 2)) : a || b || null;
     let noProj = 0;
@@ -476,10 +510,10 @@ a.pxbtn{display:inline-block;text-decoration:none}
       FA.push([n, /^W/.test(r.own) ? 'W' : 'FA', r.tp, status(r.st), proj, last, cur]);
     }
     const me = rosters.find(t => t.id === MY_TEAM_ID);
-    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA });
+    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA, SCHED });
     window._LP_UPDATE = json;
     const curN = DATA.reduce((a, t) => a + t[1].filter(p => p[6]).length, 0);
-    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到。`);
+    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到；賽程${SCHED ? '有' : '沒有'}抓到。`);
     btns.innerHTML = '';
     button('▶ 打開戰力表', () => window.open(SITE + '#import=' + encodeURIComponent(json), '_blank'));
     button('複製結果', async () => {
@@ -529,6 +563,7 @@ function checkImport(o){
   }
   if(!o.DATA.some(t=>t[0]===o.ME))return "名單裡找不到你的隊伍。";
   if(o.FA!=null&&(!Array.isArray(o.FA)||!o.FA.every(okP)))return "FA 資料格式不對。";
+  if(o.SCHED!=null){const S=o.SCHED;if(!S||!/^\d{4}-\d{2}-\d{2}$/.test(S.base)||!S.teams||typeof S.teams!=="object"||!Object.values(S.teams).every(a=>Array.isArray(a)&&a.every(d=>Number.isInteger(d)&&d>=0&&d<400)))return "賽程資料格式不對。";}
   for(const k in o.MKT){const m=o.MKT[k];if(!Array.isArray(m)||m.length!==2||!m.every(isNum))return "排名／持有率資料格式不對。";}
   return "";
 }
@@ -550,8 +585,8 @@ function applyImport(text){
   try{o=JSON.parse(text.trim());}catch(e){return "看不懂貼上的內容，請確認有完整貼上更新程式的結果。";}
   const err=checkImport(o);if(err)return err;
   const keep=state.src,prev={};
-  ["pr","ls","cur"].forEach(src=>{
-    if(src==="cur"&&!hasCur())return;
+  ["pr","ls","cur","mix"].forEach(src=>{
+    if((src==="cur"||src==="mix")&&!hasCur())return;
     state.src=src;const rows=compute();rankAll(rows);
     prev[src]={};rows.forEach(r=>prev[src][r.name]=[r.ovr9,r.ovrNA]);
   });
@@ -594,6 +629,89 @@ function initImport(){
     }
   },300);
 }
+// ---------- 預測模型：傷兵、預測＋本季混合、H2H 勝率、每週賽程與先發陣容 ----------
+
+// 傷兵：O（缺陣）不算，Q（出賽存疑）打 75 折；「全部照算」時都算 1
+const Q_RATE=0.75;
+const injW=p=>!state.inj?1:p[3]==="O"?0:p[3]==="Q"?Q_RATE:1;
+
+// 預測＋本季混合（存在 index 7）：本季打 g 場時，本季佔 g/(g+K)、預測佔 K/(g+K)
+const MIX_K=20;
+function addMix(p){
+  const pr=p[4],cu=p[6];
+  if(!cu){p[7]=pr||null;return;}
+  if(!pr){p[7]=cu;return;}
+  const a=cu[0]/(cu[0]+MIX_K);
+  p[7]=pr.map((x,i)=>i===0?x:+(x*(1-a)+cu[i]*a).toFixed(2));
+}
+
+// H2H 勝率：每項當成常態分布估計贏面。計數項用「變異係數」（每週總數大約上下浮動幾 %），命中率用固定標準差
+const CV={tpm:.16,pts:.09,reb:.09,ast:.11,stl:.20,blk:.25,to:.13};
+const PCT_SD={fg:.013,ft:.025};
+function normCdf(z){const t=1/(1+.2316419*Math.abs(z)),d=.3989423*Math.exp(-z*z/2);
+  const p=d*t*(.3193815+t*(-.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));return z>0?1-p:p}
+function catProb(c,a,b){
+  const sd=c.pct?Math.SQRT2*PCT_SD[c.k]:Math.hypot(CV[c.k]*a,CV[c.k]*b);
+  if(!sd)return a===b?.5:(c.low?a<b:a>b)?1:0;
+  return normCdf((c.low?b-a:a-b)/sd);
+}
+// 一場對戰：9 項贏面、預期贏幾項、贏過一半（≥5 項）的機率；放棄助攻也還是 9 項都比
+function matchup(va,vb){
+  const ps=CATS.map(c=>catProb(c,va[c.k],vb[c.k]));
+  let dist=[1];ps.forEach(p=>{const n=Array(dist.length+1).fill(0);dist.forEach((x,i)=>{n[i]+=x*(1-p);n[i+1]+=x*p});dist=n;});
+  return {ps,exp:ps.reduce((a,b)=>a+b,0),win:dist.slice(5).reduce((a,b)=>a+b,0)};
+}
+// 每隊對其他 15 隊的平均勝率、平均贏幾項，並排名
+function h2hAll(rows){
+  rows.forEach(r=>{let w=0,e=0;rows.forEach(o=>{if(o===r)return;const m=matchup(r.v,o.v);w+=m.win;e+=m.exp;});r.win=w/(rows.length-1);r.expCats=e/(rows.length-1);});
+  [...rows].sort((a,b)=>b.win-a.win).forEach((r,i)=>r.winRk=i+1);
+}
+const pctTxt=x=>`${Math.round(x*100)}%`;
+
+// ---------- 賽程（從 Yahoo 更新時一起從 ESPN 抓）：SCHED = {base:"YYYY-MM-DD", teams:{LAL:[天數,...]}} ----------
+const SCHED=IMP&&IMP.SCHED?IMP.SCHED:null;
+const dayMs=864e5;
+const baseUTC=SCHED?Date.parse(SCHED.base+"T00:00:00Z"):0;
+const dayDate=d=>new Date(baseUTC+d*dayMs);
+const md=d=>{const x=dayDate(d);return `${x.getUTCMonth()+1}/${x.getUTCDate()}`};
+const GAMES=SCHED?Object.fromEntries(Object.entries(SCHED.teams).map(([t,a])=>[t,new Set(a)])):{};
+// 週一到週日為一週；第 1 週從開幕日開始
+const WEEKS=(()=>{
+  if(!SCHED)return [];
+  const all=[...new Set(Object.values(SCHED.teams).flat())].sort((a,b)=>a-b);if(!all.length)return [];
+  const first=all[0],last=all[all.length-1],out=[];
+  let s=first;
+  while(s<=last){const dow=(dayDate(s).getUTCDay()+6)%7,e=s+(6-dow);out.push({i:out.length+1,s,e,key:`w${out.length+1}`});s=e+1;}
+  return out;
+})();
+const todayDay=()=>{const now=new Date();const et=new Date(now.toLocaleString("en-US",{timeZone:"America/New_York"}));return Math.floor((Date.UTC(et.getFullYear(),et.getMonth(),et.getDate())-baseUTC)/dayMs)};
+const curWeek=()=>{if(!WEEKS.length)return null;const t=todayDay();return WEEKS.find(w=>t<=w.e)||WEEKS[WEEKS.length-1]};
+const weekOf=key=>WEEKS.find(w=>w.key===key)||null;
+const nbaTeam=p=>(p[2]||"").split(" - ")[0].trim();
+const posOf=p=>((p[2]||"").split(" - ")[1]||"").split(",").map(x=>x.trim()).filter(Boolean);
+const gamesIn=(p,w)=>{const g=GAMES[nbaTeam(p)];if(!g||!w)return 0;let n=0;for(let d=w.s;d<=w.e;d++)if(g.has(d))n++;return n};
+
+// 每天的先發位置：PG、SG、G、SF、PF、F、C、C、Util、Util
+const SLOTS=[["PG"],["SG"],["PG","SG"],["SF"],["PF"],["SF","PF"],["C"],["C"],null,null];
+// 依價值由高到低排人，排得進去就上場（這種「位置配對」用貪婪法就是最佳解）
+function lineup(players){
+  const slot=Array(SLOTS.length).fill(-1),fits=players.map(p=>{const ps=posOf(p);return SLOTS.map(s=>!s||s.some(x=>ps.includes(x)))});
+  const tryPlace=(i,seen)=>{for(let k=0;k<SLOTS.length;k++){if(!fits[i][k]||seen[k])continue;seen[k]=1;if(slot[k]<0||tryPlace(slot[k],seen)){slot[k]=i;return true;}}return false};
+  players.forEach((p,i)=>tryPlace(i,[]));
+  return new Set(slot.filter(i=>i>=0));
+}
+// 一隊在某一週的預測總數：每天只算排得進先發的人，傷兵打折
+function weekTotals(ps,w,val){
+  const si=SI(),t={fgm:0,fga:0,ftm:0,fta:0,tpm:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0};let starts=0,benched=0;
+  const pool=ps.filter(p=>active(p)&&p[si]&&injW(p)>0).map(p=>({p,v:val(p[si])??-99,g:GAMES[nbaTeam(p)]})).sort((a,b)=>b.v-a.v);
+  for(let d=w.s;d<=w.e;d++){
+    const today=pool.filter(x=>x.g&&x.g.has(d));if(!today.length)continue;
+    const on=lineup(today.map(x=>x.p));
+    today.forEach((x,i)=>{if(!on.has(i)){benched++;return;}starts++;const s=x.p[si],k=injW(x.p);for(const key in t)t[key]+=s[IDX[key]]*k;});
+  }
+  const v={fg:t.fga?t.fgm/t.fga:0,ft:t.fta?t.ftm/t.fta:0,tpm:t.tpm,pts:t.pts,reb:t.reb,ast:t.ast,stl:t.stl,blk:t.blk,to:t.to};
+  return {v,starts,benched};
+}
 
 const CATS=[
  {k:"fg",l:"FG%",pct:true},{k:"ft",l:"FT%",pct:true},{k:"tpm",l:"3PM"},{k:"pts",l:"PTS"},{k:"reb",l:"REB"},
@@ -601,7 +719,7 @@ const CATS=[
 const IDX={gp:0,fgm:1,fga:2,ftm:3,fta:4,tpm:5,pts:6,reb:7,ast:8,stl:9,blk:10,to:11};
 const PREV={"pr":{"諸葛衛冕村夫":[3,2],"乂唯一珍❤️杰西卡乂":[10,10],"大小小丑與他的歡樂同伴們":[14,12],"南方勇者北伐🧔‍♂️七崩賢":[8,9],"天母羅斯":[4,4],"CrocoCroco":[5,7],"拿了就起，起了就～駿🏀":[11,13],"新中國王":[13,14],"想你的林":[12,8],"欸我姆斯拉":[2,1],"永保安康":[15,16],"高移肉 想念booker 的第一天":[1,3],"石":[6,5],"老蔡水煎包":[16,15],"金采源老公":[7,6],"坂木老大：賣全身球員求合成":[9,11]},"ls":{"諸葛衛冕村夫":[13,9],"乂唯一珍❤️杰西卡乂":[7,10],"大小小丑與他的歡樂同伴們":[12,13],"南方勇者北伐🧔‍♂️七崩賢":[5,6],"天母羅斯":[6,4],"CrocoCroco":[9,8],"拿了就起，起了就～駿🏀":[14,15],"新中國王":[16,16],"想你的林":[11,11],"欸我姆斯拉":[1,2],"永保安康":[10,12],"高移肉 想念booker 的第一天":[3,3],"石":[2,1],"老蔡水煎包":[15,14],"金采源老公":[8,5],"坂木老大：賣全身球員求合成":[4,7]}};
 if(IMP&&IMP.PREV)Object.assign(PREV,IMP.PREV);
-PREV.cur=PREV.cur||{};
+PREV.cur=PREV.cur||{};PREV.mix=PREV.mix||{};
 // 8x8 pixel emblems
 const EMB={
 "石":["00111100","01111110","11101111","11111101","11011111","11111111","01111110","00000000"],
@@ -622,29 +740,31 @@ const EMB={
 "坂木老大：賣全身球員求合成":["01100110","11000011","11000011","11000011","11000011","01100110","01100110","00000000"]};
 function emblem(name,size=20){const b=EMB[name];if(!b)return "";let r="";b.forEach((row,y)=>[...row].forEach((c,x)=>{if(c==="1")r+=`<rect x="${x}" y="${y}" width="1" height="1"/>`}));return `<svg class="emb" width="${size}" height="${size}" viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true">${r}</svg>`}
 
-let state={src:"pr",punt:false,sort:{k:"ovr",dir:1},team:ME,opp:null};
+let state={src:"pr",punt:false,inj:true,week:null,sort:{k:"ovr",dir:1},team:ME,opp:null};
 try{const s=JSON.parse(localStorage.getItem("lp-state2")||"null");if(s)state={...state,...s};}catch(e){}
-if(!["pr","ls","cur"].includes(state.src)||(state.src==="cur"&&!hasCur()))state.src="pr";
-function save(){try{localStorage.setItem("lp-state2",JSON.stringify({src:state.src,punt:state.punt,team:state.team,opp:state.opp}))}catch(e){}}
+if(!["pr","ls","cur","mix"].includes(state.src)||(["cur","mix"].includes(state.src)&&!hasCur()))state.src="pr";
+function save(){try{localStorage.setItem("lp-state2",JSON.stringify({src:state.src,punt:state.punt,inj:state.inj,week:state.week,team:state.team,opp:state.opp}))}catch(e){}}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
 const f1=x=>x.toFixed(1), f3=x=>x.toFixed(3).replace(/^0/,"");
-const SI=()=>({pr:4,ls:5,cur:6})[state.src];
+const SI=()=>({pr:4,ls:5,cur:6,mix:7})[state.src];
 const active=p=>p[1]!=="IL";
 
 function compute(data=DATA){
   const si=SI();
   return data.map(team=>{
     const t={fgm:0,fga:0,ftm:0,fta:0,tpm:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0};let n=0,miss=0;
-    team[1].forEach(p=>{if(!active(p))return;const s=p[si];if(!s){miss++;return;}n++;for(const k in t)t[k]+=s[IDX[k]];});
+    team[1].forEach(p=>{if(!active(p))return;const s=p[si];if(!s){miss++;return;}n++;const w=injW(p);for(const k in t)t[k]+=s[IDX[k]]*w;});
     const v={fg:t.fga?t.fgm/t.fga:0,ft:t.fta?t.ftm/t.fta:0,tpm:t.tpm,pts:t.pts,reb:t.reb,ast:t.ast,stl:t.stl,blk:t.blk,to:t.to};
     return {name:team[0],ps:team[1],v,n,miss};
   });
 }
-function rankAll(rows){
+// full＝也算 H2H 勝率（只有畫面顯示需要；交易、撿人模擬不用，省時間）
+function rankAll(rows,full){
   CATS.forEach(c=>{[...rows].sort((a,b)=>c.low?a.v[c.k]-b.v[c.k]:b.v[c.k]-a.v[c.k]).forEach((r,i)=>{(r.r=r.r||{})[c.k]=i+1})});
   rows.forEach(r=>{r.avg=CATS.reduce((a,c)=>a+r.r[c.k],0)/9;r.avgNA=CATS.filter(c=>c.k!=="ast").reduce((a,c)=>a+r.r[c.k],0)/8;});
   [["avg","ovr9"],["avgNA","ovrNA"]].forEach(([k,n])=>[...rows].sort((a,b)=>a[k]-b[k]).forEach((r,i)=>r[n]=i+1));
   rows.forEach(r=>{r.ovr=state.punt?r.ovrNA:r.ovr9;r.avgUse=state.punt?r.avgNA:r.avg;});
+  if(full)h2hAll(rows);
 }
 // player value (z-score sum vs all active rostered players)
 function playerValues(){
@@ -664,23 +784,24 @@ const visCats=()=>CATS.filter(c=>!(state.punt&&c.k==="ast"));
 function renderLeague(rows){
   const s=state.sort,cats=visCats();
   if(state.punt&&s.k==="ast")state.sort={k:"ovr",dir:1};
-  const key=r=>s.k==="ovr"?r.ovr:r.r[s.k];
+  const key=r=>s.k==="ovr"?r.ovr:s.k==="win"?r.winRk:r.r[s.k];
   const list=[...rows].sort((a,b)=>(key(a)-key(b))*s.dir||a.ovr-b.ovr);
   const th=(k,l)=>`<th scope="col" class="sortable ${s.k===k?"sorted":""}" data-k="${k}" tabindex="0" aria-sort="${s.k===k?(s.dir===1?"ascending":"descending"):"none"}">${l}</th>`;
-  let h=`<thead><tr><th scope="col" class="name">TEAM</th>${th("ovr",state.punt?"不算AST":"9項綜合")}${cats.map(c=>th(c.k,c.l)).join("")}</tr></thead><tbody>`;
+  let h=`<thead><tr><th scope="col" class="name">TEAM</th>${th("ovr",state.punt?"不算AST":"9項綜合")}${th("win","H2H 勝率")}${cats.map(c=>th(c.k,c.l)).join("")}</tr></thead><tbody>`;
   list.forEach(r=>{
     const me=r.name===ME,prev=(PREV[state.src][r.name]||[])[state.punt?1:0];
     const d=prev?prev-r.ovr:0;
     const dl=d>0?`<span class="delta up">${d}</span>`:d<0?`<span class="delta dn">${-d}</span>`:`<span class="delta">–</span>`;
     h+=`<tr class="${me?"me":""}"><td class="name"><span class="tn">${emblem(r.name)}<span>${esc(r.name)}</span>${me?'<span class="tag">1P</span>':""}</span></td>
     <td><div class="cell"><span class="ovr">${r.ovr}</span>${dl}<span class="pos">平均第 ${f1(r.avgUse)}</span></div></td>
+    <td class="${tier(r.winRk)}"><div class="cell"><span>${pctTxt(r.win)}</span><span class="pos">贏 ${f1(r.expCats)} 項 · 第 ${r.winRk}</span></div></td>
     ${cats.map(c=>`<td class="${tier(r.r[c.k])}"><div class="cell"><span>${fmt(c,r.v[c.k])}</span>${rk(r.r[c.k])}</div></td>`).join("")}</tr>`;
   });
   document.getElementById("league").innerHTML=h+"</tbody>";
   const missT=rows.reduce((a,r)=>a+r.miss,0);
   document.getElementById("league-note").textContent=
-    "數字是全隊（不含 IL）每場數據加總。♛ 前 3 名、☠ 第 14–16 名；格子越深名次越前（1–4、5–8、9–12、13–16 四階）。點欄位標題可排序。"
-    +(state.src!=="pr"&&missT?` ${state.src==="ls"?"上季":"本季"}版有 ${missT} 位球員沒有${state.src==="ls"?"上季":"本季"}數據，不計入加總。`:"");
+    "數字是全隊（不含 IL）每場數據加總"+(state.inj?"，缺陣（O）不算、出賽存疑（Q）打 75 折":"")+"。♛ 前 3 名、☠ 第 14–16 名；格子越深名次越前（1–4、5–8、9–12、13–16 四階）。點欄位標題可排序。H2H 勝率＝跟其他 15 隊各對戰一次、9 項贏 5 項以上的平均機率（放棄助攻也是 9 項都比）。"
+    +(!["pr","mix"].includes(state.src)&&missT?` ${state.src==="ls"?"上季":"本季"}版有 ${missT} 位球員沒有${state.src==="ls"?"上季":"本季"}數據，不計入加總。`:"");
   document.querySelectorAll("#league th.sortable").forEach(el=>{
     const go=()=>{const k=el.dataset.k;state.sort=state.sort.k===k?{k,dir:-state.sort.dir}:{k,dir:1};render();};
     el.onclick=go;el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};
@@ -693,22 +814,34 @@ function renderVS(rows){
   if(!state.opp||!others.find(r=>r.name===state.opp))state.opp=others[0].name;
   sel.innerHTML=others.map(r=>`<option value="${esc(r.name)}" ${r.name===state.opp?"selected":""}>#${r.ovr} ${esc(r.name)}</option>`).join("");
   const A=rows.find(r=>r.name===ME),B=rows.find(r=>r.name===state.opp);
+  const wk=vsWeek(),ws=document.getElementById("vs-week");
+  ws.innerHTML=`<option value="pg">每場平均（不看賽程）</option>`+WEEKS.map(x=>`<option value="${x.key}">第 ${x.i} 週 ${md(x.s)}–${md(x.e)}</option>`).join("");
+  ws.value=wk?wk.key:"pg";ws.disabled=!WEEKS.length;
+  ws.onchange=()=>{state.week=ws.value;save();render();};
+  let va=A.v,vb=B.v,info=SCHED?"":"從 Yahoo 更新過資料後，可以選週次，依每隊這週的出賽場數和每天的先發名額預測。";
+  if(wk){const val=playerValues(),ta=weekTotals(A.ps,wk,val),tb=weekTotals(B.ps,wk,val);va=ta.v;vb=tb.v;
+    info=`第 ${wk.i} 週（${md(wk.s)}–${md(wk.e)}）預測總數：${esc(ME)} 先發 ${ta.starts} 場次${ta.benched?`（另有 ${ta.benched} 場次排不進先發）`:""}；${esc(B.name)} 先發 ${tb.starts} 場次${tb.benched?`（另有 ${tb.benched} 場次排不進先發）`:""}。每天最多 10 人上場，依位置排出最好的陣容${state.inj?"，缺陣不算、存疑打 75 折":""}。`;}
+  document.getElementById("vs-info").innerHTML=info;
+  const M=matchup(va,vb);
   let w=0,l=0,t=0;
-  const rowsH=CATS.map(c=>{
-    const a=A.v[c.k],b=B.v[c.k];const eq=Math.abs(a-b)<1e-9;
+  const rowsH=CATS.map((c,ci)=>{
+    const a=va[c.k],b=vb[c.k];const eq=Math.abs(a-b)<1e-9;
     const aw=!eq&&(c.low?a<b:a>b);if(eq)t++;else if(aw)w++;else l++;
     const mx=Math.max(a,b)||1,mn=Math.min(a,b);
     let pa,pb;if(c.pct){const lo=mn-0.03;pa=(a-lo)/(mx-lo)*100;pb=(b-lo)/(mx-lo)*100;}else{pa=a/mx*100;pb=b/mx*100;}
     const pun=state.punt&&c.k==="ast";
-    return `<div class="vs-row ${eq?"":aw?"win-l":"win-r"} ${pun?"punted":""}"><span class="val l">${fmt(c,a)}</span><div class="vs-bar l"><i style="width:${pa.toFixed(0)}%"></i></div><span class="cat">${c.l}${c.low?"↓":""}</span><div class="vs-bar r"><i style="width:${pb.toFixed(0)}%"></i></div><span class="val r">${fmt(c,b)}</span></div>`;
+    return `<div class="vs-row ${eq?"":aw?"win-l":"win-r"} ${pun?"punted":""}"><span class="val l">${fmt(c,a)}</span><div class="vs-bar l"><i style="width:${pa.toFixed(0)}%"></i></div><span class="cat">${c.l}${c.low?"↓":""}<small>贏面 ${pctTxt(M.ps[ci])}</small></span><div class="vs-bar r"><i style="width:${pb.toFixed(0)}%"></i></div><span class="val r">${fmt(c,b)}</span></div>`;
   }).join("");
   const verdict=w>l?"WIN":w<l?"LOSE":"DRAW";
   document.getElementById("vs-top").innerHTML=`<div class="vs-side">${emblem(ME,40)}<span class="nm">${esc(ME)} <span class="tag">1P</span></span></div>
-    <div class="vs-score">${w} : ${l}${t?`<small>平手 ${t} 項</small>`:""}<small>預測 ${verdict}</small></div>
+    <div class="vs-score">${w} : ${l}${t?`<small>平手 ${t} 項</small>`:""}<small>預測 ${verdict}</small><small>勝率 ${pctTxt(M.win)} · 預期贏 ${f1(M.exp)} 項</small></div>
     <div class="vs-side">${emblem(B.name,40)}<span class="nm">${esc(B.name)}</span></div>`;
   document.getElementById("vs-rows").innerHTML=rowsH;
   sel.onchange=()=>{state.opp=sel.value;save();render();};
 }
+
+// VS 的週次：state.week 為 null＝自動（本週）、"pg"＝每場平均、"wN"＝第 N 週
+function vsWeek(){if(!WEEKS.length||state.week==="pg")return null;return weekOf(state.week)||curWeek()}
 
 function hpBar(v){
   if(v==null)return '<span class="dash">—</span>';
@@ -724,20 +857,20 @@ function renderTeams(rows){
   pk.innerHTML=order.map(r=>`<button class="menu-btn" type="button" data-t="${esc(r.name)}" aria-pressed="${r.name===state.team}">${emblem(r.name,16)}<span class="t">${esc(r.name)}</span>${r.name===ME?'<span class="tag">1P</span>':""}</button>`).join("");
   pk.querySelectorAll("button").forEach(b=>b.onclick=()=>{state.team=b.dataset.t;save();render();});
   if(!rows.find(r=>r.name===state.team))state.team=ME;
-  const r=rows.find(x=>x.name===state.team),si=SI(),val=playerValues();
+  const r=rows.find(x=>x.name===state.team),si=SI(),val=playerValues(),wk=vsWeek();
   const body=r.ps.map(p=>{
     const s=p[si],out=!active(p);
     const badge=out?'<span class="badge b-il">IL</span>':p[3]==="Q"?'<span class="badge">Q</span>':"";
     const cells=s?[`${f3(s[2]?s[1]/s[2]:0)}<span class="pos">${f1(s[1])}/${f1(s[2])}</span>`,`${f3(s[4]?s[3]/s[4]:0)}<span class="pos">${f1(s[3])}/${f1(s[4])}</span>`,f1(s[5]),f1(s[6]),f1(s[7]),f1(s[8]),f1(s[9]),f1(s[10]),f1(s[11])]:Array(9).fill('<span class="dash">—</span>');
     const keep=CATS.map((c,i)=>state.punt&&c.k==="ast"?null:cells[i]).filter(x=>x!==null);
-    return `<tr class="${out?"out":""}"><td class="name"><span class="slot">${esc(p[1])}</span><span class="pname">${esc(p[0])}</span>${badge}${p[2]?`<span class="pos" style="padding-left:36px">${esc(p[2])}</span>`:""}</td><td>${hpBar(val(s))}</td><td>${s?s[0]:'<span class="dash">—</span>'}</td>${keep.map(c=>`<td>${c}</td>`).join("")}</tr>`;
+    return `<tr class="${out?"out":""}"><td class="name"><span class="slot">${esc(p[1])}</span><span class="pname">${esc(p[0])}</span>${badge}${p[2]?`<span class="pos" style="padding-left:36px">${esc(p[2])}</span>`:""}</td><td>${hpBar(val(s))}</td><td>${s?s[0]:'<span class="dash">—</span>'}</td>${wk?`<td>${gamesIn(p,wk)}</td>`:""}${keep.map(c=>`<td>${c}</td>`).join("")}</tr>`;
   }).join("");
   const cats=visCats();
-  const tot=`<tr class="total"><td class="name">球隊每場加總（${r.n} 人）</td><td></td><td></td>${cats.map(c=>`<td>${fmt(c,r.v[c.k])}</td>`).join("")}</tr>
-    <tr class="ranks"><td class="name" style="color:var(--mid)">16 隊排名</td><td></td><td></td>${cats.map(c=>`<td class="${tier(r.r[c.k])}">${rk(r.r[c.k])}</td>`).join("")}</tr>`;
+  const tot=`<tr class="total"><td class="name">球隊每場加總（${r.n} 人）</td><td></td><td></td>${wk?"<td></td>":""}${cats.map(c=>`<td>${fmt(c,r.v[c.k])}</td>`).join("")}</tr>
+    <tr class="ranks"><td class="name" style="color:var(--mid)">16 隊排名</td><td></td><td></td>${wk?"<td></td>":""}${cats.map(c=>`<td class="${tier(r.r[c.k])}">${rk(r.r[c.k])}</td>`).join("")}</tr>`;
   document.getElementById("team").innerHTML=`<article class="team" style="display:flex;flex-direction:column;gap:8px">
     <div class="team-head"><h3>${emblem(r.name,28)}${esc(r.name)}${r.name===ME?'<span class="tag">1P</span>':""}</h3><span class="summary">${state.punt?"不算 AST":"9 項綜合"}第 ${r.ovr}</span></div>
-    <div class="scroll"><table><thead><tr><th class="name" scope="col">PLAYER</th><th scope="col">價值</th><th scope="col">GP</th>${cats.map(c=>`<th scope="col">${c.l}</th>`).join("")}</tr></thead><tbody>${body}${tot}</tbody></table></div></article>`;
+    <div class="scroll"><table><thead><tr><th class="name" scope="col">PLAYER</th><th scope="col">價值</th><th scope="col">GP</th>${wk?`<th scope="col">第 ${wk.i} 週</th>`:""}${cats.map(c=>`<th scope="col">${c.l}</th>`).join("")}</tr></thead><tbody>${body}${tot}</tbody></table></div></article>`;
 }
 
 // my team summary: 9-cat / punt-AST overall rank with change, best and worst categories
@@ -747,20 +880,24 @@ function renderMe(rows){
   const cats=visCats().map(c=>({l:c.l,n:r.r[c.k]})).sort((a,b)=>a.n-b.n);
   const list=a=>a.map(c=>`${c.l} ${c.n}`).join(" · ");
   document.getElementById("me-sum").innerHTML=`
-    <div class="ms-card"><span class="k">${esc(ME)} 1P · 9 CAT</span><div class="v"><b>第 ${r.ovr9} 名</b><span>${dl(r.ovr9,prev[0])}</span></div></div>
+    <div class="ms-card"><span class="k">${esc(ME)} 1P · 9 CAT</span><div class="v"><b>第 ${r.ovr9} 名</b><span>${dl(r.ovr9,prev[0])}</span></div><span class="s">H2H 預期勝率 ${pctTxt(r.win)}（第 ${r.winRk}）</span></div>
     <div class="ms-card"><span class="k">${esc(ME)} 1P · PUNT AST</span><div class="v"><b>第 ${r.ovrNA} 名</b><span>${dl(r.ovrNA,prev[1])}${r.ovrNA===1?" ♛":""}</span></div></div>
     <div class="ms-card line"><span class="k">強項 ／ 弱項</span><p>♛ ${list(cats.slice(0,3))}</p><p>☠ ${list(cats.slice(-2).reverse())}</p></div>`;
 }
 
 function render(){
-  const rows=compute();rankAll(rows);renderMe(rows);renderVS(rows);renderTrade(rows);renderFA(rows);renderLeague(rows);renderTeams(rows);
+  const rows=compute();rankAll(rows,true);renderMe(rows);renderVS(rows);renderTrade(rows);renderFA(rows);renderLeague(rows);renderTeams(rows);
   const set=(id,on)=>document.getElementById(id).setAttribute("aria-pressed",on);
-  set("src-pr",state.src==="pr");set("src-ls",state.src==="ls");set("src-cur",state.src==="cur");set("mode-9",!state.punt);set("mode-p",state.punt);
+  set("src-pr",state.src==="pr");set("src-ls",state.src==="ls");set("src-cur",state.src==="cur");set("src-mix",state.src==="mix");set("inj-on",state.inj);set("inj-off",!state.inj);set("mode-9",!state.punt);set("mode-p",state.punt);
 }
 document.getElementById("src-pr").onclick=()=>{state.src="pr";save();render()};
 document.getElementById("src-ls").onclick=()=>{state.src="ls";save();render()};
 document.getElementById("src-cur").onclick=()=>{state.src="cur";save();render()};
 document.getElementById("src-cur").hidden=!hasCur();
+document.getElementById("src-mix").onclick=()=>{state.src="mix";save();render()};
+document.getElementById("src-mix").hidden=!hasCur();
+document.getElementById("inj-on").onclick=()=>{state.inj=true;save();render()};
+document.getElementById("inj-off").onclick=()=>{state.inj=false;save();render()};
 document.getElementById("mode-9").onclick=()=>{state.punt=false;save();render()};
 document.getElementById("mode-p").onclick=()=>{state.punt=true;save();render()};
 
@@ -777,6 +914,7 @@ document.getElementById("mode-p").onclick=()=>{state.punt=true;save();render()};
 const FA={"Matisse Thybulle":["Matisse Thybulle","BN","LAL - SG,SF","",[55,2.06,4.82,0.54,0.71,1.26,5.91,2.23,1.21,1.92,0.61,0.81],null],
 "Isaiah Joe":["Isaiah Joe","BN","DET - SG,SF","",[73,3.49,7.75,1.23,1.4,2.49,10.57,2.55,1.44,0.69,0.19,0.62],[71,3.55,7.79,1.18,1.34,2.53,11.08,2.48,1.34,0.68,0.2,0.6]]};
 if(IMP&&IMP.FA){for(const k in FA)delete FA[k];IMP.FA.forEach(p=>FA[p[0]]=p.slice(0,7));}
+DATA.forEach(t=>t[1].forEach(addMix));Object.values(FA).forEach(addMix);
 const tm={give:[],get:[],opp:null,fill:""};
 const mval=n=>{const m=MKT[n]||[260,3];return .7*100*Math.exp(-(m[0]-1)/70)+.3*m[1]};
 const pkg=list=>list.reduce((a,n)=>a+Math.pow(mval(n),1.4),0);
@@ -928,7 +1066,8 @@ function renderFA(rows){
   if(fam.drop===""&&open<=0)fam.drop=null;
   if(fam.drop===null||(fam.drop&&!drops.some(x=>x.p[0]===fam.drop)))fam.drop=open>0?"":(drops[0]?drops[0].p[0]:"");
   const sa=document.getElementById("fa-add"),sd=document.getElementById("fa-drop");
-  sa.innerHTML=fas.map(x=>`<option value="${esc(x.p[0])}">${esc(x.p[0])}（${sgn(x.v)}${x.p[1]==="W"?" · waiver":""}${x.p[3]?" · "+esc(x.p[3]):""}）</option>`).join("");
+  const wk=vsWeek();
+  sa.innerHTML=fas.map(x=>`<option value="${esc(x.p[0])}">${esc(x.p[0])}（${sgn(x.v)}${wk?` · 本週 ${gamesIn(x.p,wk)} 場`:""}${x.p[1]==="W"?" · waiver":""}${x.p[3]?" · "+esc(x.p[3]):""}）</option>`).join("");
   sa.value=fam.add;
   sd.innerHTML=`<option value="" ${open>0?"":"disabled"}>不丟人，直接撿${open>0?"":"（名單已滿）"}</option>`+drops.map(x=>`<option value="${esc(x.p[0])}">${esc(x.p[0])}（${x.v==null?"—":sgn(x.v)}）</option>`).join("");
   sd.value=fam.drop;
@@ -942,7 +1081,8 @@ function renderFA(rows){
   const verdict=my>0.05?`建議撿：${up||"平均名次進步"}${dn?`（退步：${dn}）`:""}`:my>=-0.05?`差不多：名次幾乎沒變${up?`（進步：${up}；退步：${dn||"無"}）`:""}`:`不建議：整體名次變差${dn?`（退步：${dn}）`:""}`;
   const cats=visCats();
   const extra=[P[1]==="W"?`⚠ ${esc(fam.add)} 在 waiver 上，要等 waiver 處理完才拿得到，也可能被別隊搶走。`:"",P[3]==="O"?`⚠ ${esc(fam.add)} 目前缺陣（O）。`:P[3]==="Q"?`⚠ ${esc(fam.add)} 出賽存疑（Q）。`:"",
-    `位置：撿進 ${esc(fam.add)}（${esc(P[2]||"—")}）${D?`，丟掉 ${esc(D[0])}（${esc(D[2]||"—")}）`:""}。這裡不檢查先發位置，記得確認撿完還排得出完整陣容。`].filter(Boolean).map(x=>`<p class="note">${x}</p>`).join("");
+    weekLine(wk,rows,b1,P,D),
+    `位置：撿進 ${esc(fam.add)}（${esc(P[2]||"—")}）${D?`，丟掉 ${esc(D[0])}（${esc(D[2]||"—")}）`:""}。${wk?"本週預測已依位置排先發；":""}名次變化是看全季每場平均，不檢查先發位置。`].filter(Boolean).map(x=>`<p class="note">${x}</p>`).join("");
   out.innerHTML=`<div class="tm-verdict"><b>RESULT</b>${verdict}</div>
   <div class="tm-grid">
     <div class="tm-card"><span class="k">你的名次（${state.punt?"不算 AST":"9 項"}）</span><span class="v">${b0.ovr} → ${b1.ovr} ${moveTxt(b0.ovr,b1.ovr)}</span><span class="s">平均名次 ${f1(b0.avgUse)} → ${f1(b1.avgUse)}</span></div>
@@ -953,6 +1093,15 @@ function renderFA(rows){
     <tr><td class="name">每場數據</td>${cats.map(c=>`<td><div class="cell"><span>${fmt(c,b1.v[c.k])}</span><span class="pos">原 ${fmt(c,b0.v[c.k])}</span></div></td>`).join("")}</tr>
     <tr><td class="name">名次</td>${cats.map(c=>{const a=b0.r[c.k],b=b1.r[c.k];return `<td class="${tier(b)}">${b}<span class="delta">${a===b?"–":moveTxt(a,b)}</span></td>`}).join("")}</tr>
   </tbody></table></div>`;
+}
+
+// 本週對 VS 對手的預測：撿人前 → 撿人後
+function weekLine(wk,rows,b1,P,D){
+  if(!wk)return "";
+  const val=playerValues(),me=rows.find(r=>r.name===ME),op=rows.find(r=>r.name===state.opp);if(!op)return "";
+  const ov=weekTotals(op.ps,wk,val).v,m0=matchup(weekTotals(me.ps,wk,val).v,ov),m1=matchup(weekTotals(b1.ps,wk,val).v,ov);
+  const sc=m=>{const w=m.ps.filter(p=>p>.5).length;return `${w}:${9-w}`};
+  return `第 ${wk.i} 週（${md(wk.s)}–${md(wk.e)}）對 ${esc(op.name)}：預測 ${sc(m0)} → ${sc(m1)}，勝率 ${pctTxt(m0.win)} → ${pctTxt(m1.win)}。${esc(P[0])} 本週 ${gamesIn(P,wk)} 場${D?`，${esc(D[0])} 本週 ${gamesIn(D,wk)} 場`:""}。（對手和週次跟上方 VS 對戰預測一樣）`;
 }
 
 async function autoPickup(){

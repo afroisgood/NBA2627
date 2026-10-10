@@ -113,6 +113,9 @@ select{font-family:var(--f-txt);font-size:16px;min-height:40px;background:var(--
 .vs-row{display:grid;grid-template-columns:minmax(64px,auto) 1fr 56px 1fr minmax(64px,auto);align-items:center;gap:10px;font-family:var(--f-dot);font-size:19px}
 .vs-row .val{text-align:center}
 .vs-row .cat{font-family:var(--f-pix);font-size:9px;text-align:center}
+.vs-row .cat small{display:block;margin-top:4px;font-family:var(--f-txt);font-size:12px;font-weight:700;color:var(--mid);white-space:nowrap}
+.ms-card .s{font-size:14px;font-weight:700}
+.ms-card.line .s{color:var(--mid)}
 .vs-bar{height:14px;border:2px solid var(--ink);position:relative;background:var(--lcd)}
 .vs-bar i{position:absolute;top:0;bottom:0;background:var(--lo)}
 .vs-bar.l i{right:0}.vs-bar.r i{left:0}
@@ -219,6 +222,7 @@ a.pxbtn{display:inline-block;text-decoration:none}
         <button class="menu-btn" id="src-pr" type="button" aria-pressed="true">2026-27 三家預測</button>
         <button class="menu-btn" id="src-ls" type="button" aria-pressed="false">2025-26 上季實際</button>
         <button class="menu-btn" id="src-cur" type="button" aria-pressed="false" hidden>2026-27 本季實際</button>
+        <button class="menu-btn" id="src-mix" type="button" aria-pressed="false" hidden>預測＋本季</button>
       </div>
     </div>
     <div class="ctl">
@@ -226,6 +230,13 @@ a.pxbtn{display:inline-block;text-decoration:none}
       <div class="seg" aria-labelledby="lbl-mode">
         <button class="menu-btn" id="mode-9" type="button" aria-pressed="true">9 項全算</button>
         <button class="menu-btn" id="mode-p" type="button" aria-pressed="false">放棄助攻</button>
+      </div>
+    </div>
+    <div class="ctl">
+      <span class="ctl-label" id="lbl-inj">INJ</span>
+      <div class="seg" aria-labelledby="lbl-inj">
+        <button class="menu-btn" id="inj-on" type="button" aria-pressed="true">扣除傷兵</button>
+        <button class="menu-btn" id="inj-off" type="button" aria-pressed="false">全部照算</button>
       </div>
     </div>
   </div>
@@ -255,11 +266,12 @@ a.pxbtn{display:inline-block;text-decoration:none}
   <section aria-labelledby="h-vs">
     <h2 id="h-vs"><span class="en">VS MODE</span>對戰預測</h2>
     <div class="vs">
-      <div class="vs-pick"><label for="opp">對手</label><select id="opp"></select></div>
+      <div class="vs-pick"><label for="opp">對手</label><select id="opp"></select><label for="vs-week">週次</label><select id="vs-week"></select></div>
+      <p class="note" id="vs-info"></p>
       <div class="vs-top" id="vs-top"></div>
       <div class="vs-rows" id="vs-rows"></div>
     </div>
-    <p class="note">用雙方每場數據加總比較九項，多者勝；FG%、FT% 比命中率，失誤少者勝。H2H 一週的實際結果還會受出賽場次影響。</p>
+    <p class="note">「贏面」和「勝率」是把每項數據一週的正常起伏算進去後的估計：差距越大，贏面越接近 100%。勝率＝9 項贏 5 項以上的機率。選了週次會依那週每隊的出賽場數、每天最多 10 人先發來預測；選「每場平均」則只比每場數據。</p>
   </section>
 
   <section aria-labelledby="h-trade">

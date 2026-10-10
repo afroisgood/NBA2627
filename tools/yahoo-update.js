@@ -1,7 +1,7 @@
 // 一鍵更新程式：在「已登入 Yahoo」的聯盟頁面（https://basketball.fantasysports.yahoo.com/nba/1031）執行。
 // 用法一：戰力表網頁的「更新資料」書籤（建議）。用法二：F12 → Console，整段貼上後按 Enter。
 // 抓的內容：16 隊名單、Yahoo 本季剩餘預測、ESPN 預測、2025-26 上季數據、2026-27 本季數據、季前排名、持有率，
-// 以及季前排名前 400 名裡所有沒被持有的球員（FA／waiver）。
+// 以及季前排名前 400 名裡所有沒被持有的球員（FA／waiver）、ESPN 的整季 NBA 賽程。
 // 跑完會出現視窗，按「打開戰力表」就會帶著新資料打開網頁。
 (async () => {
   const LEAGUE = 1031, TEAMS = 16, MY_TEAM_ID = 13, MAX_PAGES = 32, FA_PAGES = 16;
@@ -108,6 +108,28 @@
       console.warn('[戰力表更新] ESPN 預測抓取失敗，只用 Yahoo 預測：', e);
     }
 
+    // 3-1) NBA 賽程（ESPN）：每隊打球的日期（美東時間），存成距離 SCHED_BASE 的天數
+    const SCHED_BASE = '2026-10-01';
+    const ABBR = { GS: 'GSW', NO: 'NOP', NY: 'NYK', SA: 'SAS', UTAH: 'UTA', WSH: 'WAS', PHO: 'PHX', NOR: 'NOP', BRK: 'BKN' };
+    let SCHED = null;
+    try {
+      say('抓 NBA 賽程…');
+      const j = await (await fetch(`https://lm-api-reads.fantasy.espn.com/apis/v3/games/fba/seasons/${ESPN_YEAR}?view=proTeamSchedules_wl`)).json();
+      const base = Date.parse(SCHED_BASE + 'T00:00:00Z'), teams = {};
+      const etDay = ms => { const s = new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); return Math.round((Date.parse(s + 'T00:00:00Z') - base) / 864e5); };
+      for (const t of (j.settings && j.settings.proTeams) || []) {
+        if (!t.abbrev || !t.proGamesByScoringPeriod || t.id === 0) continue;
+        const ab = ABBR[t.abbrev.toUpperCase()] || t.abbrev.toUpperCase();
+        const days = new Set();
+        Object.values(t.proGamesByScoringPeriod).flat().forEach(g => { if (g && g.date) { const d = etDay(g.date); if (d >= 0 && d < 400) days.add(d); } });
+        if (days.size) teams[ab] = [...days].sort((a, b) => a - b);
+      }
+      if (Object.keys(teams).length >= 28) SCHED = { base: SCHED_BASE, teams };
+      else console.warn('[戰力表更新] 賽程只抓到', Object.keys(teams).length, '隊，不使用');
+    } catch (e) {
+      console.warn('[戰力表更新] 賽程抓取失敗：', e);
+    }
+
     // 4) 合併：預測 = Yahoo 和 ESPN 場均平均（只有一家就用那一家）
     const avg = (a, b) => a && b ? a.map((x, i) => r2((x + b[i]) / 2)) : a || b || null;
     let noProj = 0;
@@ -128,10 +150,10 @@
       FA.push([n, /^W/.test(r.own) ? 'W' : 'FA', r.tp, status(r.st), proj, last, cur]);
     }
     const me = rosters.find(t => t.id === MY_TEAM_ID);
-    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA });
+    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA, SCHED });
     window._LP_UPDATE = json;
     const curN = DATA.reduce((a, t) => a + t[1].filter(p => p[6]).length, 0);
-    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到。`);
+    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到；賽程${SCHED ? '有' : '沒有'}抓到。`);
     btns.innerHTML = '';
     button('▶ 打開戰力表', () => window.open(SITE + '#import=' + encodeURIComponent(json), '_blank'));
     button('複製結果', async () => {

@@ -3,6 +3,7 @@
 const FA={"Matisse Thybulle":["Matisse Thybulle","BN","LAL - SG,SF","",[55,2.06,4.82,0.54,0.71,1.26,5.91,2.23,1.21,1.92,0.61,0.81],null],
 "Isaiah Joe":["Isaiah Joe","BN","DET - SG,SF","",[73,3.49,7.75,1.23,1.4,2.49,10.57,2.55,1.44,0.69,0.19,0.62],[71,3.55,7.79,1.18,1.34,2.53,11.08,2.48,1.34,0.68,0.2,0.6]]};
 if(IMP&&IMP.FA){for(const k in FA)delete FA[k];IMP.FA.forEach(p=>FA[p[0]]=p.slice(0,7));}
+DATA.forEach(t=>t[1].forEach(addMix));Object.values(FA).forEach(addMix);
 const tm={give:[],get:[],opp:null,fill:""};
 const mval=n=>{const m=MKT[n]||[260,3];return .7*100*Math.exp(-(m[0]-1)/70)+.3*m[1]};
 const pkg=list=>list.reduce((a,n)=>a+Math.pow(mval(n),1.4),0);

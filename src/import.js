@@ -13,6 +13,7 @@ function checkImport(o){
   }
   if(!o.DATA.some(t=>t[0]===o.ME))return "名單裡找不到你的隊伍。";
   if(o.FA!=null&&(!Array.isArray(o.FA)||!o.FA.every(okP)))return "FA 資料格式不對。";
+  if(o.SCHED!=null){const S=o.SCHED;if(!S||!/^\d{4}-\d{2}-\d{2}$/.test(S.base)||!S.teams||typeof S.teams!=="object"||!Object.values(S.teams).every(a=>Array.isArray(a)&&a.every(d=>Number.isInteger(d)&&d>=0&&d<400)))return "賽程資料格式不對。";}
   for(const k in o.MKT){const m=o.MKT[k];if(!Array.isArray(m)||m.length!==2||!m.every(isNum))return "排名／持有率資料格式不對。";}
   return "";
 }
@@ -34,8 +35,8 @@ function applyImport(text){
   try{o=JSON.parse(text.trim());}catch(e){return "看不懂貼上的內容，請確認有完整貼上更新程式的結果。";}
   const err=checkImport(o);if(err)return err;
   const keep=state.src,prev={};
-  ["pr","ls","cur"].forEach(src=>{
-    if(src==="cur"&&!hasCur())return;
+  ["pr","ls","cur","mix"].forEach(src=>{
+    if((src==="cur"||src==="mix")&&!hasCur())return;
     state.src=src;const rows=compute();rankAll(rows);
     prev[src]={};rows.forEach(r=>prev[src][r.name]=[r.ovr9,r.ovrNA]);
   });

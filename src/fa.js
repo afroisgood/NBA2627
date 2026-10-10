@@ -26,7 +26,8 @@ function renderFA(rows){
   if(fam.drop===""&&open<=0)fam.drop=null;
   if(fam.drop===null||(fam.drop&&!drops.some(x=>x.p[0]===fam.drop)))fam.drop=open>0?"":(drops[0]?drops[0].p[0]:"");
   const sa=document.getElementById("fa-add"),sd=document.getElementById("fa-drop");
-  sa.innerHTML=fas.map(x=>`<option value="${esc(x.p[0])}">${esc(x.p[0])}（${sgn(x.v)}${x.p[1]==="W"?" · waiver":""}${x.p[3]?" · "+esc(x.p[3]):""}）</option>`).join("");
+  const wk=vsWeek();
+  sa.innerHTML=fas.map(x=>`<option value="${esc(x.p[0])}">${esc(x.p[0])}（${sgn(x.v)}${wk?` · 本週 ${gamesIn(x.p,wk)} 場`:""}${x.p[1]==="W"?" · waiver":""}${x.p[3]?" · "+esc(x.p[3]):""}）</option>`).join("");
   sa.value=fam.add;
   sd.innerHTML=`<option value="" ${open>0?"":"disabled"}>不丟人，直接撿${open>0?"":"（名單已滿）"}</option>`+drops.map(x=>`<option value="${esc(x.p[0])}">${esc(x.p[0])}（${x.v==null?"—":sgn(x.v)}）</option>`).join("");
   sd.value=fam.drop;
@@ -40,7 +41,8 @@ function renderFA(rows){
   const verdict=my>0.05?`建議撿：${up||"平均名次進步"}${dn?`（退步：${dn}）`:""}`:my>=-0.05?`差不多：名次幾乎沒變${up?`（進步：${up}；退步：${dn||"無"}）`:""}`:`不建議：整體名次變差${dn?`（退步：${dn}）`:""}`;
   const cats=visCats();
   const extra=[P[1]==="W"?`⚠ ${esc(fam.add)} 在 waiver 上，要等 waiver 處理完才拿得到，也可能被別隊搶走。`:"",P[3]==="O"?`⚠ ${esc(fam.add)} 目前缺陣（O）。`:P[3]==="Q"?`⚠ ${esc(fam.add)} 出賽存疑（Q）。`:"",
-    `位置：撿進 ${esc(fam.add)}（${esc(P[2]||"—")}）${D?`，丟掉 ${esc(D[0])}（${esc(D[2]||"—")}）`:""}。這裡不檢查先發位置，記得確認撿完還排得出完整陣容。`].filter(Boolean).map(x=>`<p class="note">${x}</p>`).join("");
+    weekLine(wk,rows,b1,P,D),
+    `位置：撿進 ${esc(fam.add)}（${esc(P[2]||"—")}）${D?`，丟掉 ${esc(D[0])}（${esc(D[2]||"—")}）`:""}。${wk?"本週預測已依位置排先發；":""}名次變化是看全季每場平均，不檢查先發位置。`].filter(Boolean).map(x=>`<p class="note">${x}</p>`).join("");
   out.innerHTML=`<div class="tm-verdict"><b>RESULT</b>${verdict}</div>
   <div class="tm-grid">
     <div class="tm-card"><span class="k">你的名次（${state.punt?"不算 AST":"9 項"}）</span><span class="v">${b0.ovr} → ${b1.ovr} ${moveTxt(b0.ovr,b1.ovr)}</span><span class="s">平均名次 ${f1(b0.avgUse)} → ${f1(b1.avgUse)}</span></div>
@@ -51,6 +53,15 @@ function renderFA(rows){
     <tr><td class="name">每場數據</td>${cats.map(c=>`<td><div class="cell"><span>${fmt(c,b1.v[c.k])}</span><span class="pos">原 ${fmt(c,b0.v[c.k])}</span></div></td>`).join("")}</tr>
     <tr><td class="name">名次</td>${cats.map(c=>{const a=b0.r[c.k],b=b1.r[c.k];return `<td class="${tier(b)}">${b}<span class="delta">${a===b?"–":moveTxt(a,b)}</span></td>`}).join("")}</tr>
   </tbody></table></div>`;
+}
+
+// 本週對 VS 對手的預測：撿人前 → 撿人後
+function weekLine(wk,rows,b1,P,D){
+  if(!wk)return "";
+  const val=playerValues(),me=rows.find(r=>r.name===ME),op=rows.find(r=>r.name===state.opp);if(!op)return "";
+  const ov=weekTotals(op.ps,wk,val).v,m0=matchup(weekTotals(me.ps,wk,val).v,ov),m1=matchup(weekTotals(b1.ps,wk,val).v,ov);
+  const sc=m=>{const w=m.ps.filter(p=>p>.5).length;return `${w}:${9-w}`};
+  return `第 ${wk.i} 週（${md(wk.s)}–${md(wk.e)}）對 ${esc(op.name)}：預測 ${sc(m0)} → ${sc(m1)}，勝率 ${pctTxt(m0.win)} → ${pctTxt(m1.win)}。${esc(P[0])} 本週 ${gamesIn(P,wk)} 場${D?`，${esc(D[0])} 本週 ${gamesIn(D,wk)} 場`:""}。（對手和週次跟上方 VS 對戰預測一樣）`;
 }
 
 async function autoPickup(){

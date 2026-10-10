@@ -1,7 +1,7 @@
 # 杰西卡的AI實驗室 戰力表：開發紀錄
 
 > 這份文件給接手的人（或 Claude Code）看，記錄專案目的、檔案結構、資料來源、演算法、開發歷程和待辦事項。
-> 最後更新：2026-10-09（第 10 版：掌機 Pro 版面）
+> 最後更新：2026-10-10（第 11 版：預測模型升級）
 
 ---
 
@@ -30,6 +30,7 @@ fantasy-power-table/
 │   ├── data.js          ← ME（自己隊名）＋ DATA（16 隊名單與每位球員數據）
 │   ├── market.js        ← MKT（每位被持有球員的季前排名、持有率）
 │   ├── import.js        ← 讀取匯入的資料（localStorage lp-data）蓋過內建 DATA/MKT/ME；「資料更新」面板
+│   ├── model.js         ← 預測模型：傷兵權重、預測＋本季混合、H2H 勝率、賽程與每週先發陣容
 │   ├── app.js           ← 主程式：計算、排名、VS、聯盟表、各隊表、開機畫面
 │   ├── trade.js         ← 交易分析器＋自動找交易
 │   └── fa.js            ← FA 分析器＋自動推薦，最後呼叫 initTrade()、initFA()、render()、initImport()
@@ -43,7 +44,7 @@ fantasy-power-table/
 
 建置：`python3 build.py`
 
-**JS 載入順序很重要**：data.js → market.js → import.js → app.js → trade.js → fa.js。import.js 必須在 app.js 前面（app.js 一載入就會用到 ME、IMP、hasCur）。trade.js、fa.js 裡有 `const`（tm、FA、fam 等），所以 `initTrade(); initFA(); render(); initImport();` 必須放在 fa.js 最後，不能放在前面的檔案，否則會遇到 TDZ 錯誤。
+**JS 載入順序很重要**：data.js → market.js → import.js → model.js → app.js → trade.js → fa.js。model.js 載入時就會讀 `IMP.SCHED`，所以要在 import.js 後面；它用到的 state、SI、CATS 等都是呼叫時才讀。import.js 必須在 app.js 前面（app.js 一載入就會用到 ME、IMP、hasCur）。trade.js、fa.js 裡有 `const`（tm、FA、fam 等），所以 `initTrade(); initFA(); render(); initImport();` 必須放在 fa.js 最後，不能放在前面的檔案，否則會遇到 TDZ 錯誤。
 
 ---
 
@@ -55,7 +56,7 @@ fantasy-power-table/
 let ME = "石";          // let：匯入的資料可能改隊名
 const DATA = [
   ["隊名", [
-    ["球員名", "名單位置", "NBA球隊 - 位置", "狀態", proj陣列, last陣列, cur陣列],
+    ["球員名", "名單位置", "NBA球隊 - 位置", "狀態", proj陣列, last陣列, cur陣列],   // 載入後 addMix() 會補上 [7]＝預測＋本季
     ...
   ]],
   ...16 隊
@@ -84,6 +85,7 @@ const MKT = { "球員名": [季前排名, 持有率%], ... };
 ```js
 { v: 1, at: "ISO 時間", ME: "自己隊名", DATA: [...同上...], MKT: {...同上...},
   FA: [ ["球員名", "FA" 或 "W", "NBA球隊 - 位置", "狀態", proj, last, cur], ... ],   // 可撿的球員，W＝在 waiver 上
+  SCHED: { base: "2026-10-01", teams: { "LAL": [19, 21, ...], ... } },   // 每隊比賽日（美東），距離 base 的天數；可能是 null
   PREV: { pr: {隊名: [9項名次, 不算AST名次]}, ls: {...}, cur: {...} } }   // PREV 是套用時網頁自己算的
 ```
 
@@ -106,7 +108,8 @@ Yahoo 聯盟頁面需要登入，所以資料是在**已登入 Yahoo 的瀏覽�
 3. 抓 ESPN 預測（失敗就只用 Yahoo）
 4. 預測＝Yahoo 和 ESPN 場均平均（**沒有 FantasyPros**，因為它不能從 Yahoo 頁面跨站抓）
 5. 自己的隊伍用 team id 13 找（`MY_TEAM_ID`），所以改隊名也沒關係
-6. 右下角視窗按「▶ 打開戰力表」→ 開 `league-power.html#import=<JSON>`，網頁確認後套用；或「複製結果」貼到網頁的框框
+6. 抓 ESPN 整季賽程：`/seasons/2027?view=proTeamSchedules_wl`，`settings.proTeams[].proGamesByScoringPeriod` 裡每場的 `date`（毫秒）換成美東日期。ESPN 縮寫對到 Yahoo：GS→GSW、NO→NOP、NY→NYK、SA→SAS、UTAH→UTA、WSH→WAS；抓到少於 28 隊就不用
+7. 右下角視窗按「▶ 打開戰力表」→ 開 `league-power.html#import=<JSON>`，網頁確認後套用；或「複製結果」貼到網頁的框框
 
 書籤是網頁把 `#yahoo-script`（build 時嵌入的 tools/yahoo-update.js）去掉整行註解後做成 `javascript:` 網址。**程式裡不能有行尾 `//` 註解**，也不能有 `</script`（build.py 會檢查後者）。
 
@@ -210,6 +213,32 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 - 不檢查先發位置、不考慮出賽場次（跟聯盟表一樣）
 - 約 400 位 FA × 14 個選擇，實測不到 1 秒
 
+### 5.8 傷兵（v11，`injW()`）
+
+- 控制列 INJ：「扣除傷兵」（預設）時，O 的球員權重 0、Q 的球員權重 0.75（`Q_RATE`），在 `compute()` 和每週預測裡乘上去；「全部照算」時都是 1
+- 球員價值（z 分數）不受影響
+
+### 5.9 預測＋本季混合（v11，`addMix()`，資料來源 `mix`，index 7）
+
+- 本季打了 g 場：本季權重 g/(g+20)、預測權重 20/(g+20)（`MIX_K = 20`）；打 10 場時本季佔 1/3，打 40 場時佔 2/3
+- 只有預測或只有本季時就用那一個；GP 用預測的 GP
+- 只有匯入的資料有本季數據時，控制列才出現「預測＋本季」
+
+### 5.10 H2H 勝率（v11，`matchup()`、`h2hAll()`）
+
+- 每項當成常態分布：計數項的標準差＝數值 × 變異係數 `CV`（3PM .16、PTS .09、REB .09、AST .11、STL .20、BLK .25、TO .13），FG% .013、FT% .025（`PCT_SD`）。這些是經驗估計，不是從聯盟資料算出來的
+- 贏面＝Φ(差距 ／ √(雙方標準差平方和))，TO 反過來
+- 對戰勝率＝9 項贏 5 項以上的機率（用逐項機率算分布）；**放棄助攻也是 9 項都比**，所以勝率不受模式影響
+- 聯盟表的「H2H 勝率」＝對其他 15 隊的平均，旁邊是平均贏幾項和勝率排名；可以點欄位排序
+
+### 5.11 每週預測（v11，`weekTotals()`、`lineup()`）
+
+- 週：週一到週日，第 1 週從開幕日開始（`WEEKS`）。**Yahoo 的第 1 週可能比較長**，日期以畫面上顯示的為準
+- 每天：有比賽、非 IL、權重 > 0 的球員，依球員價值由高到低嘗試排進 10 個先發位置（PG、SG、G、SF、PF、F、C、C、Util、Util；位置看 `p[2]` 的「 - 」後面），排得進才算數據（位置配對是 matroid，貪婪法就是最佳解）
+- VS：週次選單預設是本週（`state.week` 為 null＝自動），可選「每場平均」；每項顯示贏面，比分下顯示勝率和預期贏幾項
+- FA 分析器：選了週次時，FA 選單顯示本週場數，結果多一行「本週對 VS 對手的預測比分和勝率：撿人前 → 撿人後」
+- 各隊球員表：選了週次時多一欄該週場數
+
 ---
 
 ## 6. 介面功能（第 10 版）
@@ -223,10 +252,10 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 
 | 區塊 | 功能 |
 |---|---|
-| 我的隊伍摘要 | 標題下方三張卡：9 項綜合名次、不算助攻名次（含 ▲▼）、強項前 3 項／弱項後 2 項（放棄助攻模式不算 AST），`renderMe()` |
+| 我的隊伍摘要 | 第一張卡另外顯示 H2H 預期勝率。標題下方三張卡：9 項綜合名次、不算助攻名次（含 ▲▼）、強項前 3 項／弱項後 2 項（放棄助攻模式不算 AST），`renderMe()` |
 | 開機畫面 | 「PRESS START」約 1.4 秒，點擊或按鍵跳過；每個瀏覽器工作階段只出現一次；減少動態效果設定下不顯示 |
 | 資料更新 | 標題下方顯示資料日期；「↻ 更新資料」打開說明面板：書籤、複製更新程式、貼上套用、還原內建資料 |
-| 控制列 | 數據來源（三家預測／上季實際／本季實際，本季實際只在匯入的資料有本季數據時出現）、模式（9 項全算／放棄助攻） |
+| 控制列 | 數據來源（三家預測／上季實際／本季實際／預測＋本季，後兩個只在匯入的資料有本季數據時出現）、模式（9 項全算／放棄助攻）、傷兵（扣除傷兵／全部照算） |
 | VS MODE | 選對手，9 項雙向血條比較，♛ 標贏家，預測比分 |
 | TRADE MACHINE | 手動交易分析：最多 3 換 3、補 FA、公平度量表、成交機率、雙方各項名次變化 |
 | AUTO SCOUT | 自動找交易 |
@@ -235,7 +264,7 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 | 聯盟排名表 | 可排序；♛ 前 3、☠ 後 3；四階熱度色塊；▲▼ 名次變化；8×8 像素隊徽 |
 | 各隊球員 | 選單一次顯示一隊（預設石）；球員價值血條；IL 劃線；球隊加總與排名 |
 
-- localStorage 鍵：`lp-state2`（數據來源、模式、選的球隊、VS 對手）、`lp-data`（匯入的資料）；sessionStorage 鍵：`lp-splash`
+- localStorage 鍵：`lp-state2`（數據來源、模式、傷兵、VS 週次、選的球隊、VS 對手）、`lp-data`（匯入的資料）；sessionStorage 鍵：`lp-splash`
 - `PREV`（app.js）存的是**上一次更新的名次**，用來畫 ▲▼。目前的基準是 10/9 waiver 後、交易前
 - 隊徽在 app.js 的 `EMB`，每隊 8 行 8 字元的 0/1 字串；新隊名要記得加（匯入的資料如果有隊伍改名，那隊會沒有隊徽）
 
@@ -254,6 +283,7 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 | v7 | 交易分析器＋自動找交易；修正 IL 球員佔名單位的誤判、2 換 1 比較基準 |
 | v8 | 網頁內一鍵更新資料：書籤／console 在 Yahoo 頁面抓名單和數據，自動帶回網頁套用；新增「2026-27 本季實際」數據來源；FA 補位改成完整 FA 清單，自動找交易的 2 換 1 不再固定補 Thybulle |
 | v9 | FA 分析器：撿人／丟人後撿人的名次模擬，加上自動推薦 |
+| v11 | 預測模型升級：傷兵扣除、預測＋本季混合、H2H 勝率（聯盟表、VS 贏面）、ESPN 賽程＋每天先發陣容的每週預測（VS、FA 分析器、各隊球員表） |
 | v10 | 掌機 Pro 版面：像素字只留給英文小標籤，內文改 Noto Sans TC、數字放大、淡色字加深；新增「我的隊伍摘要」；選中的按鈕改成反白（設計比較稿在 Claude Design 畫布，另有運動報、夜場記分板、美式漫畫三個方向） |
 
 Artifact 網址：https://claude.ai/artifact/S6yNHmWyFfDDAvJ3guEij2
@@ -272,12 +302,13 @@ Artifact 網址：https://claude.ai/artifact/S6yNHmWyFfDDAvJ3guEij2
 ## 9. 已知限制
 
 1. **內建資料是靜態快照**。網頁內更新的資料只存在使用者自己的瀏覽器，要讓網站本身更新，得把結果寫進 `src/data.js`、`src/market.js` 再 build
-2. 聯盟表的名次算法不考慮出賽場次（Embiid 預測只打 54 場也照算）
+2. 聯盟表的名次和 H2H 勝率看的是每場平均，不考慮出賽場次；每週預測（VS 選週次）才有算賽程和先發名額。內建資料沒有賽程，要從 Yahoo 更新過才能選週次
 3. 季前排名開季後會失效，要換成 Yahoo「目前排名」（`c[7]`）
 4. 成交機率只是參考，沒辦法算到對方的個人喜好
 5. 上季實際數據模式下，新秀和上季缺賽的球員沒有數據（例如 Kyrie），會低估這些隊伍
 6. 內建資料的 FA 只有 Thybulle、Isaiah Joe 兩人（寫死在 trade.js）；從 Yahoo 更新後才有完整 FA 清單（季前排名前 400 名裡沒被持有的球員）
 7. 網頁內更新的預測只有 Yahoo＋ESPN 兩家；開季後 Yahoo 的 `S_PSR` 是「剩餘賽季」預測，GP 會變少，交易分析器的出賽場次打折會跟著變大
+8. H2H 勝率的標準差（`CV`、`PCT_SD`）是經驗值；開季後可以用聯盟實際每週數據校正
 
 ---
 

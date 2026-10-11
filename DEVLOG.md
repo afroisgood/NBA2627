@@ -34,8 +34,9 @@ fantasy-power-table/
 │   ├── app.js           ← 主程式：計算、排名、VS、聯盟表、各隊表、開機畫面
 │   ├── trade.js         ← 交易分析器＋自動找交易
 │   ├── cards.js         ← 隊伍職業鑑定、球員卡圖鑑、FA 抽卡
-│   ├── plan.js          ← 每日先發、本週串流、右下角快速選單
-│   └── fa.js            ← FA 分析器＋自動推薦，最後呼叫 initTrade()、initFA()、initDex()、initPlan()、render()、initImport()
+│   ├── plan.js          ← 每日先發、本週串流、近期手感、新聞標籤、右下角快速選單
+│   ├── scout.js         ← 球探報告：近期手感（HOT／COLD）、新聞短評
+│   └── fa.js            ← FA 分析器＋自動推薦，最後呼叫 initTrade()、initFA()、initDex()、initPlan()、initScout()、render()、initImport()
 ├── data/
 │   └── latest.js        ← 網站共用資料：window.SHARED_DATA（null＝用內建）；網頁「下載網站資料檔」產生，上傳取代
 ├── tests/
@@ -53,7 +54,7 @@ fantasy-power-table/
 
 建置：`python3 build.py`；測試：`npm test`（不用安裝任何套件，Node 22 以上）。兩個完整網頁會先用 `<script src>` 載入 `data/latest.js`（根目錄用 `data/latest.js`、dist 用 `../data/latest.js`），Artifact 版不載入
 
-**JS 載入順序很重要**：data.js → market.js → import.js → model.js → app.js → trade.js → cards.js → plan.js → fa.js。model.js 載入時就會讀 `IMP.SCHED`，所以要在 import.js 後面；它用到的 state、SI、CATS 等都是呼叫時才讀。import.js 必須在 app.js 前面（app.js 一載入就會用到 ME、IMP、hasCur）。trade.js、cards.js、plan.js、fa.js 裡有 `const`（tm、FA、dx、fam 等），所以 `initTrade(); initFA(); initDex(); initPlan(); render(); initImport();` 必須放在 fa.js 最後，不能放在前面的檔案，否則會遇到 TDZ 錯誤。
+**JS 載入順序很重要**：data.js → market.js → import.js → model.js → app.js → trade.js → cards.js → plan.js → scout.js → fa.js。model.js 載入時就會讀 `IMP.SCHED`，所以要在 import.js 後面；它用到的 state、SI、CATS 等都是呼叫時才讀。import.js 必須在 app.js 前面（app.js 一載入就會用到 ME、IMP、hasCur）。trade.js、cards.js、plan.js、scout.js、fa.js 裡有 `const`／`let`（tm、FA、dx、TREND、fam 等），所以 `initTrade(); initFA(); initDex(); initPlan(); initScout(); render(); initImport();` 必須放在 fa.js 最後，不能放在前面的檔案，否則會遇到 TDZ 錯誤。
 
 ---
 
@@ -97,6 +98,8 @@ const MKT = { "球員名": [季前排名, 持有率%], ... };
   SCHED: { base: "2026-10-01", teams: { "LAL": [19, 21, ...], ... } },   // 每隊比賽日（美東），距離 base 的天數；可能是 null
   MATCH: { at, week, opp: "對手隊名", me: {fg,ft,tpm,pts,reb,ast,stl,blk,to}|null, op: {...}|null },   // Yahoo 本週對戰；還沒開打時 me/op 是 null
   IDS: { "球員名": ESPN球員編號, ... },   // 球員卡照片頭像用（v16 起；舊資料沒有）
+  RECENT: { "球員名": { l7, l14, l30 }, ... },   // 最近 7／14／30 天場均（數據陣列或 null；v18 起）
+  NEWS: { "球員名": [ { d: "ISO 時間或空字串", t: "標題", s: "內文" }, ... ], ... },   // 新聞短評，最多 3 則（v18 起）
   PREV: { pr: {隊名: [9項名次, 不算AST名次]}, ls: {...}, cur: {...} } }   // PREV 是套用時網頁自己算的
 ```
 
@@ -350,6 +353,15 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 - 右下角圓形 MENU 按鈕（掌機按鍵樣式），點開 `#nav-menu` 列出 9 個區塊和「回到最上面」；捲動時扣掉上方黏住的控制列高度
 - Esc 關閉、焦點回到按鈕；`aria-expanded` 標示開關狀態
 
+
+### 5.23 球探報告（v18，src/scout.js；更新程式第 5、6 步）
+
+- **近期數據**：更新程式多抓 Yahoo 列表 `stat1=S_L7`、`S_L14`、`S_L30`（總計 ÷ GP，解析方式跟本季一樣），存成 `RECENT`。載入時 `addRecent()` 把 l14 放在 index 8，資料來源「近 14 天」（`SI` 的 `l14: 8`，`PREV.l14`）；有人有 l14 才出現按鈕（`hasRecent()`）
+- **HOT／COLD**（`trendFn()`，`render()` 開頭存到 `TREND`）：同一套 `playerValues()`（跟著資料來源、放棄助攻）比較 l14 和基準（`p[7]` 預測＋本季，沒有就預測、上季）；差 ≥ 1.5 HOT、≤ −1.5 COLD；l14 少於 3 場不判斷。`hotBadge()` 用在球探報告、各隊球員表、球員卡、串流；`hotTxt()` 用在 FA 選單
+- **新聞**：自己隊伍（含 IL）＋ FA 前 50 名（`NEWS_FA`，Yahoo 排名順序）。每位先試 ESPN `site.api.espn.com/apis/fantasy/v2/games/fba/news/players?playerId=`（用 `IDS`），沒有再試 Yahoo `/nba/1031/playernote?init=1&view=notes&pid=`（Yahoo 編號從名單和列表的連結抓，`YID`）；同時 6 個、每個 8 秒逾時；最多 2 則，標題 ≤ 200 字、內文 ≤ 500 字
+- **中文標籤**（`newsTags()`）：關鍵字規則（`NEWS_TAGS`），最多 3 個；只是輔助，畫面上寫明以原文為準
+- **還沒在真的網站上確認過**：ESPN 新聞 API 的格式（`feed`／`articles`）、Yahoo playernote 的回應格式、`S_L7` 等代碼都是依經驗寫的，解析失敗只會讓那部分是空的。更新完成的訊息會顯示近期數據幾位、新聞幾位（ESPN／Yahoo 各幾位），用來確認
+
 ---
 
 ## 6. 介面功能（第 10 版）
@@ -400,6 +412,7 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 | v7 | 交易分析器＋自動找交易；修正 IL 球員佔名單位的誤判、2 換 1 比較基準 |
 | v8 | 網頁內一鍵更新資料：書籤／console 在 Yahoo 頁面抓名單和數據，自動帶回網頁套用；新增「2026-27 本季實際」數據來源；FA 補位改成完整 FA 清單，自動找交易的 2 換 1 不再固定補 Thybulle |
 | v9 | FA 分析器：撿人／丟人後撿人的名次模擬，加上自動推薦 |
+| v18 | 球探報告：最近 7／14／30 天數據、HOT／COLD 手感、新聞短評（中文標籤＋英文原文）；資料來源「近 14 天」 |
 | v17 | 板凳補位（每週預測、H2H 勝率改用整季每週預測）、每日先發、本週串流、右下角快速選單 |
 | v16 | 球員卡照片頭像：ESPN 大頭照轉成四階 LCD 點陣（更新程式多存 ESPN 球員編號 `IDS`） |
 | v15 | 隊伍職業鑑定（TEAM CLASS）、球員卡圖鑑（CARD DEX）＋ FA 抽卡 |

@@ -357,3 +357,43 @@ test("本週串流：撿一位這週有比賽的 FA，先發場次變多、勝�
   assert.ok(h.every(x => x.hv));
   assert.equal(h.find(x => x.n === "A").rk, 1);
 });
+
+test("近期手感：近 14 天價值比基準高／低 1.5 以上是 HOT／COLD；資料來源「近 14 天」用 index 8", () => {
+  const tmp = load();
+  const base = s(70, 5, 10, 2, 2.5, 1, 13, 5, 3, 1, 0.5, 1.5);
+  const hot = base.map((v, i) => (i === 0 ? 6 : +(v * 1.6).toFixed(2)));
+  const cold = base.map((v, i) => (i === 0 ? 6 : +(v * 0.5).toFixed(2)));
+  const imp = importFixture(tmp.run, { RECENT: { A1: { l7: null, l14: hot, l30: null }, A2: { l7: null, l14: cold, l30: null }, A3: { l7: null, l14: s(2, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 0), l30: null } } });
+  const { run } = load({ local: { "lp-data": JSON.stringify(imp) } });
+  run("state.gp=false; GP_FULL=82");
+  assert.equal(run("hasRecent()"), true);
+  assert.deepEqual(run("DATA[0][1][0][8]"), hot);
+  const t = run(`(()=>{const f=trendFn();return DATA[0][1].map(p=>f(p)&&f(p).tag)})()`);
+  assert.equal(t[0], "HOT");
+  assert.equal(t[1], "COLD");
+  assert.equal(t[2], null, "只打 2 場不判斷");
+  run(`TREND=trendFn()`);
+  assert.match(run(`hotBadge(DATA[0][1][0])`), /HOT/);
+  assert.equal(run(`hotBadge(DATA[1][1][0])`), "");
+  run(`state.src="l14"`);
+  assert.equal(run("SI()"), 8);
+  assert.equal(run(`(()=>{const r=compute();return r.find(x=>x.name==="A").n})()`), 3, "A 隊 3 人都有近 14 天數據");
+  assert.equal(run(`(()=>{const r=compute();return r.find(x=>x.name==="B").n})()`), 0);
+});
+
+test("新聞：英文關鍵字轉成中文標籤；格式不對的近期數據、新聞會被擋下", () => {
+  const { run } = load();
+  const tags = t => run(`newsTags(${JSON.stringify(t)})`);
+  assert.deepEqual(tags("Embiid (knee) has been ruled out for Friday's game."), ["受傷"]);
+  assert.deepEqual(tags("Kyrie is questionable for Saturday."), ["出賽存疑"]);
+  assert.deepEqual(tags("Herro will join the starting lineup and should see an expanded role."), ["升先發", "上場時間增加"]);
+  assert.deepEqual(tags("Edwards scored a career-high 53 points."), ["大爆發"]);
+  assert.ok(!tags("He is expected to start for the rest of the season.").includes("輪休"), "rest of the season 不是輪休");
+  assert.equal(run(`newsDate("2026-10-09T18:30:00Z")`), "10/9");
+  const good = importFixture(run);
+  const check = o => run(`checkImport(${JSON.stringify(o)})`);
+  assert.equal(check({ ...good, RECENT: { A1: { l7: null, l14: s(5, 1, 2, 1, 1, 1, 5, 1, 1, 1, 1, 1), l30: null } }, NEWS: { A1: [{ d: "", t: "Title", s: "Story" }] } }), "");
+  assert.notEqual(check({ ...good, RECENT: { A1: { l14: [1, 2] } } }), "");
+  assert.notEqual(check({ ...good, NEWS: { A1: [{ d: "", t: "x".repeat(400), s: "" }] } }), "");
+  assert.notEqual(check({ ...good, NEWS: { A1: "<b>hi</b>" } }), "");
+});

@@ -27,7 +27,7 @@ function renderFA(rows){
   if(fam.drop===null||(fam.drop&&!drops.some(x=>x.p[0]===fam.drop)))fam.drop=open>0?"":(drops[0]?drops[0].p[0]:"");
   const sa=document.getElementById("fa-add"),sd=document.getElementById("fa-drop");
   const wk=vsWeek();
-  sa.innerHTML=fas.map(x=>`<option value="${esc(x.p[0])}">${esc(x.p[0])}（${sgn(x.v)}${wk?` · 本週 ${gamesIn(x.p,wk)} 場`:""}${x.p[1]==="W"?" · waiver":""}${x.p[3]?" · "+esc(x.p[3]):""}）</option>`).join("");
+  sa.innerHTML=fas.map(x=>`<option value="${esc(x.p[0])}">${esc(x.p[0])}（${sgn(x.v)}${wk?` · 本週 ${gamesIn(x.p,wk)} 場`:""}${x.p[1]==="W"?" · waiver":""}${x.p[3]?" · "+esc(x.p[3]):""}${hotTxt(x.p)}）</option>`).join("");
   sa.value=fam.add;
   sd.innerHTML=`<option value="" ${open>0?"":"disabled"}>不丟人，直接撿${open>0?"":"（名單已滿）"}</option>`+drops.map(x=>`<option value="${esc(x.p[0])}">${esc(x.p[0])}（${x.v==null?"—":sgn(x.v)}）</option>`).join("");
   sd.value=fam.drop;
@@ -102,5 +102,6 @@ initTrade();
 initFA();
 initDex();
 initPlan();
+initScout();
 render();
 initImport();

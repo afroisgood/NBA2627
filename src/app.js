@@ -5,7 +5,7 @@ const CATS=[
 const IDX={gp:0,fgm:1,fga:2,ftm:3,fta:4,tpm:5,pts:6,reb:7,ast:8,stl:9,blk:10,to:11};
 const PREV={"pr":{"諸葛衛冕村夫":[3,2],"乂唯一珍❤️杰西卡乂":[10,10],"大小小丑與他的歡樂同伴們":[14,12],"南方勇者北伐🧔‍♂️七崩賢":[8,9],"天母羅斯":[4,4],"CrocoCroco":[5,7],"拿了就起，起了就～駿🏀":[11,13],"新中國王":[13,14],"想你的林":[12,8],"欸我姆斯拉":[2,1],"永保安康":[15,16],"高移肉 想念booker 的第一天":[1,3],"石":[6,5],"老蔡水煎包":[16,15],"金采源老公":[7,6],"坂木老大：賣全身球員求合成":[9,11]},"ls":{"諸葛衛冕村夫":[13,9],"乂唯一珍❤️杰西卡乂":[7,10],"大小小丑與他的歡樂同伴們":[12,13],"南方勇者北伐🧔‍♂️七崩賢":[5,6],"天母羅斯":[6,4],"CrocoCroco":[9,8],"拿了就起，起了就～駿🏀":[14,15],"新中國王":[16,16],"想你的林":[11,11],"欸我姆斯拉":[1,2],"永保安康":[10,12],"高移肉 想念booker 的第一天":[3,3],"石":[2,1],"老蔡水煎包":[15,14],"金采源老公":[8,5],"坂木老大：賣全身球員求合成":[4,7]}};
 if(IMP&&IMP.PREV)Object.assign(PREV,IMP.PREV);
-PREV.cur=PREV.cur||{};PREV.mix=PREV.mix||{};
+PREV.cur=PREV.cur||{};PREV.mix=PREV.mix||{};PREV.l14=PREV.l14||{};
 // 8x8 pixel emblems
 const EMB={
 "石":["00111100","01111110","11101111","11111101","11011111","11111111","01111110","00000000"],
@@ -29,11 +29,11 @@ function emblem(name,size=20){const b=EMB[name];if(!b)return "";let r="";b.forEa
 let state={src:"pr",punt:false,inj:true,gp:true,week:null,sort:{k:"ovr",dir:1},team:ME,opp:null};
 try{const s=JSON.parse(localStorage.getItem("lp-state2")||"null");if(s)state={...state,...s};}catch(e){}
 if(typeof state.gp!=="boolean")state.gp=true;
-if(!["pr","ls","cur","mix"].includes(state.src)||(["cur","mix"].includes(state.src)&&!hasCur()))state.src="pr";
+if(!["pr","ls","cur","mix","l14"].includes(state.src)||(["cur","mix"].includes(state.src)&&!hasCur())||(state.src==="l14"&&!hasRecent()))state.src="pr";
 function save(){try{localStorage.setItem("lp-state2",JSON.stringify({src:state.src,punt:state.punt,inj:state.inj,gp:state.gp,week:state.week,team:state.team,opp:state.opp}))}catch(e){}}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
 const f1=x=>x.toFixed(1), f3=x=>x.toFixed(3).replace(/^0/,"");
-const SI=()=>({pr:4,ls:5,cur:6,mix:7})[state.src];
+const SI=()=>({pr:4,ls:5,cur:6,mix:7,l14:8})[state.src];
 const active=p=>p[1]!=="IL";
 
 function compute(data=DATA){
@@ -93,7 +93,7 @@ function renderLeague(rows){
   const missT=rows.reduce((a,r)=>a+r.miss,0);
   document.getElementById("league-note").textContent=
     "數字是全隊（不含 IL）每場數據加總"+(state.inj?"，缺陣（O）不算、出賽存疑（Q）打 75 折":"")+(state.gp?"，每人再乘上出賽率（預測出賽場數 ÷ 整季場數）":"")+"。♛ 前 3 名、☠ 第 14–16 名；格子越深名次越前（1–4、5–8、9–12、13–16 四階）。點欄位標題可排序。H2H 勝率＝跟其他 15 隊各對戰一次、9 項贏 5 項以上的平均機率（放棄助攻也是 9 項都比）；有賽程時用「整季平均每週」的預測（每天排 10 人先發、有人缺陣時板凳補上）。"
-    +(!["pr","mix"].includes(state.src)&&missT?` ${state.src==="ls"?"上季":"本季"}版有 ${missT} 位球員沒有${state.src==="ls"?"上季":"本季"}數據，不計入加總。`:"");
+    +(!["pr","mix"].includes(state.src)&&missT?(w=>` ${w}版有 ${missT} 位球員沒有${w}數據，不計入加總。`)({ls:"上季",cur:"本季",l14:"近 14 天"}[state.src]):"");
   document.querySelectorAll("#league th.sortable").forEach(el=>{
     const go=()=>{const k=el.dataset.k;state.sort=state.sort.k===k?{k,dir:-state.sort.dir}:{k,dir:1};render();};
     el.onclick=go;el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};
@@ -174,7 +174,7 @@ function renderTeams(rows){
     const badge=out?'<span class="badge b-il">IL</span>':p[3]==="Q"?'<span class="badge">Q</span>':"";
     const cells=s?[`${f3(s[2]?s[1]/s[2]:0)}<span class="pos">${f1(s[1])}/${f1(s[2])}</span>`,`${f3(s[4]?s[3]/s[4]:0)}<span class="pos">${f1(s[3])}/${f1(s[4])}</span>`,f1(s[5]),f1(s[6]),f1(s[7]),f1(s[8]),f1(s[9]),f1(s[10]),f1(s[11])]:Array(9).fill('<span class="dash">—</span>');
     const keep=CATS.map((c,i)=>state.punt&&c.k==="ast"?null:cells[i]).filter(x=>x!==null);
-    return `<tr class="${out?"out":""}"><td class="name"><span class="slot">${esc(p[1])}</span><span class="pname">${esc(p[0])}</span>${badge}${p[2]?`<span class="pos" style="padding-left:36px">${esc(p[2])}</span>`:""}</td><td>${hpBar(val(s))}</td><td>${s?s[0]:'<span class="dash">—</span>'}</td>${wk?`<td>${gamesIn(p,wk)}</td>`:""}${keep.map(c=>`<td>${c}</td>`).join("")}</tr>`;
+    return `<tr class="${out?"out":""}"><td class="name"><span class="slot">${esc(p[1])}</span><span class="pname">${esc(p[0])}</span>${badge}${hotBadge(p)}${p[2]?`<span class="pos" style="padding-left:36px">${esc(p[2])}</span>`:""}</td><td>${hpBar(val(s))}</td><td>${s?s[0]:'<span class="dash">—</span>'}</td>${wk?`<td>${gamesIn(p,wk)}</td>`:""}${keep.map(c=>`<td>${c}</td>`).join("")}</tr>`;
   }).join("");
   const cats=visCats();
   const tot=`<tr class="total"><td class="name">球隊每場加總（${r.n} 人）</td><td></td><td></td>${wk?"<td></td>":""}${cats.map(c=>`<td>${fmt(c,r.v[c.k])}</td>`).join("")}</tr>
@@ -198,9 +198,10 @@ function renderMe(rows){
 }
 
 function render(){
-  const rows=compute();rankAll(rows,true);renderMe(rows);renderVS(rows);renderTrade(rows);renderFA(rows);renderToday();renderStreamInfo(rows);renderLeague(rows);renderClass(rows);renderTeams(rows);renderDex();
+  TREND=trendFn();
+  const rows=compute();rankAll(rows,true);renderMe(rows);renderVS(rows);renderTrade(rows);renderFA(rows);renderToday();renderStreamInfo(rows);renderScout();renderLeague(rows);renderClass(rows);renderTeams(rows);renderDex();
   const set=(id,on)=>document.getElementById(id).setAttribute("aria-pressed",on);
-  set("src-pr",state.src==="pr");set("src-ls",state.src==="ls");set("src-cur",state.src==="cur");set("src-mix",state.src==="mix");set("inj-on",state.inj);set("inj-off",!state.inj);set("gp-on",state.gp);set("gp-off",!state.gp);set("mode-9",!state.punt);set("mode-p",state.punt);
+  set("src-pr",state.src==="pr");set("src-ls",state.src==="ls");set("src-cur",state.src==="cur");set("src-mix",state.src==="mix");set("src-l14",state.src==="l14");set("inj-on",state.inj);set("inj-off",!state.inj);set("gp-on",state.gp);set("gp-off",!state.gp);set("mode-9",!state.punt);set("mode-p",state.punt);
 }
 document.getElementById("src-pr").onclick=()=>{state.src="pr";save();render()};
 document.getElementById("src-ls").onclick=()=>{state.src="ls";save();render()};
@@ -208,6 +209,8 @@ document.getElementById("src-cur").onclick=()=>{state.src="cur";save();render()}
 document.getElementById("src-cur").hidden=!hasCur();
 document.getElementById("src-mix").onclick=()=>{state.src="mix";save();render()};
 document.getElementById("src-mix").hidden=!hasCur();
+document.getElementById("src-l14").onclick=()=>{state.src="l14";save();render()};
+document.getElementById("src-l14").hidden=!hasRecent();
 document.getElementById("inj-on").onclick=()=>{state.inj=true;save();render()};
 document.getElementById("inj-off").onclick=()=>{state.inj=false;save();render()};
 document.getElementById("gp-on").onclick=()=>{state.gp=true;save();render()};

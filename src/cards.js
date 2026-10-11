@@ -132,7 +132,7 @@ function cardHTML(c,extra=""){
   return `<article class="card r-${c.rar}">
     <div class="c-top"><span class="c-rar">${c.faRank?"FA·":""}${c.rar}</span><span class="c-no">${c.faRank?`FA 第 ${c.faRank}`:`No.${String(c.rank).padStart(3,"0")}`}</span></div>
     <div class="c-nm">${esc(p[0])}</div>
-    <div class="c-art">${avatarHTML(p[0])}<div class="c-sub">${esc(tm||"")}<br>${esc(pos||"")}${st}${w}${il}</div></div>
+    <div class="c-art">${avatarHTML(p[0])}<div class="c-sub">${esc(tm||"")}<br>${esc(pos||"")}${st}${w}${il}${hotBadge(p)}</div></div>
     ${radar(c.ax)}
     <div class="c-foot"><span>價值 ${sgn(c.v)}</span><span>${gp?`預測 ${Math.round(gp)} 場`:""}</span></div>
     <div class="c-own">${c.owner?`${esc(c.owner)}${c.owner===ME?'<span class="tag">1P</span>':""}`:"自由球員 FA"}</div>${extra}</article>`;

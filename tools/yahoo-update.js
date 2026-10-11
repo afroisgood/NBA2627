@@ -1,10 +1,11 @@
 // 一鍵更新程式：在「已登入 Yahoo」的聯盟頁面（https://basketball.fantasysports.yahoo.com/nba/1031）執行。
 // 用法一：戰力表網頁的「更新資料」書籤（建議）。用法二：F12 → Console，整段貼上後按 Enter。
 // 抓的內容：16 隊名單、Yahoo 本季剩餘預測、ESPN 預測、2025-26 上季數據、2026-27 本季數據、季前排名、持有率，
-// 以及季前排名前 400 名裡所有沒被持有的球員（FA／waiver）、ESPN 的整季 NBA 賽程、Yahoo 本週對戰（對手和目前比分）。
+// 以及季前排名前 400 名裡所有沒被持有的球員（FA／waiver）、ESPN 的整季 NBA 賽程、Yahoo 本週對戰（對手和目前比分）、
+// 最近 7／14／30 天數據、自己隊伍和 FA 前 50 名的新聞短評。
 // 跑完會出現視窗，按「打開戰力表」就會帶著新資料打開網頁。
 (async () => {
-  const LEAGUE = 1031, TEAMS = 16, MY_TEAM_ID = 13, MAX_PAGES = 32, FA_PAGES = 16;
+  const LEAGUE = 1031, TEAMS = 16, MY_TEAM_ID = 13, MAX_PAGES = 32, FA_PAGES = 16, NEWS_FA = 50;
   const SEASON_LAST = 'S_S_2025', SEASON_CUR = 'S_S_2026', ESPN_YEAR = 2027;
   const SITE = 'https://afroisgood.github.io/NBA2627/league-power.html';
   if (!/fantasysports\.yahoo\.com$/.test(location.host)) {
@@ -41,6 +42,8 @@
       st: [...tr.querySelectorAll('.F-injury, abbr')].map(x => x.textContent.trim()).filter(x => x.length <= 4).join('')
     });
     const status = st => /^(Q|GTD|DTD)$/.test(st) ? 'Q' : /^(O|INJ|NA|SUSP)$/.test(st) ? 'O' : '';
+    const YID = {};
+    const yidOf = (a, n) => { const m = (a.getAttribute('href') || '').match(/\/(\d+)\/?$/); if (m) YID[n] = +m[1]; };
 
     // 1) 16 隊名單
     say('抓 16 隊名單…');
@@ -50,6 +53,7 @@
       const ps = [];
       d.querySelectorAll('table tbody tr').forEach(tr => {
         const a = tr.querySelector('a.name'); if (!a) return;
+        yidOf(a, a.textContent.trim());
         let slot = (tr.querySelector('td')?.textContent || '').trim();
         if (/^IL/.test(slot)) slot = 'IL';
         const { tp, st } = rowInfo(tr);
@@ -79,13 +83,14 @@
             rec.s = [gp, g(fgm), g(fga), g(ftm), g(fta), g(num(c[14])), g(num(c[15])), g(num(c[16])), g(num(c[17])), g(num(c[18])), g(num(c[19])), g(num(c[20]))];
           }
           out[a.textContent.trim()] = rec;
+          yidOf(a, a.textContent.trim());
         }));
         if (!rows || (page + 4 >= FA_PAGES && [...want].every(n => out[n]))) break;
       }
       return out;
     };
-    say(`名單完成（${want.size} 位球員）。抓 Yahoo 預測、上季、本季數據，約 30 秒…`);
-    const [yProj, yLast, yCur] = await Promise.all([fetchYahoo('S_PSR'), fetchYahoo(SEASON_LAST), fetchYahoo(SEASON_CUR)]);
+    say(`名單完成（${want.size} 位球員）。抓 Yahoo 預測、上季、本季、最近 7／14／30 天數據，約 40 秒…`);
+    const [yProj, yLast, yCur, yL7, yL14, yL30] = await Promise.all(['S_PSR', SEASON_LAST, SEASON_CUR, 'S_L7', 'S_L14', 'S_L30'].map(fetchYahoo));
 
     // 3) ESPN 預測（抓不到就只用 Yahoo）
     const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
@@ -193,10 +198,46 @@
     const IDS = {};
     [...DATA.flatMap(t => t[1]), ...FA].forEach(p => { const id = espnId[key(p[0])]; if (id) IDS[p[0]] = id; });
     const me = rosters.find(t => t.id === MY_TEAM_ID);
-    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA, SCHED, MATCH, IDS });
+
+    // 5) 最近 7／14／30 天場均（開季前沒有）
+    const RECENT = {};
+    [...DATA.flatMap(t => t[1]), ...FA].forEach(p => {
+      const r = { l7: yL7[p[0]]?.s || null, l14: yL14[p[0]]?.s || null, l30: yL30[p[0]]?.s || null };
+      if (r.l7 || r.l14 || r.l30) RECENT[p[0]] = r;
+    });
+
+    // 6) 新聞短評：自己隊伍＋FA 前 NEWS_FA 名。先試 ESPN（用 ESPN 編號），抓不到再試 Yahoo 球員小卡
+    const NEWS = {};
+    const strip = h => new DOMParser().parseFromString(String(h || ''), 'text/html').body.textContent.replace(/\s+/g, ' ').trim();
+    const timed = (url, opt = {}) => { const c = new AbortController(), t = setTimeout(() => c.abort(), 8000); return fetch(url, { ...opt, signal: c.signal }).finally(() => clearTimeout(t)); };
+    const espnNews = async id => {
+      const j = await (await timed(`https://site.api.espn.com/apis/fantasy/v2/games/fba/news/players?limit=3&playerId=${id}`)).json();
+      const arr = j.feed || j.articles || j.news || [];
+      return arr.map(a => ({ d: a.published || a.lastModified || '', t: strip(a.headline || a.title || '').slice(0, 200), s: strip(a.story || a.description || '').slice(0, 500) })).filter(x => x.t || x.s).slice(0, 2);
+    };
+    const yahooNews = async yid => {
+      const res = await timed(`/nba/${LEAGUE}/playernote?init=1&view=notes&pid=${yid}`, { credentials: 'include' });
+      if (!res.ok) return [];
+      let html = await res.text();
+      try { const j = JSON.parse(html); html = j.content || j.html || ''; } catch (e) { }
+      const d = new DOMParser().parseFromString(html, 'text/html');
+      const items = [...d.querySelectorAll('.playernote, .Playernote, .note, li, p')].map(e => e.textContent.replace(/\s+/g, ' ').trim()).filter(t => t.length > 40);
+      return [...new Set(items)].slice(0, 2).map(s => ({ d: '', t: '', s: s.slice(0, 500) }));
+    };
+    const newsFor = [...me.ps.map(p => p.n), ...FA.slice(0, NEWS_FA).map(p => p[0])];
+    let newsSrc = { espn: 0, yahoo: 0 };
+    say(`抓 ${newsFor.length} 位球員的新聞…`);
+    for (let i = 0; i < newsFor.length; i += 6) {
+      await Promise.all(newsFor.slice(i, i + 6).map(async n => {
+        try { if (IDS[n]) { const a = await espnNews(IDS[n]); if (a.length) { NEWS[n] = a; newsSrc.espn++; return; } } } catch (e) { }
+        try { if (YID[n]) { const a = await yahooNews(YID[n]); if (a.length) { NEWS[n] = a; newsSrc.yahoo++; } } } catch (e) { }
+      }));
+    }
+
+    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA, SCHED, MATCH, IDS, RECENT, NEWS });
     window._LP_UPDATE = json;
     const curN = DATA.reduce((a, t) => a + t[1].filter(p => p[6]).length, 0);
-    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到；賽程${SCHED ? '有' : '沒有'}抓到；頭像編號 ${Object.keys(IDS).length} 位；本週對手：${MATCH ? MATCH.opp + (MATCH.me ? '（含目前比分）' : '（還沒有比分）') : '沒有抓到'}。`);
+    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到；賽程${SCHED ? '有' : '沒有'}抓到；頭像編號 ${Object.keys(IDS).length} 位；近期數據 ${Object.keys(RECENT).length} 位；新聞 ${Object.keys(NEWS).length}／${newsFor.length} 位（ESPN ${newsSrc.espn}、Yahoo ${newsSrc.yahoo}）；本週對手：${MATCH ? MATCH.opp + (MATCH.me ? '（含目前比分）' : '（還沒有比分）') : '沒有抓到'}。`);
     btns.innerHTML = '';
     button('▶ 打開戰力表', () => window.open(SITE + '#import=' + encodeURIComponent(json), '_blank'));
     button('複製結果', async () => {

@@ -21,6 +21,9 @@ function addMix(p){
   p[7]=pr.map((x,i)=>i===0?x:+(x*(1-a)+cu[i]*a).toFixed(2));
 }
 
+// 最近 14 天場均放在 index 8（資料來源「近 14 天」）
+const addRecent=p=>{p[8]=(RECENT[p[0]]||{}).l14||null};
+
 // H2H 勝率：每項當成常態分布估計贏面。計數項用「變異係數」（每週總數大約上下浮動幾 %），命中率用固定標準差
 const CV={tpm:.16,pts:.09,reb:.09,ast:.11,stl:.20,blk:.25,to:.13};
 const PCT_SD={fg:.013,ft:.025};

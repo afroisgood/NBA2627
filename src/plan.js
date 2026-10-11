@@ -92,14 +92,14 @@ async function streamSearch(){
   st.textContent=res.length?`找到 ${res.length} 種會提高勝率的撿法，列出前 10 名。`:"沒有找到能提高本週勝率的撿法。";
   const g=(p)=>gamesIn(p,rng),cats=r=>CATS.map((c,i)=>({c,d:r.m.ps[i]-ctx.base.m.ps[i]})).filter(x=>Math.abs(x.d)>=.05);
   out.innerHTML=res.slice(0,10).map((r,i)=>{const D=r.drop?ctx.me.find(p=>p[0]===r.drop):null,cm=cats(r);
-    return `<div class="as-row"><span class="n">${i+1}</span><div class="d">撿 <b>${esc(r.p[0])}</b>（${esc(nbaTeam(r.p))}，剩 ${g(r.p)} 場${r.p[1]==="W"?" · waiver":""}${r.p[3]?" · "+esc(r.p[3]):""}）${D?`，丟 ${esc(D[0])}（剩 ${g(D)} 場）`:"，不丟人"}
+    return `<div class="as-row"><span class="n">${i+1}</span><div class="d">撿 <b>${esc(r.p[0])}</b>${hotBadge(r.p)}（${esc(nbaTeam(r.p))}，剩 ${g(r.p)} 場${r.p[1]==="W"?" · waiver":""}${r.p[3]?" · "+esc(r.p[3]):""}）${D?`，丟 ${esc(D[0])}（剩 ${g(D)} 場）`:"，不丟人"}
       <small>勝率 ${pctTxt(ctx.base.m.win)} → <b>${pctTxt(r.m.win)}</b>（+${Math.round((r.m.win-ctx.base.m.win)*100)}%）；先發場次 ${f1(ctx.base.starts)} → ${f1(r.starts)}${cm.length?`；${cm.map(x=>`${x.c.l} ${pctTxt(ctx.base.m.ps[CATS.indexOf(x.c)])}→${pctTxt(r.m.ps[CATS.indexOf(x.c)])}`).join("、")}`:""}</small></div>
       <button class="pxbtn st-apply" type="button" data-a="${esc(r.p[0])}" data-d="${esc(r.drop||"")}">套用</button></div>`}).join("");
   out.querySelectorAll(".st-apply").forEach(b=>b.onclick=()=>{fam.add=b.dataset.a;fam.drop=b.dataset.d;render();document.getElementById("h-fa").scrollIntoView({behavior:"smooth"});});
 }
 
 // ---------- 快速選單：右下角 MENU 按鈕，點了跳到各區塊 ----------
-const NAV=[["me-sum","我的隊伍"],["h-vs","對戰預測"],["h-today","每日先發"],["h-trade","交易分析"],["h-fa","FA 分析／串流"],["h-league","聯盟排名"],["h-class","職業鑑定"],["h-teams","各隊球員"],["h-dex","球員卡圖鑑"]];
+const NAV=[["me-sum","我的隊伍"],["h-vs","對戰預測"],["h-today","每日先發"],["h-trade","交易分析"],["h-fa","FA 分析／串流"],["h-scout","球探報告"],["h-league","聯盟排名"],["h-class","職業鑑定"],["h-teams","各隊球員"],["h-dex","球員卡圖鑑"]];
 function navGo(id){
   const el=document.getElementById(id),bar=document.querySelector(".controls");if(!el)return;
   const off=(bar?bar.getBoundingClientRect().height:0)+12;

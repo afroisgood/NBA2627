@@ -4,6 +4,7 @@ const FA={"Matisse Thybulle":["Matisse Thybulle","BN","LAL - SG,SF","",[55,2.06,
 "Isaiah Joe":["Isaiah Joe","BN","DET - SG,SF","",[73,3.49,7.75,1.23,1.4,2.49,10.57,2.55,1.44,0.69,0.19,0.62],[71,3.55,7.79,1.18,1.34,2.53,11.08,2.48,1.34,0.68,0.2,0.6]]};
 if(IMP&&IMP.FA){for(const k in FA)delete FA[k];IMP.FA.forEach(p=>FA[p[0]]=p.slice(0,7));}
 DATA.forEach(t=>t[1].forEach(addMix));Object.values(FA).forEach(addMix);
+DATA.forEach(t=>t[1].forEach(addRecent));Object.values(FA).forEach(addRecent);
 const tm={mode:"mine",give:[],get:[],opp:null,fill:""};
 const tx={a:null,b:null,ga:[],gb:[]};   // 其他隊之間的交易：A 隊送出 ga、B 隊送出 gb
 const mval=n=>{const m=MKT[n]||[260,3];return .7*100*Math.exp(-(m[0]-1)/70)+.3*m[1]};

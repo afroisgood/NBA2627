@@ -276,6 +276,22 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
 .nav-menu .menu-btn{width:100%;min-height:42px}
 .nav-menu .menu-btn:hover,.nav-menu .menu-btn:focus-visible{background:var(--ink);color:var(--lcd)}
 .nav-menu .menu-btn:hover::before,.nav-menu .menu-btn:focus-visible::before{visibility:visible}
+/* scout report */
+.b-hot{background:var(--ink);color:var(--lcd)}
+.b-cold{background:var(--lcd-3)}
+.sc-out{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.sc-row{border:3px solid var(--ink);padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.sc-head .sc-nm{font-weight:700;font-size:16px}
+.sc-head .pos{margin-top:2px}
+.sc-trend{margin:0;font-family:var(--f-dot);font-size:14px}
+.sc-news{font-size:14px;line-height:1.5;border-top:2px dotted var(--lcd-3);padding-top:6px}
+.ntag{display:inline-block;font-weight:700;font-size:12px;background:var(--ink);color:var(--lcd);padding:0 5px;margin-right:4px}
+.ndate{font-family:var(--f-dot);font-size:13px;color:var(--mid);margin-right:6px}
+.sc-news details{margin-top:4px}
+.sc-news summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--mid)}
+.sc-news details p{margin:4px 0 0;font-size:13px;color:var(--ink)}
+.sc-none{margin:0;font-size:13px;color:var(--mid)}
+.sc-try{align-self:flex-start;font-size:13px;min-height:36px;padding:4px 10px}
 @media (max-width:560px){
   .vs-row{grid-template-columns:44px 1fr 40px 1fr 44px;font-size:13px;gap:5px}
   .hp-track{width:64px}
@@ -305,6 +321,7 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
         <button class="menu-btn" id="src-ls" type="button" aria-pressed="false">2025-26 上季實際</button>
         <button class="menu-btn" id="src-cur" type="button" aria-pressed="false" hidden>2026-27 本季實際</button>
         <button class="menu-btn" id="src-mix" type="button" aria-pressed="false" hidden>預測＋本季</button>
+        <button class="menu-btn" id="src-l14" type="button" aria-pressed="false" hidden>近 14 天</button>
       </div>
     </div>
     <div class="ctl">
@@ -482,6 +499,17 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
     </div>
     <p class="note">名次用跟聯盟表一樣的算法（非 IL 球員場均加總、各項名次平均），只有你的隊伍改變。FA 依目前數據來源的價值排序，括號裡是價值。不檢查先發位置；出賽率跟著上方 GP 的設定。</p>
   </section>
+  <section aria-labelledby="h-scout">
+    <h2 id="h-scout"><span class="en">SCOUT REPORT</span>球探報告</h2>
+    <p class="note" id="sc-info"></p>
+    <div class="seg tm-mode" role="group" aria-label="看哪些球員">
+      <button class="menu-btn" id="sc-me" type="button" aria-pressed="true">我的隊伍</button>
+      <button class="menu-btn" id="sc-fa" type="button" aria-pressed="false">FA 前 50 名（Yahoo 排名）</button>
+    </div>
+    <div class="sc-out" id="sc-out"></div>
+    <p class="note"><b>HOT／COLD</b>：最近 14 天（至少 3 場）的價值比整季基準高或低 1.5 以上（基準：有本季數據用「預測＋本季」，否則用預測）。新聞是英文原文（ESPN 或 Yahoo），前面的中文標籤是依關鍵字自動判斷，可能會判斷錯，請以原文為準。</p>
+  </section>
+
   <section aria-labelledby="h-league">
     <h2 id="h-league"><span class="en">LEAGUE STANDINGS</span>聯盟排名</h2>
     <p class="note" id="league-note"></p>

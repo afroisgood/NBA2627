@@ -20,6 +20,9 @@ function checkImport(o){
     if(!m||!isStr(m.opp)||!isStr(m.at)||!(m.week==null||isNum(m.week))||!okV(m.me)||!okV(m.op))return "本週對戰資料格式不對。";}
   if(o.SCHED!=null){const S=o.SCHED;if(!S||!/^\d{4}-\d{2}-\d{2}$/.test(S.base)||!S.teams||typeof S.teams!=="object"||!Object.values(S.teams).every(a=>Array.isArray(a)&&a.every(d=>Number.isInteger(d)&&d>=0&&d<400)))return "賽程資料格式不對。";}
   if(o.IDS!=null){if(typeof o.IDS!=="object"||Array.isArray(o.IDS)||!Object.values(o.IDS).every(x=>Number.isInteger(x)&&x>0))return "球員編號資料格式不對。";}
+  if(o.RECENT!=null){if(typeof o.RECENT!=="object"||Array.isArray(o.RECENT)||!Object.values(o.RECENT).every(r=>r&&typeof r==="object"&&["l7","l14","l30"].every(k=>isStats(r[k]))))return "近期數據格式不對。";}
+  if(o.NEWS!=null){const okN=a=>Array.isArray(a)&&a.length<=3&&a.every(x=>x&&isStr(x.d)&&isStr(x.t)&&isStr(x.s)&&x.t.length<=300&&x.s.length<=800);
+    if(typeof o.NEWS!=="object"||Array.isArray(o.NEWS)||!Object.values(o.NEWS).every(okN))return "新聞資料格式不對。";}
   for(const k in o.MKT){const m=o.MKT[k];if(!Array.isArray(m)||m.length!==2||!m.every(isNum))return "排名／持有率資料格式不對。";}
   return "";
 }
@@ -38,6 +41,9 @@ try{
   }
 }catch(e){}
 const hasCur=()=>DATA.some(t=>t[1].some(p=>p[6]));
+// 最近 7／14／30 天場均（RECENT）和新聞短評（NEWS），名字 → 資料
+const RECENT=IMP&&IMP.RECENT?IMP.RECENT:{},NEWS=IMP&&IMP.NEWS?IMP.NEWS:{};
+const hasRecent=()=>Object.values(RECENT).some(r=>r.l14);
 const fmtAt=iso=>{const d=new Date(iso);return isNaN(d)?"":`${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`};
 
 // 套用新資料：先把目前的名次存成 ▲▼ 的比較基準，再存進瀏覽器、重新載入
@@ -46,8 +52,9 @@ function applyImport(text){
   try{o=JSON.parse(text.trim());}catch(e){return "看不懂貼上的內容，請確認有完整貼上更新程式的結果。";}
   const err=checkImport(o);if(err)return err;
   const keep=state.src,prev={};
-  ["pr","ls","cur","mix"].forEach(src=>{
+  ["pr","ls","cur","mix","l14"].forEach(src=>{
     if((src==="cur"||src==="mix")&&!hasCur())return;
+    if(src==="l14"&&!hasRecent())return;
     state.src=src;const rows=compute();rankAll(rows);
     prev[src]={};rows.forEach(r=>prev[src][r.name]=[r.ovr9,r.ovrNA]);
   });

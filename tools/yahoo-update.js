@@ -30,11 +30,22 @@
 
   const num = x => +String(x ?? '').replace(/,/g, '') || 0;
   const r2 = x => +x.toFixed(2);
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  // 讀一頁 Yahoo：失敗（太多請求、伺服器忙、網路斷）會等一下再試，最多 3 次
   const getDoc = async url => {
-    const res = await fetch(url, { credentials: 'include' });
-    if (!res.ok) throw new Error(`讀取失敗（${res.status}）：${url}`);
-    return new DOMParser().parseFromString(await res.text(), 'text/html');
+    let last = '';
+    for (let k = 0; k < 3; k++) {
+      if (k) await wait(1500 * k);
+      try {
+        const res = await fetch(url, { credentials: 'include' });
+        if (res.ok) return new DOMParser().parseFromString(await res.text(), 'text/html');
+        last = `HTTP ${res.status}`;
+        if (res.status < 500 && res.status !== 429 && res.status !== 408) break;
+      } catch (e) { last = e.message; }
+    }
+    throw new Error(`讀取失敗（${last}）：${url}`);
   };
+  let step = '開始';
 
   try {
     const rowInfo = tr => ({
@@ -45,11 +56,17 @@
     const YID = {};
     const yidOf = (a, n) => { const m = (a.getAttribute('href') || '').match(/\/(\d+)\/?$/); if (m) YID[n] = +m[1]; };
 
-    // 1) 16 隊名單
+    // 1) 16 隊名單。隊名從各隊頁面的標題切；切不出來或有重複時，改用聯盟首頁的隊伍連結
+    step = '抓 16 隊名單';
     say('抓 16 隊名單…');
-    const rosters = await Promise.all(Array.from({ length: TEAMS }, async (_, k) => {
-      const id = k + 1, d = await getDoc(`/nba/${LEAGUE}/${id}`);
-      const name = d.querySelector('title').textContent.split(' - ')[1].split(' |')[0].trim();
+    const titleName = d => {
+      const parts = (d.querySelector('title')?.textContent || '').trim().split(' - ');
+      return parts.length > 1 ? parts[1].split(' |')[0].trim() : '';
+    };
+    const rosters = [];
+    for (let k = 0; k < TEAMS; k += 4) rosters.push(...await Promise.all(Array.from({ length: Math.min(4, TEAMS - k) }, async (_, j) => {
+      const id = k + j + 1, d = await getDoc(`/nba/${LEAGUE}/${id}`);
+      const name = titleName(d);
       const ps = [];
       d.querySelectorAll('table tbody tr').forEach(tr => {
         const a = tr.querySelector('a.name'); if (!a) return;
@@ -59,9 +76,22 @@
         const { tp, st } = rowInfo(tr);
         ps.push({ n: a.textContent.trim(), slot, tp, st: status(st) });
       });
-      if (!ps.length) throw new Error(`第 ${id} 隊（${name}）抓不到球員，可能沒有登入，或 Yahoo 頁面格式改了`);
+      if (!ps.length) throw new Error(`第 ${id} 隊（${name || '?'}）抓不到球員，可能沒有登入，或 Yahoo 頁面格式改了`);
       return { id, name, ps };
-    }));
+    })));
+    if (rosters.some(t => !t.name) || new Set(rosters.map(t => t.name)).size < rosters.length) {
+      const teamNames = {};
+      try {
+        const home = await getDoc(`/nba/${LEAGUE}`);
+        home.querySelectorAll('a[href]').forEach(a => {
+          const m = (a.getAttribute('href') || '').match(new RegExp('/nba/' + LEAGUE + '/(\\d+)/?$'));
+          const t = a.textContent.replace(/\s+/g, ' ').trim();
+          if (m && t && !teamNames[m[1]]) teamNames[m[1]] = t;
+        });
+      } catch (e) { console.warn('[戰力表更新] 聯盟首頁讀取失敗：', e); }
+      rosters.forEach(t => { t.name = teamNames[t.id] || t.name || `第 ${t.id} 隊`; });
+      console.warn('[戰力表更新] 隊名改用聯盟首頁：', rosters.map(t => t.name));
+    }
     const want = new Set(rosters.flatMap(t => t.ps.map(p => p.n)));
 
     // 2) Yahoo 球員列表：依季前排名一頁一頁抓，直到所有被持有的球員都找到，而且至少抓到前 FA_PAGES 頁（FA 用）
@@ -90,8 +120,13 @@
       return out;
     };
     say(`名單完成（${want.size} 位球員）。抓 Yahoo 預測、上季、本季、最近 7／14／30 天數據，約 40 秒…`);
-    const [yProj, yLast, yCur, yL7, yL14, yL30] = await Promise.all(['S_PSR', SEASON_LAST, SEASON_CUR, 'S_L7', 'S_L14', 'S_L30'].map(fetchYahoo));
+    step = '抓 Yahoo 預測和數據';
+    const [yProj, yLast, yCur] = await Promise.all(['S_PSR', SEASON_LAST, SEASON_CUR].map(fetchYahoo));
+    step = '抓最近 7／14／30 天數據';
+    const recentList = async s => { try { return await fetchYahoo(s); } catch (e) { console.warn('[戰力表更新] 近期數據抓取失敗（略過）：', s, e); return {}; } };
+    const yL7 = await recentList('S_L7'), yL14 = await recentList('S_L14'), yL30 = await recentList('S_L30');
 
+    step = '抓 ESPN 預測';
     // 3) ESPN 預測（抓不到就只用 Yahoo）
     const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
       .replace(/[^a-z ]/g, ' ').replace(/\b(jr|sr|ii|iii|iv)\b/g, ' ').replace(/\s+/g, ' ').trim();
@@ -175,6 +210,7 @@
       }
     }
 
+    step = '整理資料';
     // 4) 合併：預測 = Yahoo 和 ESPN 場均平均（只有一家就用那一家）
     const avg = (a, b) => a && b ? a.map((x, i) => r2((x + b[i]) / 2)) : a || b || null;
     let noProj = 0;
@@ -224,6 +260,7 @@
       const items = [...d.querySelectorAll('.playernote, .Playernote, .note, li, p')].map(e => e.textContent.replace(/\s+/g, ' ').trim()).filter(t => t.length > 40);
       return [...new Set(items)].slice(0, 2).map(s => ({ d: '', t: '', s: s.slice(0, 500) }));
     };
+    step = '抓新聞';
     const newsFor = [...me.ps.map(p => p.n), ...FA.slice(0, NEWS_FA).map(p => p[0])];
     let newsSrc = { espn: 0, yahoo: 0 };
     say(`抓 ${newsFor.length} 位球員的新聞…`);
@@ -247,6 +284,14 @@
     button('關閉', () => box.remove());
   } catch (e) {
     console.error('[戰力表更新] 失敗：', e);
-    say('❌ 更新失敗：' + e.message);
+    say(`❌ 更新失敗（在「${step}」這一步）：${e.message}`);
+    const report = `戰力表更新失敗\n步驟：${step}\n訊息：${e.message}\n網址：${location.href}\n時間：${new Date().toISOString()}\n${(e.stack || '').split('\n').slice(0, 6).join('\n')}`;
+    btns.innerHTML = '';
+    button('複製錯誤訊息', async () => {
+      try { await navigator.clipboard.writeText(report); say('已複製錯誤訊息，貼給 Claude 看就可以了。'); }
+      catch (err) { say('複製失敗。請按 F12 打開 Console，把紅色的錯誤訊息截圖給 Claude。'); }
+    });
+    button('再試一次', () => { box.remove(); location.reload(); });
+    button('關閉', () => box.remove());
   }
 })();

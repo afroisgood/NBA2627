@@ -610,9 +610,9 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
   const r2 = x => +x.toFixed(2);
   const wait = ms => new Promise(r => setTimeout(r, ms));
   // 讀一頁 Yahoo：失敗（太多請求、伺服器忙、網路斷）會等一下再試，最多 3 次
-  const getDoc = async url => {
+  const getDoc = async (url, tries = 3) => {
     let last = '';
-    for (let k = 0; k < 3; k++) {
+    for (let k = 0; k < tries; k++) {
       if (k) await wait(1500 * k);
       try {
         const res = await fetch(url, { credentials: 'include' });
@@ -641,9 +641,20 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
       const parts = (d.querySelector('title')?.textContent || '').trim().split(' - ');
       return parts.length > 1 ? parts[1].split(' |')[0].trim() : '';
     };
+    // 某一隊的頁面 Yahoo 打不開（例如 HTTP 500）時，換幾種網址再試；都不行就之後從球員列表的「持有隊伍」推算名單
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    const teamDoc = async id => {
+      let err = null;
+      for (const url of [`/nba/${LEAGUE}/${id}`, `/nba/${LEAGUE}/${id}?date=${today}`, `/nba/${LEAGUE}/${id}?stat1=${SEASON_LAST}`]) {
+        try { return await getDoc(url, 2); } catch (e) { err = e; }
+      }
+      console.warn(`[戰力表更新] 第 ${id} 隊頁面打不開，之後改用球員列表推算：`, err);
+      return null;
+    };
     const rosters = [];
     for (let k = 0; k < TEAMS; k += 4) rosters.push(...await Promise.all(Array.from({ length: Math.min(4, TEAMS - k) }, async (_, j) => {
-      const id = k + j + 1, d = await getDoc(`/nba/${LEAGUE}/${id}`);
+      const id = k + j + 1, d = await teamDoc(id);
+      if (!d) return { id, name: '', ps: [], failed: true };
       const name = titleName(d);
       const ps = [];
       d.querySelectorAll('table tbody tr').forEach(tr => {
@@ -654,10 +665,13 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
         const { tp, st } = rowInfo(tr);
         ps.push({ n: a.textContent.trim(), slot, tp, st: status(st) });
       });
-      if (!ps.length) throw new Error(`第 ${id} 隊（${name || '?'}）抓不到球員，可能沒有登入，或 Yahoo 頁面格式改了`);
+      if (!ps.length) return { id, name, ps, failed: true };
       return { id, name, ps };
     })));
-    if (rosters.some(t => !t.name) || new Set(rosters.map(t => t.name)).size < rosters.length) {
+    const failedTeams = rosters.filter(t => t.failed);
+    if (failedTeams.length > 4) throw new Error(`有 ${failedTeams.length} 隊抓不到球員，可能沒有登入，或 Yahoo 頁面格式改了`);
+    const named = rosters.filter(t => t.name).map(t => t.name), dupNames = new Set(named).size < named.length;
+    if (dupNames || named.length < rosters.length) {
       const teamNames = {};
       try {
         const home = await getDoc(`/nba/${LEAGUE}`);
@@ -667,11 +681,12 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
           if (m && t && !teamNames[m[1]]) teamNames[m[1]] = t;
         });
       } catch (e) { console.warn('[戰力表更新] 聯盟首頁讀取失敗：', e); }
-      rosters.forEach(t => { t.name = teamNames[t.id] || t.name || `第 ${t.id} 隊`; });
-      console.warn('[戰力表更新] 隊名改用聯盟首頁：', rosters.map(t => t.name));
+      rosters.forEach(t => { if (dupNames || !t.name) t.name = teamNames[t.id] || t.name || `第 ${t.id} 隊`; });
+      console.warn('[戰力表更新] 隊名從聯盟首頁補上：', rosters.map(t => t.name));
     }
     const want = new Set(rosters.flatMap(t => t.ps.map(p => p.n)));
 
+    const teamLink = {};
     // 2) Yahoo 球員列表：依季前排名一頁一頁抓，直到所有被持有的球員都找到，而且至少抓到前 FA_PAGES 頁（FA 用）
     const fetchYahoo = async stat => {
       const out = {};
@@ -684,7 +699,9 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
           rows++;
           const c = [...tr.querySelectorAll('td')].map(td => td.textContent.replace(/\s+/g, ' ').trim());
           const gp = num(c[5]);
-          const rec = { pre: num(c[6]) || 260, ros: parseFloat(c[8]) || 0, own: c[4] || '', ...rowInfo(tr), s: null };
+          const oa = [...tr.querySelectorAll('a[href]')].map(x => (x.getAttribute('href') || '').match(new RegExp('/nba/' + LEAGUE + '/(\\d+)/?$'))).find(Boolean);
+          const rec = { pre: num(c[6]) || 260, ros: parseFloat(c[8]) || 0, own: c[4] || '', ownId: oa ? +oa[1] : 0, ...rowInfo(tr), s: null };
+          if (oa) teamLink[rec.ownId] = teamLink[rec.ownId] || [...tr.querySelectorAll('a[href]')].find(x => (x.getAttribute('href') || '').match(new RegExp('/nba/' + LEAGUE + '/' + rec.ownId + '/?$'))).textContent.trim();
           if (gp && c[10] && c[10].includes('/') && c[12] && c[12].includes('/')) {
             const [fgm, fga] = c[10].split('/').map(num), [ftm, fta] = c[12].split('/').map(num);
             const g = x => r2(x / gp);
@@ -693,13 +710,23 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
           out[a.textContent.trim()] = rec;
           yidOf(a, a.textContent.trim());
         }));
-        if (!rows || (page + 4 >= FA_PAGES && [...want].every(n => out[n]))) break;
+        if (!rows || (!failedTeams.length && page + 4 >= FA_PAGES && [...want].every(n => out[n]))) break;
       }
       return out;
     };
     say(`名單完成（${want.size} 位球員）。抓 Yahoo 預測、上季、本季、最近 7／14／30 天數據，約 40 秒…`);
     step = '抓 Yahoo 預測和數據';
     const [yProj, yLast, yCur] = await Promise.all(['S_PSR', SEASON_LAST, SEASON_CUR].map(fetchYahoo));
+    // 頁面打不開的隊伍：用球員列表的「持有隊伍」連結推算名單（看不到先發位置和 IL，都記成 BN）
+    for (const t of failedTeams) {
+      const seen = new Set();
+      for (const list of [yProj, yLast, yCur]) for (const n in list) {
+        const r = list[n];
+        if ((r.ownId === t.id || (!r.ownId && t.name && r.own === t.name)) && !seen.has(n)) { seen.add(n); t.ps.push({ n, slot: 'BN', tp: r.tp, st: status(r.st) }); want.add(n); }
+      }
+      if (/^第 \d+ 隊$/.test(t.name) && teamLink[t.id]) t.name = teamLink[t.id];
+      if (!t.ps.length) throw new Error(`第 ${t.id} 隊（${t.name}）的頁面 Yahoo 打不開，也沒辦法從球員列表推算名單`);
+    }
     step = '抓最近 7／14／30 天數據';
     const recentList = async s => { try { return await fetchYahoo(s); } catch (e) { console.warn('[戰力表更新] 近期數據抓取失敗（略過）：', s, e); return {}; } };
     const yL7 = await recentList('S_L7'), yL14 = await recentList('S_L14'), yL30 = await recentList('S_L30');
@@ -802,8 +829,9 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
     })]);
     // FA：沒被持有、而且至少有一種數據的球員，依季前排名排序；waiver 上的名單位置記成 W
     const FA = [];
+    const r0 = n => yProj[n] && yProj[n].ownId;
     for (const n of Object.keys(yProj)) {
-      if (want.has(n)) continue;
+      if (want.has(n) || r0(n)) continue;
       const r = yProj[n], proj = avg(r.s, espn[key(n)]), last = yLast[n]?.s || null, cur = yCur[n]?.s || null;
       if (!proj && !last && !cur) continue;
       FA.push([n, /^W/.test(r.own) ? 'W' : 'FA', r.tp, status(r.st), proj, last, cur]);
@@ -852,7 +880,7 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
     const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA, SCHED, MATCH, IDS, RECENT, NEWS });
     window._LP_UPDATE = json;
     const curN = DATA.reduce((a, t) => a + t[1].filter(p => p[6]).length, 0);
-    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到；賽程${SCHED ? '有' : '沒有'}抓到；頭像編號 ${Object.keys(IDS).length} 位；近期數據 ${Object.keys(RECENT).length} 位；新聞 ${Object.keys(NEWS).length}／${newsFor.length} 位（ESPN ${newsSrc.espn}、Yahoo ${newsSrc.yahoo}）；本週對手：${MATCH ? MATCH.opp + (MATCH.me ? '（含目前比分）' : '（還沒有比分）') : '沒有抓到'}。`);
+    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到；賽程${SCHED ? '有' : '沒有'}抓到；頭像編號 ${Object.keys(IDS).length} 位；近期數據 ${Object.keys(RECENT).length} 位；新聞 ${Object.keys(NEWS).length}／${newsFor.length} 位（ESPN ${newsSrc.espn}、Yahoo ${newsSrc.yahoo}）；本週對手：${MATCH ? MATCH.opp + (MATCH.me ? '（含目前比分）' : '（還沒有比分）') : '沒有抓到'}。${failedTeams.length ? `⚠ ${failedTeams.map(t => t.name).join('、')} 的頁面 Yahoo 打不開，名單改用球員列表推算（${failedTeams.map(t => t.ps.length).join('、')} 人；看不到先發位置和 IL）。` : ''}`);
     btns.innerHTML = '';
     button('▶ 打開戰力表', () => window.open(SITE + '#import=' + encodeURIComponent(json), '_blank'));
     button('複製結果', async () => {

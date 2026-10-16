@@ -1,15 +1,18 @@
 // ---------- 預測模型：傷兵、預測＋本季混合、H2H 勝率、每週賽程與先發陣容 ----------
 
-// 傷兵：O（缺陣）不算，Q（出賽存疑）打 75 折；「全部照算」時都算 1
-const Q_RATE=0.75;
-const injW=p=>!state.inj?1:p[3]==="O"?0:p[3]==="Q"?Q_RATE:1;
+// 傷兵：Yahoo 的 O（缺陣）、Q（出賽存疑）只代表最近一兩場，所以只算進「近期」的比賽：
+// 更新資料後 Q_DAYS 天內 Q 打 75 折、O_DAYS 天內 O 不算；整季的名次和 H2H 勝率不看傷兵（長期缺陣已經算在出賽率和預測場數裡）
+// 「全部照算」時都算 1
+const Q_RATE=0.75,Q_DAYS=3,O_DAYS=7;
+const statusDay=()=>IMP&&IMP.at?dayOf(IMP.at):todayDay();
+const injOn=(p,d)=>{if(!state.inj)return 1;const k=d-statusDay();return p[3]==="O"?(k<O_DAYS?0:1):p[3]==="Q"?(k<Q_DAYS?Q_RATE:1):1};
 // 出賽率：預測出賽場數 ÷ 全聯盟最多的預測場數（季前大約 82；開季後預測只算剩下的比賽，會跟著變少）
 // 沒有預測就用上季場數 ÷ 82；容易受傷、輪休的球員打折；「不考慮」時都算 1
 let GP_FULL=0;
 const gpFull=()=>{if(!GP_FULL){const m=Math.max(0,...DATA.flatMap(t=>t[1].map(p=>p[4]?p[4][0]:0)));GP_FULL=m>=20?m:82;}return GP_FULL};
 const gpRate=p=>{const r=p[4]?p[4][0]/gpFull():p[5]?p[5][0]/82:1;return Math.min(1,r||1)};
-// 球員在加總時的權重＝傷兵 × 出賽率
-const playW=p=>injW(p)*(state.gp?gpRate(p):1);
+// 整季加總用的權重＝出賽率
+const gpW=p=>state.gp?gpRate(p):1;
 
 // 預測＋本季混合（存在 index 7）：本季打 g 場時，本季佔 g/(g+K)、預測佔 K/(g+K)
 const MIX_K=20;
@@ -104,12 +107,12 @@ function startProbs(players,avail){
 }
 const toV=t=>({fg:t.fga?t.fgm/t.fga:0,ft:t.fta?t.ftm/t.fta:0,tpm:t.tpm,pts:t.pts,reb:t.reb,ast:t.ast,stl:t.stl,blk:t.blk,to:t.to});
 const addRaw=(a,b)=>{const t={};for(const k in a.t)t[k]=a.t[k]+b.t[k];return {t,starts:a.starts+b.starts,benched:a.benched+b.benched}};
-// 一隊在第 s～e 天的預測總數（期望值）：每天依位置排先發，缺陣（傷兵、出賽率）時由板凳補上
+// 一隊在第 s～e 天的預測總數（期望值）：每天依位置排先發，缺陣（近期傷兵、出賽率）時由板凳補上
 function weekRaw(ps,s,e,val){
   const si=SI(),t={fgm:0,fga:0,ftm:0,fta:0,tpm:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0};let starts=0,benched=0;
-  const pool=ps.filter(p=>active(p)&&p[si]&&playW(p)>0).map(p=>({p,v:val(p[si])??-99,a:playW(p),g:GAMES[nbaTeam(p)]})).sort((a,b)=>b.v-a.v);
+  const pool=ps.filter(p=>active(p)&&p[si]).map(p=>({p,v:val(p[si])??-99,a:gpW(p),g:GAMES[nbaTeam(p)]})).sort((a,b)=>b.v-a.v);
   for(let d=s;d<=e;d++){
-    const today=pool.filter(x=>x.g&&x.g.has(d));if(!today.length)continue;
+    const today=pool.filter(x=>x.g&&x.g.has(d)).map(x=>({...x,a:x.a*injOn(x.p,d)})).filter(x=>x.a>0);if(!today.length)continue;
     const pr=startProbs(today.map(x=>x.p),today.map(x=>x.a));
     today.forEach((x,i)=>{starts+=pr[i];benched+=x.a-pr[i];const st=x.p[si];for(const key in t)t[key]+=st[IDX[key]]*pr[i];});
   }

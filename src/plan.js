@@ -7,10 +7,10 @@ const START_SLOTS=new Set(["PG","SG","G","SF","PF","F","C","Util"]);
 // 某一天的先發建議：有比賽、沒缺陣（O）的人依價值排進 10 個位置；其他人分成排不進、缺陣、沒比賽
 function dayPlan(ps,d,val){
   const si=SI(),act=ps.filter(p=>active(p)),has=p=>{const g=GAMES[nbaTeam(p)];return !!(g&&g.has(d))};
-  const play=act.filter(p=>has(p)&&p[3]!=="O").sort((a,b)=>(val(b[si])??-99)-(val(a[si])??-99));
+  const play=act.filter(p=>has(p)&&injOn(p,d)>0).sort((a,b)=>(val(b[si])??-99)-(val(a[si])??-99));
   const sl=lineupSlots(play),on=new Set(sl.filter(i=>i>=0).map(i=>play[i]));
   return {start:sl.map((i,k)=>({slot:SLOT_L[k],p:i>=0?play[i]:null})),bench:play.filter(p=>!on.has(p)),
-    out:act.filter(p=>has(p)&&p[3]==="O"),off:act.filter(p=>!has(p))};
+    out:act.filter(p=>has(p)&&injOn(p,d)===0),off:act.filter(p=>!has(p))};
 }
 // 從今天起有 NBA 比賽的日子（最多 7 天）
 function gameDays(){
@@ -34,7 +34,7 @@ function renderToday(){
     :`<tr class="out"><td class="name"><span class="slot">${slot}</span></td><td class="name" colspan="2">（空著）</td></tr>`;
   // 要動的人：該上場卻在板凳、有比賽卻排不進（或缺陣）卻佔著先發；沒比賽的人佔先發不影響，只在需要騰位置時提醒
   const ups=pl.start.filter(x=>x.p&&!START_SLOTS.has(x.p[1])).length,moves=ups+[...pl.bench,...pl.out].filter(p=>START_SLOTS.has(p[1])).length;
-  const q=pl.start.filter(x=>x.p&&x.p[3]==="Q").map(x=>x.p[0]);
+  const q=pl.start.filter(x=>x.p&&x.p[3]==="Q"&&injOn(x.p,planDay)<1).map(x=>x.p[0]);
   const list=(k,a,f=p=>esc(p[0]))=>a.length?`<p><b>${k}</b>：${a.map(f).join("、")}</p>`:"";
   out.innerHTML=`<p class="day-sum">${dayTxt(planDay)}：你有 ${n+pl.bench.length} 人有比賽${pl.bench.length?`，${pl.bench.length} 人排不進先發`:"，全部排得進先發"}${10-n?`，${10-n} 個位置空著`:""}。${moves?`跟更新資料時 Yahoo 的陣容比，要調整 ${moves} 個人。`:"跟更新資料時 Yahoo 的陣容一樣。"}</p>
     ${q.length?`<p class="note">⚠ ${q.map(esc).join("、")} 出賽存疑（Q），開賽前到 Yahoo 確認。</p>`:""}

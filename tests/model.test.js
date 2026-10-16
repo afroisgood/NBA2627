@@ -16,18 +16,35 @@ test("內建資料：16 隊都有名次、勝率在 0～1 之間", () => {
   for (const r of rows) assert.ok(r.win > 0 && r.win < 1, `${r.name} 勝率 ${r.win}`);
 });
 
-test("compute：只加非 IL 球員；傷兵 O 不算、Q 打 75 折；全部照算時都算", () => {
+test("compute：只加非 IL 球員；傷兵狀態不影響整季數據", () => {
   const { run } = load();
   fixtureLeague(run);
   const a = row(run, "A");
   near(a.v.pts, 3 * 13 * 1.3);
   assert.equal(a.n, 3);
   run(`DATA[0][1][1][3]="O"`);
-  near(row(run, "A").v.pts, 2 * 13 * 1.3);
+  near(row(run, "A").v.pts, 3 * 13 * 1.3, 1e-9, "O 只代表最近幾場，整季照算");
   run(`DATA[0][1][1][3]="Q"`);
-  near(row(run, "A").v.pts, 3 * 13 * 1.3 - 13 * 1.3 * 0.25);
-  run(`state.inj=false`);
   near(row(run, "A").v.pts, 3 * 13 * 1.3);
+});
+
+test("傷兵只算近期：更新後 3 天內 Q 打 75 折、7 天內 O 不算；之後照常；全部照算時都算", () => {
+  const tmp = load();
+  const imp = importFixture(tmp.run, { at: "2026-10-19T16:00:00Z" });   // 美東 10/19＝第 18 天
+  const { run } = load({ local: { "lp-data": JSON.stringify(imp) } });
+  assert.equal(run("statusDay()"), 18);
+  const q = P("q", "BN", "LAL - PG", "Q", null), o = P("o", "BN", "LAL - PG", "O", null), h = P("h", "BN", "LAL - PG", "", null);
+  const w = (p, d) => run(`injOn(${JSON.stringify(p)},${d})`);
+  assert.equal(w(q, 18), 0.75); assert.equal(w(q, 20), 0.75); assert.equal(w(q, 21), 1);
+  assert.equal(w(o, 18), 0); assert.equal(w(o, 24), 0); assert.equal(w(o, 25), 1);
+  assert.equal(w(h, 18), 1);
+  run("state.inj=false");
+  assert.equal(w(o, 18), 1);
+  run("state.inj=true; state.gp=false");
+  // 一週預測：A1（LAL 第 19、20、21 天）標 O，7 天內都不算
+  run(`DATA[0][1][0][3]="O"`);
+  const wt = run(`(()=>{const val=playerValues();return weekTotals(DATA[0][1],WEEKS[0],val);})()`);
+  assert.equal(Math.round(wt.starts), 1, "只剩 A2（BOS 第 19 天）");
 });
 
 test("出賽率：預測場數 ÷ 82，最多算 1；沒預測用上季場數；關掉時都算 1", () => {
@@ -39,9 +56,9 @@ test("出賽率：預測場數 ÷ 82，最多算 1；沒預測用上季場數；
   near(run(`gpRate(${JSON.stringify(P("x", "PG", "LAL - PG", "", null))})`), 1);
   run("state.gp=true");
   near(row(run, "A").v.pts, 3 * 13 * 1.3 * 70 / 82);
-  // 傷兵和出賽率一起打折
+  // 傷兵狀態不影響整季，只有出賽率
   run(`DATA[0][1][1][3]="Q"`);
-  near(row(run, "A").v.pts, (3 * 13 * 1.3 - 13 * 1.3 * 0.25) * 70 / 82);
+  near(row(run, "A").v.pts, 3 * 13 * 1.3 * 70 / 82);
   // 同樣每場數據，常缺陣的隊伍名次比較後面
   run(`DATA[3][1].forEach(p=>p[4][0]=40)`);
   const r = run(`(()=>{const r=compute();rankAll(r,true);return Object.fromEntries(r.map(x=>[x.name,x.r.pts]));})()`);
@@ -327,7 +344,7 @@ test("板凳補位：全員到齊時跟先發陣容一樣；主力可能缺陣�
 
 test("每日先發：當天有比賽的人排進位置；沒比賽、缺陣分開列", () => {
   const tmp = load();
-  const imp = importFixture(tmp.run);
+  const imp = importFixture(tmp.run, { at: "2026-10-19T16:00:00Z" });
   const { run } = load({ local: { "lp-data": JSON.stringify(imp) } });
   run(`DATA[0][1][0][3]="O"`); // A1（LAL）缺陣
   const pl = run(`(()=>{const p=dayPlan(DATA[0][1],19,playerValues());return {start:p.start.filter(x=>x.p).map(x=>[x.slot,x.p[0]]),bench:p.bench.map(p=>p[0]),out:p.out.map(p=>p[0]),off:p.off.map(p=>p[0])}})()`);

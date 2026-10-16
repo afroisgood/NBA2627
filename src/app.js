@@ -40,7 +40,7 @@ function compute(data=DATA){
   const si=SI();
   return data.map(team=>{
     const t={fgm:0,fga:0,ftm:0,fta:0,tpm:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0};let n=0,miss=0;
-    team[1].forEach(p=>{if(!active(p))return;const s=p[si];if(!s){miss++;return;}n++;const w=playW(p);for(const k in t)t[k]+=s[IDX[k]]*w;});
+    team[1].forEach(p=>{if(!active(p))return;const s=p[si];if(!s){miss++;return;}n++;const w=gpW(p);for(const k in t)t[k]+=s[IDX[k]]*w;});
     const v={fg:t.fga?t.fgm/t.fga:0,ft:t.fta?t.ftm/t.fta:0,tpm:t.tpm,pts:t.pts,reb:t.reb,ast:t.ast,stl:t.stl,blk:t.blk,to:t.to};
     return {name:team[0],ps:team[1],v,n,miss};
   });
@@ -92,7 +92,7 @@ function renderLeague(rows){
   document.getElementById("league").innerHTML=h+"</tbody>";
   const missT=rows.reduce((a,r)=>a+r.miss,0);
   document.getElementById("league-note").textContent=
-    "數字是全隊（不含 IL）每場數據加總"+(state.inj?"，缺陣（O）不算、出賽存疑（Q）打 75 折":"")+(state.gp?"，每人再乘上出賽率（預測出賽場數 ÷ 整季場數）":"")+"。♛ 前 3 名、☠ 第 14–16 名；格子越深名次越前（1–4、5–8、9–12、13–16 四階）。點欄位標題可排序。H2H 勝率＝跟其他 15 隊各對戰一次、9 項贏 5 項以上的平均機率（放棄助攻也是 9 項都比）；有賽程時用「整季平均每週」的預測（每天排 10 人先發、有人缺陣時板凳補上）。"
+    "數字是全隊（不含 IL）每場數據加總"+(state.inj?"（傷兵狀態只代表最近幾場，不影響這裡的整季數據，只算進 VS 本週、每日先發、串流）":"")+(state.gp?"，每人再乘上出賽率（預測出賽場數 ÷ 整季場數）":"")+"。♛ 前 3 名、☠ 第 14–16 名；格子越深名次越前（1–4、5–8、9–12、13–16 四階）。點欄位標題可排序。H2H 勝率＝跟其他 15 隊各對戰一次、9 項贏 5 項以上的平均機率（放棄助攻也是 9 項都比）；有賽程時用「整季平均每週」的預測（每天排 10 人先發、有人缺陣時板凳補上）。"
     +(!["pr","mix"].includes(state.src)&&missT?(w=>` ${w}版有 ${missT} 位球員沒有${w}數據，不計入加總。`)({ls:"上季",cur:"本季",l14:"近 14 天"}[state.src]):"");
   document.querySelectorAll("#league th.sortable").forEach(el=>{
     const go=()=>{const k=el.dataset.k;state.sort=state.sort.k===k?{k,dir:-state.sort.dir}:{k,dir:1};render();};
@@ -115,7 +115,7 @@ function renderVS(rows){
   let va=A.v,vb=B.v,info=SCHED?"":"從 Yahoo 更新過資料後，可以選週次，依每隊這週的出賽場數和每天的先發名額預測。";
   if(wk){const val=playerValues(),ta=weekTotals(A.ps,wk,val),tb=weekTotals(B.ps,wk,val);va=ta.v;vb=tb.v;
     const sb=x=>`先發約 ${Math.round(x.starts)} 場次${x.benched>=.5?`（另有約 ${Math.round(x.benched)} 場次排不進先發）`:""}`;
-    info=`第 ${wk.i} 週（${md(wk.s)}–${md(wk.e)}）預測總數：${esc(ME)} ${sb(ta)}；${esc(B.name)} ${sb(tb)}。每天最多 10 人上場，依位置排出最好的陣容${state.inj?"，缺陣不算、存疑打 75 折":""}${state.gp?"，再乘上出賽率":""}；有人缺陣時由板凳補上。`;}
+    info=`第 ${wk.i} 週（${md(wk.s)}–${md(wk.e)}）預測總數：${esc(ME)} ${sb(ta)}；${esc(B.name)} ${sb(tb)}。每天最多 10 人上場，依位置排出最好的陣容${state.inj?`，更新資料後 ${O_DAYS} 天內缺陣（O）不算、${Q_DAYS} 天內出賽存疑（Q）打 75 折`:""}${state.gp?"，再乘上出賽率":""}；有人缺陣時由板凳補上。`;}
   document.getElementById("vs-info").innerHTML=info;
   document.getElementById("vs-live").innerHTML=liveScore(B.name,mt);
   const M=matchup(va,vb);

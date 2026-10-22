@@ -55,7 +55,10 @@ function streamCtx(rows){
   const from=Math.max(wk.s,todayDay()+1),val=playerValues(),si=SI(),opp=vsOppName(rows);
   const me=DATA.find(t=>t[0]===ME)[1],act=me.filter(p=>active(p)),open=ROSTER-act.length;
   const drops=act.map(p=>({p,v:val(p[si])??-99})).sort((a,b)=>a.v-b.v).slice(0,STREAM_DROPS).map(x=>x.p[0]);
-  const oppV=weekTotals(DATA.find(t=>t[0]===opp)[1],wk,val).v,pre=from>wk.s?weekRaw(me,wk.s,Math.min(from-1,wk.e),val):null;
+  // 本週有 Yahoo 實際比分時：打完的用實際、更新後到撿人前的用預測
+  const L=liveOf(ME,wk)&&liveOf(opp,wk)?liveOf(ME,wk):null;
+  const oppV=weekLive(DATA.find(t=>t[0]===opp)[1],L?opp:null,wk,val).v;
+  const pre=L?addRaw(liveRaw(me,L,wk,val),restRaw(me,L.cut,Math.min(from-1,wk.e),val)):from>wk.s?weekRaw(me,wk.s,Math.min(from-1,wk.e),val):null;
   const ctx={wk,from,val,opp,me,open,drops,oppV,pre};
   ctx.base=streamEval(ctx,null,null);
   return ctx;

@@ -30,7 +30,9 @@ let state={src:"pr",punt:false,inj:true,gp:true,week:null,sort:{k:"ovr",dir:1},t
 try{const s=JSON.parse(localStorage.getItem("lp-state2")||"null");if(s)state={...state,...s};}catch(e){}
 if(typeof state.gp!=="boolean")state.gp=true;
 if(!["pr","ls","cur","mix","l14"].includes(state.src)||(["cur","mix"].includes(state.src)&&!hasCur())||(state.src==="l14"&&!hasRecent()))state.src="pr";
-function save(){try{localStorage.setItem("lp-state2",JSON.stringify({src:state.src,punt:state.punt,inj:state.inj,gp:state.gp,week:state.week,team:state.team,opp:state.opp}))}catch(e){}}
+function save(){try{localStorage.setItem("lp-state2",JSON.stringify({src:state.src,punt:state.punt,inj:state.inj,gp:state.gp,week:state.week,team:state.team,opp:state.opp,curSeen:state.curSeen}))}catch(e){}}
+// 開季後第一次有本季數據：資料來源從「預測」自動換成「預測＋本季」（只換一次，之後照自己的選擇）
+if(hasCur()&&!state.curSeen){state.curSeen=true;if(state.src==="pr")state.src="mix";save();}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
 const f1=x=>x.toFixed(1), f3=x=>x.toFixed(3).replace(/^0/,"");
 const SI=()=>({pr:4,ls:5,cur:6,mix:7,l14:8})[state.src];
@@ -113,9 +115,9 @@ function renderVS(rows){
   ws.value=wk?wk.key:"pg";ws.disabled=!WEEKS.length;
   ws.onchange=()=>{state.week=ws.value;save();render();};
   let va=A.v,vb=B.v,info=SCHED?"":"從 Yahoo 更新過資料後，可以選週次，依每隊這週的出賽場數和每天的先發名額預測。";
-  if(wk){const val=playerValues(),ta=weekTotals(A.ps,wk,val),tb=weekTotals(B.ps,wk,val);va=ta.v;vb=tb.v;
+  if(wk){const val=playerValues(),lv=!!(liveOf(ME,wk)&&liveOf(B.name,wk)),ta=weekLive(A.ps,lv?ME:null,wk,val),tb=weekLive(B.ps,lv?B.name:null,wk,val);va=ta.v;vb=tb.v;
     const sb=x=>`先發約 ${Math.round(x.starts)} 場次${x.benched>=.5?`（另有約 ${Math.round(x.benched)} 場次排不進先發）`:""}`;
-    info=`第 ${wk.i} 週（${md(wk.s)}–${md(wk.e)}）預測總數：${esc(ME)} ${sb(ta)}；${esc(B.name)} ${sb(tb)}。每天最多 10 人上場，依位置排出最好的陣容${state.inj?`，更新資料後 ${O_DAYS} 天內缺陣（O）不算、${Q_DAYS} 天內出賽存疑（Q）打 75 折`:""}${state.gp?"，再乘上出賽率":""}；有人缺陣時由板凳補上。`;}
+    info=`第 ${wk.i} 週（${md(wk.s)}–${md(wk.e)}）預測總數：${esc(ME)} ${sb(ta)}；${esc(B.name)} ${sb(tb)}。${lv?liveTxt(ta.live,wk):""}每天最多 10 人上場，依位置排出最好的陣容${state.inj?`，更新資料後 ${O_DAYS} 天內缺陣（O）不算、${Q_DAYS} 天內出賽存疑（Q）打 75 折`:""}${state.gp?"，再乘上出賽率":""}；有人缺陣時由板凳補上。`;}
   document.getElementById("vs-info").innerHTML=info;
   document.getElementById("vs-live").innerHTML=liveScore(B.name,mt);
   const M=matchup(va,vb);
@@ -134,6 +136,12 @@ function renderVS(rows){
     <div class="vs-side">${emblem(B.name,40)}<span class="nm">${esc(B.name)}</span></div>`;
   document.getElementById("vs-rows").innerHTML=rowsH;
   sel.onchange=()=>{state.opp=sel.value;save();render();};
+}
+
+// 已經打完的比賽用實際比分的說明
+function liveTxt(L,wk){
+  const c=L.cut,done=c.b-1>=wk.s?`${md(wk.s)}${c.b-1>wk.s?"–"+md(c.b-1):""} 打完的比賽`:"",part=c.f>0&&c.b<=wk.e?`${md(c.b)} 更新時已經打的部分`:"";
+  return c.b>wk.e?"這週已經打完，全部用 Yahoo 實際比分。":`${[done,part].filter(Boolean).join("、")}用 Yahoo 實際比分（${fmtAt(L.at)} 更新），之後才用預測；想看最新的請再按「↻ 更新資料」。`;
 }
 
 // Yahoo 本週實際比分（只在看的是本週對手時顯示）

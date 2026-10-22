@@ -59,7 +59,8 @@ function renderFA(rows){
 function weekLine(wk,rows,b1,P,D){
   if(!wk)return "";
   const val=playerValues(),me=rows.find(r=>r.name===ME),op=rows.find(r=>r.name===state.opp);if(!op)return "";
-  const ov=weekTotals(op.ps,wk,val).v,m0=matchup(weekTotals(me.ps,wk,val).v,ov),m1=matchup(weekTotals(b1.ps,wk,val).v,ov);
+  const lv=!!(liveOf(ME,wk)&&liveOf(op.name,wk)),mn=lv?ME:null;
+  const ov=weekLive(op.ps,lv?op.name:null,wk,val).v,m0=matchup(weekLive(me.ps,mn,wk,val).v,ov),m1=matchup(weekLive(b1.ps,mn,wk,val).v,ov);
   const sc=m=>{const w=m.ps.filter(p=>p>.5).length;return `${w}:${9-w}`};
   return `第 ${wk.i} 週（${md(wk.s)}–${md(wk.e)}）對 ${esc(op.name)}：預測 ${sc(m0)} → ${sc(m1)}，勝率 ${pctTxt(m0.win)} → ${pctTxt(m1.win)}。${esc(P[0])} 本週 ${gamesIn(P,wk)} 場${D?`，${esc(D[0])} 本週 ${gamesIn(D,wk)} 場`:""}。（對手和週次跟上方 VS 對戰預測一樣）`;
 }

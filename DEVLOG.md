@@ -96,7 +96,7 @@ const MKT = { "球員名": [季前排名, 持有率%], ... };
 { v: 1, at: "ISO 時間", ME: "自己隊名", DATA: [...同上...], MKT: {...同上...},
   FA: [ ["球員名", "FA" 或 "W", "NBA球隊 - 位置", "狀態", proj, last, cur], ... ],   // 可撿的球員，W＝在 waiver 上
   SCHED: { base: "2026-10-01", teams: { "LAL": [19, 21, ...], ... } },   // 每隊比賽日（美東），距離 base 的天數；可能是 null
-  MATCH: { at, week, opp: "對手隊名", me: {fg,ft,tpm,pts,reb,ast,stl,blk,to}|null, op: {...}|null },   // Yahoo 本週對戰；還沒開打時 me/op 是 null
+  MATCH: { at, week, opp: "對手隊名", me: {fg,ft,tpm,pts,reb,ast,stl,blk,to, fgm?,fga?,ftm?,fta?}|null, op: {...}|null },   // Yahoo 本週對戰；還沒開打時 me/op 是 null
   IDS: { "球員名": ESPN球員編號, ... },   // 球員卡照片頭像用（v16 起；舊資料沒有）
   RECENT: { "球員名": { l7, l14, l30 }, ... },   // 最近 7／14／30 天場均（數據陣列或 null；v18 起）
   NEWS: { "球員名": [ { d: "ISO 時間或空字串", t: "標題", s: "內文" }, ... ], ... },   // 新聞短評，最多 3 則（v18 起）
@@ -249,6 +249,7 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 - 本季打了 g 場：本季權重 g/(g+20)、預測權重 20/(g+20)（`MIX_K = 20`）；打 10 場時本季佔 1/3，打 40 場時佔 2/3
 - 只有預測或只有本季時就用那一個；GP 用預測的 GP
 - 只有匯入的資料有本季數據時，控制列才出現「預測＋本季」
+- v21：開季後第一次有本季數據時，資料來源從「預測」自動換成「預測＋本季」（`state.curSeen` 記住換過，之後使用者改回預測就不再動）
 
 ### 5.10 H2H 勝率（v11，`matchup()`、`h2hAll()`）
 
@@ -270,6 +271,10 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 - `matchNow()`：MATCH 抓的那天所在的週（開季前算第 1 週）＝現在這週才用；沒有賽程時 7 天內有效；對手不在聯盟裡就不用
 - VS 對手：自己選的優先（`state.opp`），沒選（null）就用 Yahoo 本週對手，選單標「（本週對手）」；套用新資料時會把 `opp`、`week` 改回自動
 - 看的是本週對手、而且有比分時，VS 下方顯示「本週實際比分」表；否則顯示提示
+- v21 實際＋剩餘預測（`liveOf()`、`liveCut()`、`liveRaw()`、`restRaw()`、`weekLive()`，src/model.js）：本週、看的是 Yahoo 本週對手、雙方都有比分時，VS、FA 分析器的本週預測、本週串流都改成「已經打完的用 Yahoo 實際比分＋剩下的天數用預測」
+  - 切點用 MATCH.at：`b`＝美東時間（往前推 2 小時）的那天；`f`＝那天已經算進比分的比例，美東 19 點開打、6 小時打完線性估（台灣白天更新時美東比賽常常還在打）。b 那天的預測只算 1−f
+  - Yahoo 只給 FG%／FT% 時，打完那幾天的出手數用預測估；更新程式有抓到 `FGM/A`、`FTM/A` 欄（MATCH.me／op 的 fgm、fga、ftm、fta）就直接用
+  - 比分是更新那一刻的，要看最新的就再更新一次；整季 H2H 勝率（`seasonWeek()`）還是全用預測
 
 ### 5.13 網站共用資料（v12）
 
@@ -435,6 +440,7 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 | v7 | 交易分析器＋自動找交易；修正 IL 球員佔名單位的誤判、2 換 1 比較基準 |
 | v8 | 網頁內一鍵更新資料：書籤／console 在 Yahoo 頁面抓名單和數據，自動帶回網頁套用；新增「2026-27 本季實際」數據來源；FA 補位改成完整 FA 清單，自動找交易的 2 換 1 不再固定補 Thybulle |
 | v9 | FA 分析器：撿人／丟人後撿人的名次模擬，加上自動推薦 |
+| v21 | 開季後：本週預測改成「已經打完的用 Yahoo 實際比分＋剩下的用預測」；第一次有本季數據時資料來源自動換成「預測＋本季」；更新程式多抓對戰頁的 FGM/A、FTM/A |
 | v20 | 傷兵狀態只算近期（Q 3 天、O 7 天），整季名次和 H2H 勝率不再被 Q／O 拖累 |
 | v19 | 更新程式加強：讀取失敗自動重試（429／5xx／網路錯誤，最多 3 次）、隊名切不出來時改用聯盟首頁連結、近期數據失敗只略過、失敗時顯示步驟並可複製錯誤訊息；某隊頁面打不開（Yahoo 500）時換網址再試，再不行從球員列表推算名單 |
 | v18 | 球探報告：最近 7／14／30 天數據、HOT／COLD 手感、新聞短評（中文標籤＋英文原文）；資料來源「近 14 天」 |

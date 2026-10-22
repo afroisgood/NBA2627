@@ -119,6 +119,38 @@ function weekRaw(ps,s,e,val){
   return {t,starts,benched};
 }
 function weekTotals(ps,w,val){const r=weekRaw(ps,w.s,w.e,val);return {v:toV(r.t),starts:r.starts,benched:r.benched}}
+const scaleRaw=(r,k)=>{const t={};for(const x in r.t)t[x]=r.t[x]*k;return {t,starts:r.starts*k,benched:r.benched*k}};
+
+// 本週已經打完的部分用 Yahoo 實際比分（只有自己和 Yahoo 本週對手有），剩下的天數才用預測。
+// 更新時間決定切在哪：b＝還沒完全算進實際比分的第一天；f＝b 那天已經算進去的比例
+// （美東晚上 7 點開打、大約 6 小時打完；台灣白天更新時，美東當天的比賽常常還在打）
+function liveCut(at){
+  const t=Date.parse(at)-2*36e5,et=new Date(new Date(t).toLocaleString("en-US",{timeZone:"America/New_York"}));
+  return {b:dayOf(t),f:Math.min(1,Math.max(0,(et.getHours()+et.getMinutes()/60-17)/6))};
+}
+function liveOf(name,w){
+  const mt=matchNow(),c=curWeek();if(!mt||!w||!c||w.key!==c.key)return null;
+  const side=name===ME?mt.me:name===mt.opp?mt.op:null;if(!side)return null;
+  const cut=liveCut(mt.at);if(cut.b<w.s)return null;
+  if(cut.b>w.e){cut.b=w.e+1;cut.f=0;}
+  return {side,cut,at:mt.at};
+}
+// 從 cut 到第 e 天的預測（cut 那天只算還沒打的部分）
+const restRaw=(ps,cut,e,val)=>addRaw(scaleRaw(weekRaw(ps,cut.b,Math.min(cut.b,e),val),1-cut.f),weekRaw(ps,cut.b+1,e,val));
+// 實際比分換成跟 weekRaw 一樣的總數；Yahoo 只給命中率時，出手數用已打完那幾天的預測估
+function liveRaw(ps,L,w,val){
+  const est=addRaw(weekRaw(ps,w.s,L.cut.b-1,val),scaleRaw(weekRaw(ps,L.cut.b,Math.min(L.cut.b,w.e),val),L.cut.f)),s=L.side,t={};
+  for(const k in est.t)t[k]=s[k]??est.t[k];
+  if(s.fga==null&&s.fg!=null)t.fgm=s.fg*t.fga;
+  if(s.fta==null&&s.ft!=null)t.ftm=s.ft*t.fta;
+  return {t,starts:est.starts,benched:est.benched};
+}
+// 一週的預測總數：本週有實際比分時＝實際＋剩下的預測（live 是實際比分的範圍），否則跟 weekTotals 一樣
+function weekLive(ps,name,w,val){
+  const L=liveOf(name,w);if(!L)return {...weekTotals(ps,w,val),live:null};
+  const r=addRaw(liveRaw(ps,L,w,val),restRaw(ps,L.cut,w.e,val));
+  return {v:toV(r.t),starts:r.starts,benched:r.benched,live:L};
+}
 // 整季（從本週到最後一週）平均每週的預測，H2H 勝率用；同一份名單、同樣設定只算一次
 const seasonCache=new WeakMap();
 function seasonWeek(ps,val){

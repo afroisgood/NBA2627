@@ -209,17 +209,19 @@
         const col = {};
         for (const k in CAT_HEAD) col[k] = head.findIndex(h => CAT_HEAD[k].includes(h));
         if (col.fg < 0 || col.pts < 0 || col.to < 0) continue;
+        const vol = { fg: head.findIndex(h => /^FGM\/(FG)?A\*?$/.test(h)), ft: head.findIndex(h => /^FTM\/(FT)?A\*?$/.test(h)) };
         const rows = {};
         [...table.querySelectorAll('tr')].filter(tr => tr !== headRow).forEach(tr => {
           const id = teamIdOf(tr); if (!id) return;
           const cells = [...tr.children].map(x => x.textContent.trim());
           const v = {};
           for (const k in col) { const x = parseFloat((cells[col[k]] || '').replace(/,/g, '')); v[k] = Number.isFinite(x) ? x : null; }
+          for (const k in vol) { const m = (cells[vol[k]] || '').replace(/,/g, '').match(/^(\d+)\s*\/\s*(\d+)$/); if (m) { v[k + 'm'] = +m[1]; v[k + 'a'] = +m[2]; } }
           rows[id] = v;
         });
         const ids = Object.keys(rows).map(Number);
         if (ids.includes(MY_TEAM_ID) && ids.length >= 2) {
-          const oid = ids.find(i => i !== MY_TEAM_ID), ok = v => Object.values(v).filter(x => x != null).length >= 7;
+          const oid = ids.find(i => i !== MY_TEAM_ID), ok = v => Object.keys(CAT_HEAD).filter(k => v[k] != null).length >= 7;
           return { oppId: oid, me: ok(rows[MY_TEAM_ID]) ? rows[MY_TEAM_ID] : null, op: ok(rows[oid]) ? rows[oid] : null, week: +((d.body.textContent.match(/Week\s+(\d+)/) || [])[1]) || null };
         }
       }

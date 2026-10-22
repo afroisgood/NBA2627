@@ -414,3 +414,51 @@ test("新聞：英文關鍵字轉成中文標籤；格式不對的近期數據�
   assert.notEqual(check({ ...good, NEWS: { A1: [{ d: "", t: "x".repeat(400), s: "" }] } }), "");
   assert.notEqual(check({ ...good, NEWS: { A1: "<b>hi</b>" } }), "");
 });
+
+test("本週實際比分：打完的比賽用 Yahoo 實際比分，剩下的才用預測；只看 Yahoo 本週對手", () => {
+  const tmp = load();
+  const side = x => ({ fg: .4, ft: .8, tpm: 5, pts: 100, reb: 30, ast: 10, stl: 3, blk: 2, to: 5, ...x });
+  // 美東 10/21 晚上 11 點更新：10/20 打完、10/21 的比賽算 2/3 已經打了
+  const mk = (me, at = "2026-10-22T03:00:00Z") => load({ local: { "lp-data": JSON.stringify(importFixture(tmp.run, { MATCH: { at, week: 1, opp: "B", me, op: side({ pts: 80 }) } })) } });
+  const prep = run => { run("state.gp=false; GP_FULL=82; Date.now=()=>Date.parse('2026-10-22T16:00:00Z')"); };
+  let { run } = mk(side());
+  prep(run);
+  const cut = run("liveOf('A',WEEKS[0]).cut");
+  assert.equal(cut.b, 20);
+  near(cut.f, 2 / 3);
+  assert.equal(run("liveOf('C',WEEKS[0])"), null, "不是 Yahoo 本週對手，沒有實際比分");
+  const w = run(`weekLive(DATA[0][1],"A",WEEKS[0],playerValues())`);
+  // A1（LAL）每場 16.9 分：10/21 剩 1/3、10/22 一整場；A2（BOS）只有 10/20，已經算在實際比分裡
+  near(w.v.pts, 100 + 16.9 * 4 / 3);
+  near(w.starts, 4);
+  // 只有命中率時，打完的出手數用預測估（每場 13 次出手）
+  const fga0 = 13 * (2 + 2 / 3), fgaR = 13 * 4 / 3;
+  near(w.v.fg, (.4 * fga0 + 6.5 * 4 / 3) / (fga0 + fgaR));
+  near(run(`weekLive(DATA[1][1],"B",WEEKS[0],playerValues()).v.pts`), 80 + 0.8 * 13 * 4 / 3);
+  // 有出手數就直接用
+  ({ run } = mk(side({ fgm: 20, fga: 40 })));
+  prep(run);
+  near(run(`weekLive(DATA[0][1],"A",WEEKS[0],playerValues()).v.fg`), (20 + 6.5 * 4 / 3) / (40 + fgaR));
+  // 本週串流：打完的用實際，撿人從明天起算
+  const st = run(`(()=>{const rows=compute();rankAll(rows);const c=streamCtx(rows);return {opp:c.opp,from:c.from,starts:c.base.starts}})()`);
+  assert.equal(st.opp, "B");
+  assert.equal(st.from, 22);
+  near(st.starts, 4);
+  // 開打前抓的比分不算
+  ({ run } = mk(side(), "2026-10-19T12:00:00Z"));
+  prep(run);
+  assert.equal(run("liveOf('A',WEEKS[0])"), null);
+  near(run(`weekLive(DATA[0][1],"A",WEEKS[0],playerValues()).v.pts`), 16.9 * 4);
+});
+
+test("開季後第一次有本季數據：資料來源自動換成「預測＋本季」，只換一次", () => {
+  const tmp = load();
+  const imp = importFixture(tmp.run);
+  imp.DATA[0][1][0][6] = s(2, 6, 12, 2, 2, 1, 15, 4, 2, 1, 0, 2);
+  const src = st => load({ local: { "lp-data": JSON.stringify(imp), ...(st ? { "lp-state2": JSON.stringify(st) } : {}) } }).run("state.src");
+  assert.equal(src(null), "mix");
+  assert.equal(src({ src: "pr" }), "mix");
+  assert.equal(src({ src: "ls" }), "ls", "自己選了別的就不動");
+  assert.equal(src({ src: "pr", curSeen: true }), "pr", "換過一次之後，改回預測就照自己的選擇");
+  assert.equal(load({ local: { "lp-data": JSON.stringify(importFixture(tmp.run)) } }).run("state.src"), "pr", "還沒有本季數據時不換");
+});

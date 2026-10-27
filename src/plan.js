@@ -102,7 +102,7 @@ async function streamSearch(){
 }
 
 // ---------- 快速選單：右下角 MENU 按鈕，點了跳到各區塊 ----------
-const NAV=[["me-sum","我的隊伍"],["h-vs","對戰預測"],["h-today","每日先發"],["h-trade","交易分析"],["h-fa","FA 分析／串流"],["h-scout","球探報告"],["h-league","聯盟排名"],["h-class","職業鑑定"],["h-teams","各隊球員"],["h-dex","球員卡圖鑑"]];
+const NAV=[["me-sum","我的隊伍"],["h-vs","對戰預測"],["h-today","每日先發"],["h-trade","交易分析"],["h-fa","FA 分析／串流"],["h-scout","球探報告"],["h-league","聯盟排名"],["h-check","模型檢查"],["h-class","職業鑑定"],["h-teams","各隊球員"],["h-dex","球員卡圖鑑"]];
 function navGo(id){
   const el=document.getElementById(id),bar=document.querySelector(".controls");if(!el)return;
   const off=(bar?bar.getBoundingClientRect().height:0)+12;

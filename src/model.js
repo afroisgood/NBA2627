@@ -38,8 +38,9 @@ function addMix(p){
 const addRecent=p=>{p[8]=(RECENT[p[0]]||{}).l14||null};
 
 // H2H 勝率：每項當成常態分布估計贏面。計數項用「變異係數」（每週總數大約上下浮動幾 %），命中率用固定標準差
-const CV={tpm:.16,pts:.09,reb:.09,ast:.11,stl:.20,blk:.25,to:.13};
-const PCT_SD={fg:.013,ft:.025};
+// CV0、PCT_SD0 是經驗值；有聯盟真實每週成績時，載入後用 calibrate() 校正 CV、PCT_SD（見檔案最後）
+const CV0={tpm:.16,pts:.09,reb:.09,ast:.11,stl:.20,blk:.25,to:.13},PCT_SD0={fg:.013,ft:.025};
+const CV={...CV0},PCT_SD={...PCT_SD0};
 function normCdf(z){if(!z)return .5;const t=1/(1+.2316419*Math.abs(z)),d=.3989423*Math.exp(-z*z/2);
   const p=d*t*(.3193815+t*(-.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));return z>0?1-p:p}
 function catProb(c,a,b){
@@ -171,4 +172,94 @@ function seasonWeek(ps,val){
   const v=toV(r.t);for(const k in v)if(!["fg","ft"].includes(k))v[k]/=ws.length;
   if(seasonCache.size>5000)seasonCache.clear();
   seasonCache.set(key,v);return v;
+}
+
+// ---------- 模型檢查：用聯盟真實每週成績校正起伏、回測預測（WEEKLY、TID 是更新程式抓的；隊伍用 Yahoo 編號） ----------
+const WEEKLY=IMP&&IMP.WEEKLY?IMP.WEEKLY:null;
+const TID=IMP&&IMP.TID?IMP.TID:{};
+const CAT_K=["fg","ft","tpm","pts","reb","ast","stl","blk","to"];   // 跟 CATS 同樣順序
+// 校正：每隊每週的成績先跟那週的聯盟平均比（計數項用比例、命中率用差距），消掉「這週比較長、大家都多打幾場」的影響；
+// 同一隊在不同週之間跳動多大，就是每週的起伏。週數少時偏向經驗值：經驗值當成 CAL_N0 筆資料一起平均
+const CAL_N0=30;
+function calibrate(weeks){
+  if(!weeks||weeks.length<2)return null;
+  const by={};CAT_K.forEach(k=>by[k]={});
+  weeks.forEach(x=>{
+    const rows=x.g.flatMap(g=>[[g[0],g[1]],[g[2],g[3]]]);
+    CAT_K.forEach(k=>{
+      const pct=k==="fg"||k==="ft",a=rows.filter(r=>r[1][k]!=null);if(a.length<2)return;
+      const m=a.reduce((s,r)=>s+r[1][k],0)/a.length;if(!pct&&!m)return;
+      a.forEach(([id,v])=>(by[k][id]=by[k][id]||[]).push(pct?v[k]-m:v[k]/m));
+    });
+  });
+  const cv={},sd={},est={};let n=0;
+  CAT_K.forEach(k=>{
+    let ss=0,dof=0;
+    Object.values(by[k]).forEach(a=>{if(a.length<2)return;const mu=a.reduce((s,x)=>s+x,0)/a.length;a.forEach(x=>ss+=(x-mu)**2);dof+=a.length-1;});
+    const pct=k==="fg"||k==="ft",p0=pct?PCT_SD0[k]:CV0[k];
+    est[k]=dof?Math.sqrt(ss/dof):null;
+    (pct?sd:cv)[k]=Math.sqrt((CAL_N0*p0*p0+ss)/(CAL_N0+dof));
+    n=Math.max(n,dof);
+  });
+  return {weeks:weeks.length,n,cv,sd,est};
+}
+const CAL=calibrate(WEEKLY&&WEEKLY.weeks);
+if(CAL){Object.assign(CV,CAL.cv);Object.assign(PCT_SD,CAL.sd);}
+
+// Yahoo 的週次 → 賽程的天數。Yahoo 第 1 週可能比較長，用抓資料那天算出差幾週（off）：
+// Yahoo 第 y 週＝WEEKS 第 y+off 週；Yahoo 第 1 週＝WEEKS 第 1～1+off 週。對不起來（off 不在 0～3）就不用
+function yWeekDays(y){
+  if(!WEEKLY||!WEEKS.length)return null;
+  const d=dayOf(IMP.at),i=WEEKS.findIndex(w=>d<=w.e),off=(i<0?WEEKS.length:i+1)-WEEKLY.cur;
+  if(off<0||off>3)return null;
+  if(y===1)return {s:WEEKS[0].s,e:WEEKS[Math.min(off,WEEKS.length-1)].e};
+  const w=WEEKS[y+off-1];return w?{s:w.s,e:w.e}:null;
+}
+const teamById=id=>{const n=Object.keys(TID).find(k=>TID[k]===id);return n?DATA.find(t=>t[0]===n)||null:null};
+// 本週的預測：每組對戰用這週的賽程、每天排先發算雙方總數，記下勝率和 9 項贏面。
+// 用固定的設定（有本季數據用預測＋本季、扣傷兵、考慮出賽率、9 項），不受畫面上的選擇影響
+function predWeek(){
+  if(!WEEKLY||!WEEKLY.now.length)return null;
+  const r=yWeekDays(WEEKLY.cur);if(!r)return null;
+  const keep={src:state.src,inj:state.inj,gp:state.gp,punt:state.punt};
+  Object.assign(state,{src:hasCur()?"mix":"pr",inj:true,gp:true,punt:false});
+  try{
+    const val=playerValues(),g=[];
+    for(const [a,b] of WEEKLY.now){
+      const A=teamById(a),B=teamById(b);if(!A||!B)continue;
+      const m=matchup(toV(weekRaw(A[1],r.s,r.e,val).t),toV(weekRaw(B[1],r.s,r.e,val).t));
+      g.push([a,b,+m.win.toFixed(3),m.ps.map(p=>+p.toFixed(3))]);
+    }
+    return g.length?{at:IMP.at,late:dayOf(IMP.at)>r.s,g}:null;
+  }finally{Object.assign(state,keep);}
+}
+// 所有週的預測紀錄。每週只留第一次的（最接近開打前）：資料裡的 PRED、這台電腦的 lp-pred，再加上這份資料的本週預測
+let PRED_ALL=null;
+function predAll(){
+  if(PRED_ALL)return PRED_ALL;
+  const all={},add=o=>{if(!okPred(o))return;for(const k in o)if(!all[k]||Date.parse(o[k].at)<Date.parse(all[k].at))all[k]=o[k];};
+  add(IMP&&IMP.PRED);
+  try{add(JSON.parse(localStorage.getItem("lp-pred")||"null"));}catch(e){}
+  if(WEEKLY&&!all[WEEKLY.cur]){const p=predWeek();if(p)all[WEEKLY.cur]=p;}
+  try{localStorage.setItem("lp-pred",JSON.stringify(all));}catch(e){}
+  return PRED_ALL=all;
+}
+// 回測：有預測、也有實際成績的週，看模型猜中幾場（勝率 > 50% 的那隊有沒有贏；平手不算）、幾個項目，
+// 以及 Brier 分數＝(預測勝率 − 實際結果)² 的平均：越小越準，每場都猜 50% 是 0.25
+function backtest(){
+  const P=predAll(),me=TID[ME],out=[];if(!WEEKLY)return out;
+  WEEKLY.weeks.forEach(x=>{
+    const r=P[x.w];if(!r)return;
+    let hit=0,n=0,ch=0,cn=0,br=0,mine=null;
+    r.g.forEach(([a,b,p,cps])=>{
+      const g=x.g.find(y=>(y[0]===a&&y[2]===b)||(y[0]===b&&y[2]===a));if(!g)return;
+      const va=g[0]===a?g[1]:g[3],vb=g[0]===a?g[3]:g[1];let wa=0,wb=0;
+      CAT_K.forEach((k,i)=>{if(va[k]==null||vb[k]==null||va[k]===vb[k])return;const aw=k==="to"?va[k]<vb[k]:va[k]>vb[k];if(aw)wa++;else wb++;cn++;if((cps[i]>.5)===aw)ch++;});
+      if(a===me||b===me)mine=a===me?{opp:b,p,w:wa,l:wb}:{opp:a,p:1-p,w:wb,l:wa};
+      if(wa===wb)return;
+      n++;const aw=wa>wb;if((p>.5)===aw)hit++;br+=(p-(aw?1:0))**2;
+    });
+    if(n||mine)out.push({w:x.w,at:r.at,late:r.late,hit,n,ch,cn,brier:n?br/n:null,mine});
+  });
+  return out;
 }

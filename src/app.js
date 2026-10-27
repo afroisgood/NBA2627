@@ -211,9 +211,34 @@ function renderMe(rows){
     <div class="ms-card line"><span class="k">職業鑑定 · Lv.${Math.round(r.win*98)+1}</span><p>${tc.cls.i} ${tc.title}</p><p class="s">${tc.cls.d}</p></div>`;
 }
 
+// 模型檢查：勝率起伏的設定（經驗值 → 用真實每週成績校正）和每週預測的回測
+function renderCheck(){
+  const P=predAll(),cur=WEEKLY&&P[WEEKLY.cur],bt=backtest();
+  const sdTxt=(c,cv,sd)=>c.pct?(sd&&sd[c.k]!=null?`±${f3(sd[c.k])}`:"—"):(cv&&cv[c.k]!=null?`±${Math.round(cv[c.k]*100)}%`:"—");
+  const row=(l,cv,sd)=>`<tr><td class="name">${l}</td>${CATS.map(c=>`<td>${sdTxt(c,cv,sd)}</td>`).join("")}</tr>`;
+  const calNote=CAL?`已用 ${CAL.weeks} 週聯盟真實成績校正。週數少時偏向經驗值（經驗值當成 ${CAL_N0} 筆資料一起平均），週數越多越相信真實資料。`
+    :WEEKLY?`真實成績還不夠（至少要 2 週打完的成績，現在 ${WEEKLY.weeks.length} 週），先用經驗值。`:"從 Yahoo 更新資料後才會抓每週成績，目前用經驗值。";
+  const predNote=!WEEKLY?"":cur?`第 ${WEEKLY.cur} 週的預測已經記下來（${fmtAt(cur.at)} 的資料${cur.late?"，記錄時這週已經開打":""}），這週打完、下次更新資料後就會出現在下面。`
+    :"這份資料對不上本週的賽程，沒辦法記錄本週預測。";
+  const nm=id=>{const n=Object.keys(TID).find(k=>TID[k]===id);return n?esc(n):`第 ${id} 隊`};
+  const btRows=bt.map(x=>`<tr><td class="name">第 ${x.w} 週${x.late?"<span class=\"pos\">開打後才記錄</span>":""}</td><td>${x.n?`${x.hit}／${x.n}`:"—"}</td><td>${x.cn?`${x.ch}／${x.cn}`:"—"}</td><td>${x.brier==null?"—":x.brier.toFixed(2)}</td>
+    <td>${x.mine?`對 ${nm(x.mine.opp)}：預測勝率 ${pctTxt(x.mine.p)} → 實際 ${x.mine.w}:${x.mine.l}`:"—"}</td></tr>`).join("");
+  const tot=bt.reduce((a,x)=>({hit:a.hit+x.hit,n:a.n+x.n}),{hit:0,n:0});
+  document.getElementById("check").innerHTML=`
+    <p class="note">${calNote}</p>
+    <div class="scroll"><table><thead><tr><th class="name">每週起伏</th>${CATS.map(c=>`<th>${c.l}</th>`).join("")}</tr></thead><tbody>
+      ${row("經驗值",CV0,PCT_SD0)}${CAL?row("真實資料估計",CAL.est,CAL.est):""}${row("現在用的",CV,PCT_SD)}</tbody></table></div>
+    <p class="note">計數項是「一隊每週的總數大約上下跳動幾 %」，命中率是「大約上下跳動多少」。起伏越大，實力差一點點的對戰越接近五五波。</p>
+    ${predNote?`<p class="note">${predNote}</p>`:""}
+    ${bt.length?`<p class="note">回測：總共猜中 <b>${tot.hit}／${tot.n}</b> 場（${tot.n?pctTxt(tot.hit/tot.n):"—"}）。</p>
+    <div class="scroll"><table><thead><tr><th class="name">週次</th><th>猜中場數</th><th>猜中項目</th><th>Brier</th><th>你的對戰</th></tr></thead><tbody>${btRows}</tbody></table></div>
+    <p class="note">猜中＝預測勝率超過 50% 的那隊真的贏了（平手不算）。Brier＝(預測勝率 − 實際結果)² 的平均，越小越準；每場都猜 50% 是 0.25。週次是 Yahoo 的週次。</p>`
+    :`<p class="note">${WEEKLY?"還沒有可以比對的週：要先記下某一週的預測，那週打完後再更新一次資料。":"每週第一次從 Yahoo 更新資料時，會記下模型對這週 8 場對戰的預測；那週打完、再更新一次後，就會在這裡比對猜中幾場。"}</p>`}`;
+}
+
 function render(){
   TREND=trendFn();
-  const rows=compute();rankAll(rows,true);renderMe(rows);renderVS(rows);renderTrade(rows);renderFA(rows);renderToday();renderStreamInfo(rows);renderScout();renderLeague(rows);renderClass(rows);renderTeams(rows);renderDex();
+  const rows=compute();rankAll(rows,true);renderMe(rows);renderVS(rows);renderTrade(rows);renderFA(rows);renderToday();renderStreamInfo(rows);renderScout();renderLeague(rows);renderCheck();renderClass(rows);renderTeams(rows);renderDex();
   const set=(id,on)=>document.getElementById(id).setAttribute("aria-pressed",on);
   set("src-pr",state.src==="pr");set("src-ls",state.src==="ls");set("src-cur",state.src==="cur");set("src-mix",state.src==="mix");set("src-l14",state.src==="l14");set("inj-on",state.inj);set("inj-off",!state.inj);set("gp-on",state.gp);set("gp-off",!state.gp);set("mode-9",!state.punt);set("mode-p",state.punt);
 }

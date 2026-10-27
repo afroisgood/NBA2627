@@ -201,7 +201,14 @@
     // 3-2) 本週對戰：Yahoo 對戰頁裡有 FG%、PTS 等欄位的表格，用隊伍連結找出自己和對手那兩列
     const CAT_HEAD = { fg: ['FG%'], ft: ['FT%'], tpm: ['3PTM', '3PM'], pts: ['PTS'], reb: ['REB'], ast: ['AST'], stl: ['ST', 'STL'], blk: ['BLK'], to: ['TO'] };
     const teamIdOf = el => { const a = [...el.querySelectorAll('a[href]')].map(x => (x.getAttribute('href') || '').match(new RegExp('/nba/' + LEAGUE + '/(\\d+)(?:[/?#]|$)'))).find(Boolean); return a ? +a[1] : 0; };
-    const parseMatch = d => {
+    // 週次：先找選單裡被選中的那一週，找不到才用頁面上第一個「Week N」
+    const weekOf = d => {
+      const sel = [...d.querySelectorAll('option[selected], [aria-selected="true"], [aria-current], .is-selected, .Selected')].map(e => e.textContent).join(' ');
+      const m = sel.match(/Week\s+(\d+)/) || d.body.textContent.match(/Week\s+(\d+)/);
+      return m ? +m[1] : null;
+    };
+    // 對戰頁裡有 9 項數據的表格：回傳每隊（Yahoo 隊伍編號）一列數據；need＝表格裡一定要有這一隊
+    const parseRows = (d, need) => {
       for (const table of d.querySelectorAll('table')) {
         const headRow = table.querySelector('thead tr') || table.querySelector('tr');
         if (!headRow) continue;
@@ -220,12 +227,16 @@
           rows[id] = v;
         });
         const ids = Object.keys(rows).map(Number);
-        if (ids.includes(MY_TEAM_ID) && ids.length >= 2) {
-          const oid = ids.find(i => i !== MY_TEAM_ID), ok = v => Object.keys(CAT_HEAD).filter(k => v[k] != null).length >= 7;
-          return { oppId: oid, me: ok(rows[MY_TEAM_ID]) ? rows[MY_TEAM_ID] : null, op: ok(rows[oid]) ? rows[oid] : null, week: +((d.body.textContent.match(/Week\s+(\d+)/) || [])[1]) || null };
-        }
+        if (ids.length >= 2 && (!need || ids.includes(need))) return { rows, ids, week: weekOf(d) };
       }
       return null;
+    };
+    const okCats = v => !!v && Object.keys(CAT_HEAD).filter(k => v[k] != null).length >= 7;
+    const parseMatch = d => {
+      const m = parseRows(d, MY_TEAM_ID);
+      if (!m) return null;
+      const oid = m.ids.find(i => i !== MY_TEAM_ID);
+      return { oppId: oid, me: okCats(m.rows[MY_TEAM_ID]) ? m.rows[MY_TEAM_ID] : null, op: okCats(m.rows[oid]) ? m.rows[oid] : null, week: m.week };
     };
     let MATCH = null;
     for (const url of [`/nba/${LEAGUE}/matchup?mid1=${MY_TEAM_ID}`, `/nba/${LEAGUE}/${MY_TEAM_ID}/matchup`]) {
@@ -238,6 +249,49 @@
         console.warn('[戰力表更新] 對戰頁讀取失敗：', url, e);
       }
     }
+
+    // 3-3) 每週成績（模型校正、回測用）：打完的每一週 16 隊的 9 項實際成績，加上本週的對戰組合
+    // 打完的週不會再變，存在這個網站（Yahoo）的 localStorage，下次只抓新的週。失敗只略過，不影響其他資料
+    step = '抓每週成績';
+    let WEEKLY = null;
+    const yw = MATCH && MATCH.week;
+    if (yw) {
+      try {
+        const CK = 'lp-weekly-' + LEAGUE;
+        let cache = {};
+        try { cache = JSON.parse(localStorage.getItem(CK) || '{}') || {}; } catch (e) { }
+        const weekGames = async w => {
+          const seen = new Set(), g = [];
+          for (let id = 1; id <= TEAMS; id++) {
+            if (seen.has(id)) continue;
+            const m = parseRows(await getDoc(`/nba/${LEAGUE}/matchup?week=${w}&mid1=${id}`), id);
+            const oid = m && m.ids.find(i => i !== id);
+            if (!oid) continue;
+            seen.add(id); seen.add(oid);
+            g.push([id, m.rows[id], oid, m.rows[oid]]);
+          }
+          return g;
+        };
+        const full = g => Array.isArray(g) && g.length === TEAMS / 2 && g.every(x => okCats(x[1]) && okCats(x[3]));
+        const need = [];
+        for (let w = 1; w < yw; w++) if (!full(cache[w])) need.push(w);
+        for (let i = 0; i < need.length; i += 2) {
+          say(`抓每週成績（第 ${need[i]}${need[i + 1] ? '、' + need[i + 1] : ''} 週）…`);
+          await Promise.all(need.slice(i, i + 2).map(async w => { const g = await weekGames(w); if (full(g)) cache[w] = g; }));
+        }
+        say('抓本週對戰組合…');
+        const now = (await weekGames(yw)).map(x => [x[0], x[2]]);
+        const weeks = [];
+        for (let w = 1; w < yw; w++) if (full(cache[w])) weeks.push({ w, g: cache[w].map(x => [x[0], x[1], x[2], x[3]]) });
+        const sig = new Set(weeks.map(x => JSON.stringify(x.g.map(y => [y[1], y[3]]))));
+        if (sig.size < weeks.length) throw new Error('不同週抓到一模一樣的成績，週次參數可能沒有作用');
+        try { localStorage.setItem(CK, JSON.stringify(cache)); } catch (e) { }
+        WEEKLY = { cur: yw, weeks, now };
+      } catch (e) {
+        console.warn('[戰力表更新] 每週成績抓取失敗（略過）：', e);
+      }
+    }
+    const TID = Object.fromEntries(rosters.map(t => [t.name, t.id]));
 
     step = '整理資料';
     // 4) 合併：預測 = Yahoo 和 ESPN 場均平均（只有一家就用那一家）
@@ -301,10 +355,10 @@
       }));
     }
 
-    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA, SCHED, MATCH, IDS, RECENT, NEWS });
+    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA, SCHED, MATCH, WEEKLY, TID, IDS, RECENT, NEWS });
     window._LP_UPDATE = json;
     const curN = DATA.reduce((a, t) => a + t[1].filter(p => p[6]).length, 0);
-    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到；賽程${SCHED ? '有' : '沒有'}抓到；頭像編號 ${Object.keys(IDS).length} 位；近期數據 ${Object.keys(RECENT).length} 位；新聞 ${Object.keys(NEWS).length}／${newsFor.length} 位（ESPN ${newsSrc.espn}、Yahoo ${newsSrc.yahoo}）；本週對手：${MATCH ? MATCH.opp + (MATCH.me ? '（含目前比分）' : '（還沒有比分）') : '沒有抓到'}。${failedTeams.length ? `⚠ ${failedTeams.map(t => t.name).join('、')} 的頁面 Yahoo 打不開，名單改用球員列表推算（${failedTeams.map(t => t.ps.length).join('、')} 人；看不到先發位置和 IL）。` : ''}`);
+    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到；賽程${SCHED ? '有' : '沒有'}抓到；頭像編號 ${Object.keys(IDS).length} 位；近期數據 ${Object.keys(RECENT).length} 位；新聞 ${Object.keys(NEWS).length}／${newsFor.length} 位（ESPN ${newsSrc.espn}、Yahoo ${newsSrc.yahoo}）；本週對手：${MATCH ? MATCH.opp + (MATCH.me ? '（含目前比分）' : '（還沒有比分）') : '沒有抓到'}；每週成績：${WEEKLY ? `${WEEKLY.weeks.length} 週、本週 ${WEEKLY.now.length} 組對戰` : '沒有抓到'}。${failedTeams.length ? `⚠ ${failedTeams.map(t => t.name).join('、')} 的頁面 Yahoo 打不開，名單改用球員列表推算（${failedTeams.map(t => t.ps.length).join('、')} 人；看不到先發位置和 IL）。` : ''}`);
     btns.innerHTML = '';
     button('▶ 打開戰力表', () => window.open(SITE + '#import=' + encodeURIComponent(json), '_blank'));
     button('複製結果', async () => {

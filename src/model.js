@@ -4,7 +4,9 @@
 // 更新資料後 Q_DAYS 天內 Q 打 75 折、O_DAYS 天內 O 不算；整季的名次和 H2H 勝率不看傷兵（長期缺陣已經算在出賽率和預測場數裡）
 // 「全部照算」時都算 1
 const Q_RATE=0.75,Q_DAYS=3,O_DAYS=7;
-const statusDay=()=>IMP&&IMP.at?dayOf(IMP.at):todayDay();
+// 資料載入後 IMP 不會變，只算一次（時區換算很慢，weekRaw 每人每天都會用到）
+let STATUS_DAY=null;
+const statusDay=()=>STATUS_DAY??(STATUS_DAY=IMP&&IMP.at?dayOf(IMP.at):todayDay());
 const injOn=(p,d)=>{if(!state.inj)return 1;const k=d-statusDay();return p[3]==="O"?(k<O_DAYS?0:1):p[3]==="Q"?(k<Q_DAYS?Q_RATE:1):1};
 // 出賽率：預測出賽場數 ÷ 全聯盟最多的預測場數（季前大約 82；開季後預測只算剩下的比賽，會跟著變少）
 // 沒有預測就用上季場數 ÷ 82；容易受傷、輪休的球員打折；「不考慮」時都算 1
@@ -14,14 +16,22 @@ const gpRate=p=>{const r=p[4]?p[4][0]/gpFull():p[5]?p[5][0]/82:1;return Math.min
 // 整季加總用的權重＝出賽率
 const gpW=p=>state.gp?gpRate(p):1;
 
-// 預測＋本季混合（存在 index 7）：本季打 g 場時，本季佔 g/(g+K)、預測佔 K/(g+K)
-const MIX_K=20;
+// 預測＋本季混合（存在 index 7）：本季打 g 場時，本季佔 g/(g+K)、預測佔 K/(g+K)，每一項的 K 不一樣：
+// 出手數、得分、籃板、助攻、失誤幾場就看得出角色（K 小）；三分、阻攻、抄截起伏比較大；命中率要很多場才可信（K 大）
+// 命中率另外混：先混出手數，再乘上混出來的命中率得到命中數
+const MIX_K={fga:12,fta:12,pts:12,reb:12,ast:12,to:12,tpm:20,blk:20,stl:25,fg:40,ft:60};
+const MIX_I={fga:2,fta:4,tpm:5,pts:6,reb:7,ast:8,stl:9,blk:10,to:11};
 function addMix(p){
   const pr=p[4],cu=p[6];
   if(!cu){p[7]=pr||null;return;}
   if(!pr){p[7]=cu;return;}
-  const a=cu[0]/(cu[0]+MIX_K);
-  p[7]=pr.map((x,i)=>i===0?x:+(x*(1-a)+cu[i]*a).toFixed(2));
+  const g=cu[0],mix=(a,b,k)=>a+(b-a)*g/(g+k),r=pr.slice();
+  for(const k in MIX_I)r[MIX_I[k]]=mix(pr[MIX_I[k]],cu[MIX_I[k]],MIX_K[k]);
+  // 本季沒出手就沿用預測的命中率；預測沒出手就用本季的
+  const pct=(m,a,k)=>!cu[a]?(pr[a]?pr[m]/pr[a]:0):!pr[a]?cu[m]/cu[a]:mix(pr[m]/pr[a],cu[m]/cu[a],k);
+  r[1]=r[2]*pct(1,2,MIX_K.fg);
+  r[3]=r[4]*pct(3,4,MIX_K.ft);
+  p[7]=r.map((x,i)=>i===0?x:+x.toFixed(2));
 }
 
 // 最近 14 天場均放在 index 8（資料來源「近 14 天」）
@@ -44,10 +54,9 @@ function matchup(va,vb){
   return {ps,exp:ps.reduce((a,b)=>a+b,0),win:dist.slice(5).reduce((a,b)=>a+b,0)};
 }
 // 每隊對其他 15 隊的平均勝率、平均贏幾項，並排名
-// 有賽程時用「整季平均每週」的預測（每天排先發、板凳補位）；沒有賽程就用每場平均加總
+// 用的是 compute() 算出來的球隊數據 v：有賽程時是「整季平均每週」（每天排先發、板凳補位），沒有賽程就是每場平均加總
 function h2hAll(rows){
-  if(WEEKS.length){const val=playerValues();rows.forEach(r=>r.hv=seasonWeek(r.ps,val));}else rows.forEach(r=>r.hv=r.v);
-  rows.forEach(r=>{let w=0,e=0;rows.forEach(o=>{if(o===r)return;const m=matchup(r.hv,o.hv);w+=m.win;e+=m.exp;});r.win=w/(rows.length-1);r.expCats=e/(rows.length-1);});
+  rows.forEach(r=>{let w=0,e=0;rows.forEach(o=>{if(o===r)return;const m=matchup(r.v,o.v);w+=m.win;e+=m.exp;});r.win=w/(rows.length-1);r.expCats=e/(rows.length-1);});
   [...rows].sort((a,b)=>b.win-a.win).forEach((r,i)=>r.winRk=i+1);
 }
 const pctTxt=x=>`${Math.round(x*100)}%`;
@@ -108,9 +117,10 @@ function startProbs(players,avail){
 const toV=t=>({fg:t.fga?t.fgm/t.fga:0,ft:t.fta?t.ftm/t.fta:0,tpm:t.tpm,pts:t.pts,reb:t.reb,ast:t.ast,stl:t.stl,blk:t.blk,to:t.to});
 const addRaw=(a,b)=>{const t={};for(const k in a.t)t[k]=a.t[k]+b.t[k];return {t,starts:a.starts+b.starts,benched:a.benched+b.benched}};
 // 一隊在第 s～e 天的預測總數（期望值）：每天依位置排先發，缺陣（近期傷兵、出賽率）時由板凳補上
-function weekRaw(ps,s,e,val){
+// il＝也算 IL 球員（整季預測用：他們回來後會上場，缺陣的場次已經算在預測場數和出賽率裡）
+function weekRaw(ps,s,e,val,il){
   const si=SI(),t={fgm:0,fga:0,ftm:0,fta:0,tpm:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0};let starts=0,benched=0;
-  const pool=ps.filter(p=>active(p)&&p[si]).map(p=>({p,v:val(p[si])??-99,a:gpW(p),g:GAMES[nbaTeam(p)]})).sort((a,b)=>b.v-a.v);
+  const pool=ps.filter(p=>(il||active(p))&&p[si]).map(p=>({p,v:val(p[si])??-99,a:gpW(p),g:GAMES[nbaTeam(p)]})).sort((a,b)=>b.v-a.v);
   for(let d=s;d<=e;d++){
     const today=pool.filter(x=>x.g&&x.g.has(d)).map(x=>({...x,a:x.a*injOn(x.p,d)})).filter(x=>x.a>0);if(!today.length)continue;
     const pr=startProbs(today.map(x=>x.p),today.map(x=>x.a));
@@ -151,11 +161,14 @@ function weekLive(ps,name,w,val){
   const r=addRaw(liveRaw(ps,L,w,val),restRaw(ps,L.cut,w.e,val));
   return {v:toV(r.t),starts:r.starts,benched:r.benched,live:L};
 }
-// 整季（從本週到最後一週）平均每週的預測，H2H 勝率用；同一份名單、同樣設定只算一次
-const seasonCache=new WeakMap();
+// 整季（從本週到最後一週）平均每週的預測：聯盟表的名次、H2H 勝率、交易和撿人模擬都用它。IL 球員也算（見 weekRaw）
+// 同樣的球員、數據和設定只算一次（交易模擬每次只有一兩隊會變，其他隊直接用算過的）
+const seasonCache=new Map();
 function seasonWeek(ps,val){
-  const key=`${state.src}|${state.inj}|${state.gp}|${state.punt}`,c=seasonCache.get(ps);if(c&&c.key===key)return c.v;
-  const cw=curWeek(),i0=WEEKS.indexOf(cw),ws=WEEKS.slice(i0<0?0:i0),r=weekRaw(ps,ws[0].s,ws[ws.length-1].e,val);
+  const si=SI(),cw=curWeek(),key=`${cw.key}|${state.src}|${state.inj}|${state.gp}|${state.punt}|`+ps.map(p=>`${p[0]}/${p[1]}/${p[3]}/${gpW(p)}/${p[si]||""}`).join("|");
+  const c=seasonCache.get(key);if(c)return c;
+  const i0=WEEKS.indexOf(cw),ws=WEEKS.slice(i0<0?0:i0),r=weekRaw(ps,ws[0].s,ws[ws.length-1].e,val,true);
   const v=toV(r.t);for(const k in v)if(!["fg","ft"].includes(k))v[k]/=ws.length;
-  seasonCache.set(ps,{key,v});return v;
+  if(seasonCache.size>5000)seasonCache.clear();
+  seasonCache.set(key,v);return v;
 }

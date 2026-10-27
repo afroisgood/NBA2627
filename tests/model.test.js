@@ -100,14 +100,19 @@ test("matchup：贏面雙方加起來是 1；實力一樣勝率 50%；全面壓�
   assert.ok(res.abExp > 6 && res.abExp < 8);
 });
 
-test("addMix：本季打 g 場時佔 g/(g+20)；只有一種數據就用那一種", () => {
+test("addMix：每項各自決定多快相信本季（得分 g/(g+12)、FG% g/(g+40)）；只有一種數據就用那一種", () => {
   const { run } = load();
   const out = run(`(()=>{
-    const pr=[70,5,10,2,2.5,1,20,5,3,1,0.5,1.5], cu=[10,5,10,2,2.5,1,30,5,3,1,0.5,1.5];
-    const a=["x","BN","LAL - PG","",pr,null,cu], b=["y","BN","LAL - PG","",pr,null,null], c=["z","BN","LAL - PG","",null,null,cu], d=["w","BN","","",null,null,null];
-    [a,b,c,d].forEach(addMix);return [a[7],b[7],c[7],d[7]];})()`);
-  near(out[0][6], 20 * (2 / 3) + 30 * (1 / 3), 0.01);
+    const pr=[70,5,10,2,2.5,1,20,5,3,1,0.5,1.5], cu=[10,6,10,2,2.5,1,30,5,3,2,0.5,1.5], cu0=[10,6,10,0,0,1,30,5,3,1,0.5,1.5];
+    const a=["x","BN","LAL - PG","",pr,null,cu], b=["y","BN","LAL - PG","",pr,null,null], c=["z","BN","LAL - PG","",null,null,cu], d=["w","BN","","",null,null,null], e=["v","BN","","",pr,null,cu0];
+    [a,b,c,d,e].forEach(addMix);return [a[7],b[7],c[7],d[7],e[7]];})()`);
+  near(out[0][6], 20 + 10 * 10 / 22, 0.01);
+  near(out[0][9], 1 + 1 * 10 / 35, 0.01, "抄截 K=25，比得分慢");
+  near(out[0][2], 10, 1e-9);
+  near(out[0][1], 10 * (0.5 + 0.1 * 10 / 50), 0.01, "FG% 50% → 60%，打 10 場只往本季移 1/5");
   assert.equal(out[0][0], 70, "GP 用預測的");
+  near(out[4][4], 2.5 - 2.5 * 10 / 22, 0.01, "本季沒罰球：罰球數往 0 移");
+  near(out[4][3] / out[4][4], 0.8, 0.01, "本季沒罰球：FT% 沿用預測");
   assert.deepEqual(out[1], [70, 5, 10, 2, 2.5, 1, 20, 5, 3, 1, 0.5, 1.5]);
   assert.equal(out[2][6], 30);
   assert.equal(out[3], null);
@@ -359,7 +364,7 @@ test("本週串流：撿一位這週有比賽的 FA，先發場次變多、勝�
   const tmp = load();
   const imp = importFixture(tmp.run);
   const { run } = load({ local: { "lp-data": JSON.stringify(imp) } });
-  run("state.gp=false; GP_FULL=82");
+  run("state.gp=false; GP_FULL=82; Date.now=()=>Date.parse('2026-10-20T16:00:00Z')");   // 固定「今天」在第 1 週
   // A 隊只留 1 人有比賽（A1，LAL 3 場）；FA 裡的 Thybulle 也是 LAL
   const r = run(`(()=>{const wk=WEEKS[0],val=playerValues(),me=DATA[0][1];
     const ctx={wk,from:wk.s,val,opp:"B",me,open:3,drops:["A3"],oppV:weekTotals(DATA[1][1],wk,val).v,pre:null};
@@ -369,8 +374,8 @@ test("本週串流：撿一位這週有比賽的 FA，先發場次變多、勝�
   near(r.a, r.b + 3, 1e-9);
   near(r.s, r.b + 3, 1e-9, "A3（DEN）這週沒比賽，丟掉不影響");
   assert.ok(r.aw >= r.bw);
-  // 有賽程時，H2H 勝率用整季平均每週（hv），A 隊還是最強
-  const h = run(`(()=>{const rows=compute();rankAll(rows,true);return rows.map(x=>({n:x.name,hv:!!x.hv,rk:x.winRk}))})()`);
+  // 有賽程時，名次和 H2H 勝率用整季平均每週（wk），A 隊還是最強
+  const h = run(`(()=>{const rows=compute();rankAll(rows,true);return rows.map(x=>({n:x.name,hv:x.wk,rk:x.winRk}))})()`);
   assert.ok(h.every(x => x.hv));
   assert.equal(h.find(x => x.n === "A").rk, 1);
 });
@@ -461,4 +466,26 @@ test("開季後第一次有本季數據：資料來源自動換成「預測＋�
   assert.equal(src({ src: "ls" }), "ls", "自己選了別的就不動");
   assert.equal(src({ src: "pr", curSeen: true }), "pr", "換過一次之後，改回預測就照自己的選擇");
   assert.equal(load({ local: { "lp-data": JSON.stringify(importFixture(tmp.run)) } }).run("state.src"), "pr", "還沒有本季數據時不換");
+});
+
+test("整季每週預測：名次和 H2H 用同一份；IL 球員也算；初篩用每場平均；數據變了會重算", () => {
+  const tmp = load();
+  const imp = importFixture(tmp.run);
+  const { run } = load({ local: { "lp-data": JSON.stringify(imp) } });
+  run("state.gp=false; GP_FULL=82; Date.now=()=>Date.parse('2026-10-20T16:00:00Z')");
+  const r = run(`(()=>{const rows=compute();rankAll(rows,true);const A=rows.find(x=>x.name==="A"),val=playerValues();
+    const noIL=weekRaw(DATA[0][1],WEEKS[0].s,WEEKS[WEEKS.length-1].e,val).t.pts/WEEKS.length;
+    const fast=compute(DATA,true).find(x=>x.name==="A");
+    return {weeks:WEEKS.length,wk:A.wk,pts:A.v.pts,noIL,pg:A.pg.pts,fastWk:fast.wk,fastPts:fast.v.pts,rk:A.r.pts}})()`);
+  assert.equal(r.weeks, 2);
+  assert.equal(r.wk, true);
+  // A1（LAL 3 場）＋A2（BOS 1 場）＋IL 的 A-IL（LAL 3 場，5 倍數據）；DEN 沒比賽，兩週平均
+  near(r.pts, (4 * 13 * 1.3 + 3 * 13 * 5) / 2);
+  near(r.noIL, (4 * 13 * 1.3) / 2, 1e-9, "本週相關的預測不算 IL");
+  near(r.pg, 3 * 13 * 1.3, 1e-9, "每場平均不含 IL");
+  assert.equal(r.fastWk, false);
+  near(r.fastPts, 3 * 13 * 1.3, 1e-9);
+  assert.equal(r.rk, 1);
+  run("DATA[0][1][0][4][6]=100");
+  near(run(`compute().find(x=>x.name==="A").v.pts`), (3 * 100 + 13 * 1.3 + 3 * 13 * 5) / 2, 1e-6, "數據改了不能用舊的快取");
 });

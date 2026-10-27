@@ -183,6 +183,13 @@ test("checkImport：格式不對的資料會被擋下", () => {
   assert.equal(check({ ...good, IDS: { A1: 3992, B2: 4065648 } }), "");
   assert.notEqual(check({ ...good, IDS: { A1: "3992" } }), "");
   assert.notEqual(check({ ...good, IDS: [3992] }), "");
+  const wv = { fg: 0.5, ft: 0.8, tpm: 10, pts: 100, reb: 40, ast: 20, stl: 8, blk: 5, to: 12 };
+  assert.equal(check({ ...good, WEEKLY: { cur: 2, weeks: [{ w: 1, g: [[1, wv, 2, wv]] }], now: [[1, 2]] }, TID: { A: 1, B: 2 } }), "");
+  assert.notEqual(check({ ...good, WEEKLY: { cur: 2, weeks: [{ w: 1, g: [[1, { pts: "<b>" }, 2, wv]] }], now: [] } }), "");
+  assert.notEqual(check({ ...good, WEEKLY: { cur: 2, weeks: [], now: [[1]] } }), "");
+  assert.notEqual(check({ ...good, TID: { A: "1" } }), "");
+  assert.equal(check({ ...good, PRED: { 1: { at: "2026-10-19T00:00:00Z", late: false, g: [[1, 2, 0.7, Array(9).fill(0.5)]] } } }), "");
+  assert.notEqual(check({ ...good, PRED: { 1: { at: "x", late: false, g: [[1, 2, 0.7, [0.5]]] } } }), "");
 });
 
 test("本週對戰：抓的那週就是現在這週才用；對手不在聯盟裡就不用", () => {
@@ -488,4 +495,67 @@ test("整季每週預測：名次和 H2H 用同一份；IL 球員也算；初篩
   assert.equal(r.rk, 1);
   run("DATA[0][1][0][4][6]=100");
   near(run(`compute().find(x=>x.name==="A").v.pts`), (3 * 100 + 13 * 1.3 + 3 * 13 * 5) / 2, 1e-6, "數據改了不能用舊的快取");
+});
+
+// 每週成績的一隊數據：base 是 9 項，o 蓋過其中幾項
+const WV = { fg: 0.5, ft: 0.8, tpm: 10, pts: 100, reb: 40, ast: 20, stl: 8, blk: 5, to: 12 };
+const wv = (o = {}) => ({ ...WV, ...o });
+
+test("校正起伏：每隊每週先除以聯盟平均，同一隊週跟週之間的跳動；週數少時偏向經驗值", () => {
+  const { run } = load();
+  // 第 1 週 4 隊得分都 100；第 2 週 110、90、100、100（聯盟平均還是 100）→ 1 號、2 號隊各跳 ±5%
+  const weeks = [
+    { w: 1, g: [[1, wv(), 2, wv()], [3, wv(), 4, wv()]] },
+    { w: 2, g: [[1, wv({ pts: 110, fg: 0.52 }), 2, wv({ pts: 90, fg: 0.48 })], [3, wv(), 4, wv()]] },
+  ];
+  const c = run(`calibrate(${JSON.stringify(weeks)})`);
+  assert.equal(c.weeks, 2);
+  assert.equal(c.n, 4, "4 隊 × 2 週，每隊扣掉 1 個自由度");
+  near(c.est.pts, 0.05, 1e-9);
+  near(c.cv.pts, Math.sqrt((30 * 0.09 ** 2 + 0.01) / 34), 1e-9);
+  near(c.est.reb, 0, 1e-9, "籃板每週都一樣 → 真實起伏 0");
+  near(c.cv.reb, 0.09 * Math.sqrt(30 / 34), 1e-9, "往 0 拉，但經驗值還佔大部分");
+  near(c.est.fg, 0.01, 1e-9, "命中率用差距：兩週差 .02，各偏離平均 .01");
+  assert.equal(run(`calibrate(${JSON.stringify(weeks.slice(0, 1))})`), null, "只有 1 週不校正");
+  // 匯入的資料有 2 週以上的成績時，載入就套用到勝率的 CV、PCT_SD
+  const tmp = load();
+  const imp = importFixture(tmp.run, { WEEKLY: { cur: 3, weeks, now: [] }, TID: { A: 1, B: 2, C: 3, D: 4 } });
+  const r = load({ local: { "lp-data": JSON.stringify(imp) } }).run("({cv:CV.pts,sd:PCT_SD.fg,cv0:CV0.pts})");
+  near(r.cv, c.cv.pts, 1e-9);
+  near(r.sd, c.sd.fg, 1e-9);
+  near(r.cv0, 0.09, 1e-9, "經驗值留著對照");
+});
+
+test("回測：每週第一次更新時記下 8 場對戰的預測；那週打完後比對猜中幾場", () => {
+  const tmp = load();
+  const TIDS = { A: 1, B: 2, C: 3, D: 4 };
+  // 第 1 週開打前（10/10）的資料：Yahoo 本週是第 1 週，對戰 A–B、C–D
+  const imp1 = importFixture(tmp.run, { WEEKLY: { cur: 1, weeks: [], now: [[1, 2], [3, 4]] }, TID: TIDS });
+  const a = load({ local: { "lp-data": JSON.stringify(imp1) } });
+  const pred = a.run("predAll()");
+  assert.deepEqual(Object.keys(pred), ["1"]);
+  assert.equal(pred[1].late, false);
+  assert.equal(pred[1].g.length, 2);
+  const [ab, cd] = pred[1].g;
+  assert.deepEqual([ab[0], ab[1], cd[0], cd[1]], [1, 2, 3, 4]);
+  assert.ok(ab[2] > 0.5, "A 比 B 強");
+  assert.ok(cd[2] > 0.5, "C（1.1 倍）比 D 強");
+  assert.equal(ab[3].length, 9);
+  assert.ok(a.run(`localStorage.getItem("lp-pred")`).includes('"1"'), "存在這台電腦");
+  // 第 2 週的資料：第 1 週打完了。A 贏 B 6:3（猜中）、D 全勝 C（猜錯）
+  const lose = { fg: 0.45, ft: 0.75, tpm: 8, pts: 90, reb: 35, ast: 18 }, win = { fg: 0.55, ft: 0.85, tpm: 12, pts: 110, reb: 45, ast: 22, stl: 10, blk: 7, to: 10 };
+  const week1 = { w: 1, g: [[1, wv({ stl: 7, blk: 4, to: 13 }), 2, wv(lose)], [4, wv(win), 3, wv()]] };
+  const imp2 = importFixture(tmp.run, { at: "2026-10-28T00:00:00Z", WEEKLY: { cur: 2, weeks: [week1], now: [[1, 3], [2, 4]] }, TID: TIDS, PRED: pred });
+  const b = load({ local: { "lp-data": JSON.stringify(imp2) } });
+  const bt = b.run("backtest()");
+  assert.equal(bt.length, 1);
+  assert.equal(bt[0].w, 1);
+  assert.equal(bt[0].n, 2);
+  assert.equal(bt[0].hit, 1);
+  near(bt[0].brier, ((ab[2] - 1) ** 2 + (cd[2] - 0) ** 2) / 2, 1e-9);
+  assert.deepEqual(bt[0].mine, { opp: 2, p: ab[2], w: 6, l: 3 });
+  const all = b.run("predAll()");
+  assert.deepEqual(Object.keys(all).sort(), ["1", "2"], "第 1 週的預測沿用，第 2 週記新的");
+  assert.equal(all[1].at, pred[1].at);
+  assert.equal(all[2].late, true, "美東 10/27 才記錄，第 2 週（10/26 起）已經開打");
 });

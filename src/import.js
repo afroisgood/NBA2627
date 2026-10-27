@@ -4,6 +4,12 @@
 //   2. 網站共用：data/latest.js 裡的 window.SHARED_DATA（「下載網站資料檔」產生，上傳到專案的 data 資料夾）
 const BUILTIN_AT="2026/10/9";
 let IMP=null,IMP_FROM="";
+// 模型預測紀錄（網頁自己存的，見 model.js predAll）：{Yahoo 週次: {at, late, g:[[隊伍編號, 隊伍編號, 勝率, [9 項贏面]]]}}
+function okPred(o){
+  const isNum=x=>typeof x==="number"&&Number.isFinite(x),isId=x=>Number.isInteger(x)&&x>0&&x<100;
+  const okR=r=>r&&typeof r==="object"&&typeof r.at==="string"&&typeof r.late==="boolean"&&Array.isArray(r.g)&&r.g.every(x=>Array.isArray(x)&&x.length===4&&isId(x[0])&&isId(x[1])&&isNum(x[2])&&Array.isArray(x[3])&&x[3].length===9&&x[3].every(isNum));
+  return !!o&&typeof o==="object"&&!Array.isArray(o)&&Object.entries(o).every(([k,r])=>/^\d+$/.test(k)&&okR(r));
+}
 function checkImport(o){
   const isStr=x=>typeof x==="string",isNum=x=>typeof x==="number"&&Number.isFinite(x);
   const isStats=s=>s==null||(Array.isArray(s)&&s.length===12&&s.every(isNum));
@@ -16,8 +22,15 @@ function checkImport(o){
   }
   if(!o.DATA.some(t=>t[0]===o.ME))return "名單裡找不到你的隊伍。";
   if(o.FA!=null&&(!Array.isArray(o.FA)||!o.FA.every(okP)))return "FA 資料格式不對。";
-  if(o.MATCH!=null){const m=o.MATCH,okV=v=>v==null||(typeof v==="object"&&["fg","ft","tpm","pts","reb","ast","stl","blk","to","fgm","fga","ftm","fta"].every(k=>v[k]==null||isNum(v[k])));
+  const okV=v=>v==null||(typeof v==="object"&&["fg","ft","tpm","pts","reb","ast","stl","blk","to","fgm","fga","ftm","fta"].every(k=>v[k]==null||isNum(v[k])));
+  const isId=x=>Number.isInteger(x)&&x>0&&x<100,isObj=x=>x&&typeof x==="object"&&!Array.isArray(x);
+  if(o.MATCH!=null){const m=o.MATCH;
     if(!m||!isStr(m.opp)||!isStr(m.at)||!(m.week==null||isNum(m.week))||!okV(m.me)||!okV(m.op))return "本週對戰資料格式不對。";}
+  // 每週成績：weeks＝打完的週（每場 [隊伍編號, 成績, 隊伍編號, 成績]），now＝本週對戰組合
+  if(o.WEEKLY!=null){const W=o.WEEKLY,okG=g=>Array.isArray(g)&&g.length===4&&isId(g[0])&&isId(g[2])&&g[1]&&g[3]&&okV(g[1])&&okV(g[3]);
+    if(!isObj(W)||!isId(W.cur)||!Array.isArray(W.weeks)||!W.weeks.every(x=>isObj(x)&&isId(x.w)&&Array.isArray(x.g)&&x.g.every(okG))||!Array.isArray(W.now)||!W.now.every(p=>Array.isArray(p)&&p.length===2&&p.every(isId)))return "每週成績資料格式不對。";}
+  if(o.TID!=null){if(!isObj(o.TID)||!Object.values(o.TID).every(isId))return "隊伍編號資料格式不對。";}
+  if(o.PRED!=null&&!okPred(o.PRED))return "模型預測紀錄格式不對。";
   if(o.SCHED!=null){const S=o.SCHED;if(!S||!/^\d{4}-\d{2}-\d{2}$/.test(S.base)||!S.teams||typeof S.teams!=="object"||!Object.values(S.teams).every(a=>Array.isArray(a)&&a.every(d=>Number.isInteger(d)&&d>=0&&d<400)))return "賽程資料格式不對。";}
   if(o.IDS!=null){if(typeof o.IDS!=="object"||Array.isArray(o.IDS)||!Object.values(o.IDS).every(x=>Number.isInteger(x)&&x>0))return "球員編號資料格式不對。";}
   if(o.RECENT!=null){if(typeof o.RECENT!=="object"||Array.isArray(o.RECENT)||!Object.values(o.RECENT).every(r=>r&&typeof r==="object"&&["l7","l14","l30"].every(k=>isStats(r[k]))))return "近期數據格式不對。";}
@@ -60,6 +73,8 @@ function applyImport(text){
   });
   state.src=keep;
   o.PREV=prev;
+  // 模型預測紀錄跟著新資料走（回測要用以前每週的預測）
+  const pr=predAll();if(Object.keys(pr).length)o.PRED=pr;
   try{localStorage.setItem("lp-data",JSON.stringify(o));}catch(e){return "瀏覽器不允許儲存資料（可能是無痕模式），沒辦法套用。";}
   // 新資料的本週對手可能不一樣：VS 的對手和週次改回自動
   try{const s=JSON.parse(localStorage.getItem("lp-state2")||"{}");s.opp=null;s.week=null;localStorage.setItem("lp-state2",JSON.stringify(s));}catch(e){}
@@ -85,7 +100,7 @@ function initImport(){
   // 網站資料檔：把目前用的資料存成 latest.js，上傳到專案的 data 資料夾後，所有人打開網站都會用它
   document.getElementById("upd-dl").onclick=()=>{
     if(!IMP){msg.textContent="目前是內建資料，請先從 Yahoo 更新一次，再下載網站資料檔。";return;}
-    const blob=new Blob([`window.SHARED_DATA=${JSON.stringify(IMP)};\n`],{type:"text/javascript"});
+    const blob=new Blob([`window.SHARED_DATA=${JSON.stringify({...IMP,PRED:predAll()})};\n`],{type:"text/javascript"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="latest.js";document.body.appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(a.href),1000);
     msg.textContent="已下載 latest.js。照下面的步驟上傳到 GitHub 的 data 資料夾，大約 1–2 分鐘後所有人都會看到新資料。";

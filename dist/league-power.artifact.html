@@ -517,6 +517,11 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
     <div class="scroll"><table class="league" id="league"></table></div>
   </section>
 
+  <section aria-labelledby="h-check">
+    <h2 id="h-check"><span class="en">MODEL CHECK</span>模型檢查</h2>
+    <div id="check"></div>
+  </section>
+
   <section aria-labelledby="h-class">
     <h2 id="h-class"><span class="en">TEAM CLASS</span>隊伍職業鑑定</h2>
     <p class="note">依各隊九項數據跟其他 15 隊比較，自動判斷職業和實際在放棄哪幾項（明顯比聯盟平均差一截的項目）。等級＝H2H 勝率換算（Lv.1～99），依等級排序。數據跟著上方的資料來源、傷兵和出賽率設定。</p>
@@ -770,7 +775,14 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
     // 3-2) 本週對戰：Yahoo 對戰頁裡有 FG%、PTS 等欄位的表格，用隊伍連結找出自己和對手那兩列
     const CAT_HEAD = { fg: ['FG%'], ft: ['FT%'], tpm: ['3PTM', '3PM'], pts: ['PTS'], reb: ['REB'], ast: ['AST'], stl: ['ST', 'STL'], blk: ['BLK'], to: ['TO'] };
     const teamIdOf = el => { const a = [...el.querySelectorAll('a[href]')].map(x => (x.getAttribute('href') || '').match(new RegExp('/nba/' + LEAGUE + '/(\\d+)(?:[/?#]|$)'))).find(Boolean); return a ? +a[1] : 0; };
-    const parseMatch = d => {
+    // 週次：先找選單裡被選中的那一週，找不到才用頁面上第一個「Week N」
+    const weekOf = d => {
+      const sel = [...d.querySelectorAll('option[selected], [aria-selected="true"], [aria-current], .is-selected, .Selected')].map(e => e.textContent).join(' ');
+      const m = sel.match(/Week\s+(\d+)/) || d.body.textContent.match(/Week\s+(\d+)/);
+      return m ? +m[1] : null;
+    };
+    // 對戰頁裡有 9 項數據的表格：回傳每隊（Yahoo 隊伍編號）一列數據；need＝表格裡一定要有這一隊
+    const parseRows = (d, need) => {
       for (const table of d.querySelectorAll('table')) {
         const headRow = table.querySelector('thead tr') || table.querySelector('tr');
         if (!headRow) continue;
@@ -789,12 +801,16 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
           rows[id] = v;
         });
         const ids = Object.keys(rows).map(Number);
-        if (ids.includes(MY_TEAM_ID) && ids.length >= 2) {
-          const oid = ids.find(i => i !== MY_TEAM_ID), ok = v => Object.keys(CAT_HEAD).filter(k => v[k] != null).length >= 7;
-          return { oppId: oid, me: ok(rows[MY_TEAM_ID]) ? rows[MY_TEAM_ID] : null, op: ok(rows[oid]) ? rows[oid] : null, week: +((d.body.textContent.match(/Week\s+(\d+)/) || [])[1]) || null };
-        }
+        if (ids.length >= 2 && (!need || ids.includes(need))) return { rows, ids, week: weekOf(d) };
       }
       return null;
+    };
+    const okCats = v => !!v && Object.keys(CAT_HEAD).filter(k => v[k] != null).length >= 7;
+    const parseMatch = d => {
+      const m = parseRows(d, MY_TEAM_ID);
+      if (!m) return null;
+      const oid = m.ids.find(i => i !== MY_TEAM_ID);
+      return { oppId: oid, me: okCats(m.rows[MY_TEAM_ID]) ? m.rows[MY_TEAM_ID] : null, op: okCats(m.rows[oid]) ? m.rows[oid] : null, week: m.week };
     };
     let MATCH = null;
     for (const url of [`/nba/${LEAGUE}/matchup?mid1=${MY_TEAM_ID}`, `/nba/${LEAGUE}/${MY_TEAM_ID}/matchup`]) {
@@ -807,6 +823,49 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
         console.warn('[戰力表更新] 對戰頁讀取失敗：', url, e);
       }
     }
+
+    // 3-3) 每週成績（模型校正、回測用）：打完的每一週 16 隊的 9 項實際成績，加上本週的對戰組合
+    // 打完的週不會再變，存在這個網站（Yahoo）的 localStorage，下次只抓新的週。失敗只略過，不影響其他資料
+    step = '抓每週成績';
+    let WEEKLY = null;
+    const yw = MATCH && MATCH.week;
+    if (yw) {
+      try {
+        const CK = 'lp-weekly-' + LEAGUE;
+        let cache = {};
+        try { cache = JSON.parse(localStorage.getItem(CK) || '{}') || {}; } catch (e) { }
+        const weekGames = async w => {
+          const seen = new Set(), g = [];
+          for (let id = 1; id <= TEAMS; id++) {
+            if (seen.has(id)) continue;
+            const m = parseRows(await getDoc(`/nba/${LEAGUE}/matchup?week=${w}&mid1=${id}`), id);
+            const oid = m && m.ids.find(i => i !== id);
+            if (!oid) continue;
+            seen.add(id); seen.add(oid);
+            g.push([id, m.rows[id], oid, m.rows[oid]]);
+          }
+          return g;
+        };
+        const full = g => Array.isArray(g) && g.length === TEAMS / 2 && g.every(x => okCats(x[1]) && okCats(x[3]));
+        const need = [];
+        for (let w = 1; w < yw; w++) if (!full(cache[w])) need.push(w);
+        for (let i = 0; i < need.length; i += 2) {
+          say(`抓每週成績（第 ${need[i]}${need[i + 1] ? '、' + need[i + 1] : ''} 週）…`);
+          await Promise.all(need.slice(i, i + 2).map(async w => { const g = await weekGames(w); if (full(g)) cache[w] = g; }));
+        }
+        say('抓本週對戰組合…');
+        const now = (await weekGames(yw)).map(x => [x[0], x[2]]);
+        const weeks = [];
+        for (let w = 1; w < yw; w++) if (full(cache[w])) weeks.push({ w, g: cache[w].map(x => [x[0], x[1], x[2], x[3]]) });
+        const sig = new Set(weeks.map(x => JSON.stringify(x.g.map(y => [y[1], y[3]]))));
+        if (sig.size < weeks.length) throw new Error('不同週抓到一模一樣的成績，週次參數可能沒有作用');
+        try { localStorage.setItem(CK, JSON.stringify(cache)); } catch (e) { }
+        WEEKLY = { cur: yw, weeks, now };
+      } catch (e) {
+        console.warn('[戰力表更新] 每週成績抓取失敗（略過）：', e);
+      }
+    }
+    const TID = Object.fromEntries(rosters.map(t => [t.name, t.id]));
 
     step = '整理資料';
     // 4) 合併：預測 = Yahoo 和 ESPN 場均平均（只有一家就用那一家）
@@ -870,10 +929,10 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
       }));
     }
 
-    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA, SCHED, MATCH, IDS, RECENT, NEWS });
+    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA, SCHED, MATCH, WEEKLY, TID, IDS, RECENT, NEWS });
     window._LP_UPDATE = json;
     const curN = DATA.reduce((a, t) => a + t[1].filter(p => p[6]).length, 0);
-    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到；賽程${SCHED ? '有' : '沒有'}抓到；頭像編號 ${Object.keys(IDS).length} 位；近期數據 ${Object.keys(RECENT).length} 位；新聞 ${Object.keys(NEWS).length}／${newsFor.length} 位（ESPN ${newsSrc.espn}、Yahoo ${newsSrc.yahoo}）；本週對手：${MATCH ? MATCH.opp + (MATCH.me ? '（含目前比分）' : '（還沒有比分）') : '沒有抓到'}。${failedTeams.length ? `⚠ ${failedTeams.map(t => t.name).join('、')} 的頁面 Yahoo 打不開，名單改用球員列表推算（${failedTeams.map(t => t.ps.length).join('、')} 人；看不到先發位置和 IL）。` : ''}`);
+    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到；賽程${SCHED ? '有' : '沒有'}抓到；頭像編號 ${Object.keys(IDS).length} 位；近期數據 ${Object.keys(RECENT).length} 位；新聞 ${Object.keys(NEWS).length}／${newsFor.length} 位（ESPN ${newsSrc.espn}、Yahoo ${newsSrc.yahoo}）；本週對手：${MATCH ? MATCH.opp + (MATCH.me ? '（含目前比分）' : '（還沒有比分）') : '沒有抓到'}；每週成績：${WEEKLY ? `${WEEKLY.weeks.length} 週、本週 ${WEEKLY.now.length} 組對戰` : '沒有抓到'}。${failedTeams.length ? `⚠ ${failedTeams.map(t => t.name).join('、')} 的頁面 Yahoo 打不開，名單改用球員列表推算（${failedTeams.map(t => t.ps.length).join('、')} 人；看不到先發位置和 IL）。` : ''}`);
     btns.innerHTML = '';
     button('▶ 打開戰力表', () => window.open(SITE + '#import=' + encodeURIComponent(json), '_blank'));
     button('複製結果', async () => {
@@ -922,6 +981,12 @@ const MKT={"Tyrese Maxey":[8,100],"Darryn Peterson":[114,80],"LaMelo Ball":[23,1
 //   2. 網站共用：data/latest.js 裡的 window.SHARED_DATA（「下載網站資料檔」產生，上傳到專案的 data 資料夾）
 const BUILTIN_AT="2026/10/9";
 let IMP=null,IMP_FROM="";
+// 模型預測紀錄（網頁自己存的，見 model.js predAll）：{Yahoo 週次: {at, late, g:[[隊伍編號, 隊伍編號, 勝率, [9 項贏面]]]}}
+function okPred(o){
+  const isNum=x=>typeof x==="number"&&Number.isFinite(x),isId=x=>Number.isInteger(x)&&x>0&&x<100;
+  const okR=r=>r&&typeof r==="object"&&typeof r.at==="string"&&typeof r.late==="boolean"&&Array.isArray(r.g)&&r.g.every(x=>Array.isArray(x)&&x.length===4&&isId(x[0])&&isId(x[1])&&isNum(x[2])&&Array.isArray(x[3])&&x[3].length===9&&x[3].every(isNum));
+  return !!o&&typeof o==="object"&&!Array.isArray(o)&&Object.entries(o).every(([k,r])=>/^\d+$/.test(k)&&okR(r));
+}
 function checkImport(o){
   const isStr=x=>typeof x==="string",isNum=x=>typeof x==="number"&&Number.isFinite(x);
   const isStats=s=>s==null||(Array.isArray(s)&&s.length===12&&s.every(isNum));
@@ -934,8 +999,15 @@ function checkImport(o){
   }
   if(!o.DATA.some(t=>t[0]===o.ME))return "名單裡找不到你的隊伍。";
   if(o.FA!=null&&(!Array.isArray(o.FA)||!o.FA.every(okP)))return "FA 資料格式不對。";
-  if(o.MATCH!=null){const m=o.MATCH,okV=v=>v==null||(typeof v==="object"&&["fg","ft","tpm","pts","reb","ast","stl","blk","to","fgm","fga","ftm","fta"].every(k=>v[k]==null||isNum(v[k])));
+  const okV=v=>v==null||(typeof v==="object"&&["fg","ft","tpm","pts","reb","ast","stl","blk","to","fgm","fga","ftm","fta"].every(k=>v[k]==null||isNum(v[k])));
+  const isId=x=>Number.isInteger(x)&&x>0&&x<100,isObj=x=>x&&typeof x==="object"&&!Array.isArray(x);
+  if(o.MATCH!=null){const m=o.MATCH;
     if(!m||!isStr(m.opp)||!isStr(m.at)||!(m.week==null||isNum(m.week))||!okV(m.me)||!okV(m.op))return "本週對戰資料格式不對。";}
+  // 每週成績：weeks＝打完的週（每場 [隊伍編號, 成績, 隊伍編號, 成績]），now＝本週對戰組合
+  if(o.WEEKLY!=null){const W=o.WEEKLY,okG=g=>Array.isArray(g)&&g.length===4&&isId(g[0])&&isId(g[2])&&g[1]&&g[3]&&okV(g[1])&&okV(g[3]);
+    if(!isObj(W)||!isId(W.cur)||!Array.isArray(W.weeks)||!W.weeks.every(x=>isObj(x)&&isId(x.w)&&Array.isArray(x.g)&&x.g.every(okG))||!Array.isArray(W.now)||!W.now.every(p=>Array.isArray(p)&&p.length===2&&p.every(isId)))return "每週成績資料格式不對。";}
+  if(o.TID!=null){if(!isObj(o.TID)||!Object.values(o.TID).every(isId))return "隊伍編號資料格式不對。";}
+  if(o.PRED!=null&&!okPred(o.PRED))return "模型預測紀錄格式不對。";
   if(o.SCHED!=null){const S=o.SCHED;if(!S||!/^\d{4}-\d{2}-\d{2}$/.test(S.base)||!S.teams||typeof S.teams!=="object"||!Object.values(S.teams).every(a=>Array.isArray(a)&&a.every(d=>Number.isInteger(d)&&d>=0&&d<400)))return "賽程資料格式不對。";}
   if(o.IDS!=null){if(typeof o.IDS!=="object"||Array.isArray(o.IDS)||!Object.values(o.IDS).every(x=>Number.isInteger(x)&&x>0))return "球員編號資料格式不對。";}
   if(o.RECENT!=null){if(typeof o.RECENT!=="object"||Array.isArray(o.RECENT)||!Object.values(o.RECENT).every(r=>r&&typeof r==="object"&&["l7","l14","l30"].every(k=>isStats(r[k]))))return "近期數據格式不對。";}
@@ -978,6 +1050,8 @@ function applyImport(text){
   });
   state.src=keep;
   o.PREV=prev;
+  // 模型預測紀錄跟著新資料走（回測要用以前每週的預測）
+  const pr=predAll();if(Object.keys(pr).length)o.PRED=pr;
   try{localStorage.setItem("lp-data",JSON.stringify(o));}catch(e){return "瀏覽器不允許儲存資料（可能是無痕模式），沒辦法套用。";}
   // 新資料的本週對手可能不一樣：VS 的對手和週次改回自動
   try{const s=JSON.parse(localStorage.getItem("lp-state2")||"{}");s.opp=null;s.week=null;localStorage.setItem("lp-state2",JSON.stringify(s));}catch(e){}
@@ -1003,7 +1077,7 @@ function initImport(){
   // 網站資料檔：把目前用的資料存成 latest.js，上傳到專案的 data 資料夾後，所有人打開網站都會用它
   document.getElementById("upd-dl").onclick=()=>{
     if(!IMP){msg.textContent="目前是內建資料，請先從 Yahoo 更新一次，再下載網站資料檔。";return;}
-    const blob=new Blob([`window.SHARED_DATA=${JSON.stringify(IMP)};\n`],{type:"text/javascript"});
+    const blob=new Blob([`window.SHARED_DATA=${JSON.stringify({...IMP,PRED:predAll()})};\n`],{type:"text/javascript"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="latest.js";document.body.appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(a.href),1000);
     msg.textContent="已下載 latest.js。照下面的步驟上傳到 GitHub 的 data 資料夾，大約 1–2 分鐘後所有人都會看到新資料。";
@@ -1066,8 +1140,9 @@ function addMix(p){
 const addRecent=p=>{p[8]=(RECENT[p[0]]||{}).l14||null};
 
 // H2H 勝率：每項當成常態分布估計贏面。計數項用「變異係數」（每週總數大約上下浮動幾 %），命中率用固定標準差
-const CV={tpm:.16,pts:.09,reb:.09,ast:.11,stl:.20,blk:.25,to:.13};
-const PCT_SD={fg:.013,ft:.025};
+// CV0、PCT_SD0 是經驗值；有聯盟真實每週成績時，載入後用 calibrate() 校正 CV、PCT_SD（見檔案最後）
+const CV0={tpm:.16,pts:.09,reb:.09,ast:.11,stl:.20,blk:.25,to:.13},PCT_SD0={fg:.013,ft:.025};
+const CV={...CV0},PCT_SD={...PCT_SD0};
 function normCdf(z){if(!z)return .5;const t=1/(1+.2316419*Math.abs(z)),d=.3989423*Math.exp(-z*z/2);
   const p=d*t*(.3193815+t*(-.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));return z>0?1-p:p}
 function catProb(c,a,b){
@@ -1199,6 +1274,96 @@ function seasonWeek(ps,val){
   const v=toV(r.t);for(const k in v)if(!["fg","ft"].includes(k))v[k]/=ws.length;
   if(seasonCache.size>5000)seasonCache.clear();
   seasonCache.set(key,v);return v;
+}
+
+// ---------- 模型檢查：用聯盟真實每週成績校正起伏、回測預測（WEEKLY、TID 是更新程式抓的；隊伍用 Yahoo 編號） ----------
+const WEEKLY=IMP&&IMP.WEEKLY?IMP.WEEKLY:null;
+const TID=IMP&&IMP.TID?IMP.TID:{};
+const CAT_K=["fg","ft","tpm","pts","reb","ast","stl","blk","to"];   // 跟 CATS 同樣順序
+// 校正：每隊每週的成績先跟那週的聯盟平均比（計數項用比例、命中率用差距），消掉「這週比較長、大家都多打幾場」的影響；
+// 同一隊在不同週之間跳動多大，就是每週的起伏。週數少時偏向經驗值：經驗值當成 CAL_N0 筆資料一起平均
+const CAL_N0=30;
+function calibrate(weeks){
+  if(!weeks||weeks.length<2)return null;
+  const by={};CAT_K.forEach(k=>by[k]={});
+  weeks.forEach(x=>{
+    const rows=x.g.flatMap(g=>[[g[0],g[1]],[g[2],g[3]]]);
+    CAT_K.forEach(k=>{
+      const pct=k==="fg"||k==="ft",a=rows.filter(r=>r[1][k]!=null);if(a.length<2)return;
+      const m=a.reduce((s,r)=>s+r[1][k],0)/a.length;if(!pct&&!m)return;
+      a.forEach(([id,v])=>(by[k][id]=by[k][id]||[]).push(pct?v[k]-m:v[k]/m));
+    });
+  });
+  const cv={},sd={},est={};let n=0;
+  CAT_K.forEach(k=>{
+    let ss=0,dof=0;
+    Object.values(by[k]).forEach(a=>{if(a.length<2)return;const mu=a.reduce((s,x)=>s+x,0)/a.length;a.forEach(x=>ss+=(x-mu)**2);dof+=a.length-1;});
+    const pct=k==="fg"||k==="ft",p0=pct?PCT_SD0[k]:CV0[k];
+    est[k]=dof?Math.sqrt(ss/dof):null;
+    (pct?sd:cv)[k]=Math.sqrt((CAL_N0*p0*p0+ss)/(CAL_N0+dof));
+    n=Math.max(n,dof);
+  });
+  return {weeks:weeks.length,n,cv,sd,est};
+}
+const CAL=calibrate(WEEKLY&&WEEKLY.weeks);
+if(CAL){Object.assign(CV,CAL.cv);Object.assign(PCT_SD,CAL.sd);}
+
+// Yahoo 的週次 → 賽程的天數。Yahoo 第 1 週可能比較長，用抓資料那天算出差幾週（off）：
+// Yahoo 第 y 週＝WEEKS 第 y+off 週；Yahoo 第 1 週＝WEEKS 第 1～1+off 週。對不起來（off 不在 0～3）就不用
+function yWeekDays(y){
+  if(!WEEKLY||!WEEKS.length)return null;
+  const d=dayOf(IMP.at),i=WEEKS.findIndex(w=>d<=w.e),off=(i<0?WEEKS.length:i+1)-WEEKLY.cur;
+  if(off<0||off>3)return null;
+  if(y===1)return {s:WEEKS[0].s,e:WEEKS[Math.min(off,WEEKS.length-1)].e};
+  const w=WEEKS[y+off-1];return w?{s:w.s,e:w.e}:null;
+}
+const teamById=id=>{const n=Object.keys(TID).find(k=>TID[k]===id);return n?DATA.find(t=>t[0]===n)||null:null};
+// 本週的預測：每組對戰用這週的賽程、每天排先發算雙方總數，記下勝率和 9 項贏面。
+// 用固定的設定（有本季數據用預測＋本季、扣傷兵、考慮出賽率、9 項），不受畫面上的選擇影響
+function predWeek(){
+  if(!WEEKLY||!WEEKLY.now.length)return null;
+  const r=yWeekDays(WEEKLY.cur);if(!r)return null;
+  const keep={src:state.src,inj:state.inj,gp:state.gp,punt:state.punt};
+  Object.assign(state,{src:hasCur()?"mix":"pr",inj:true,gp:true,punt:false});
+  try{
+    const val=playerValues(),g=[];
+    for(const [a,b] of WEEKLY.now){
+      const A=teamById(a),B=teamById(b);if(!A||!B)continue;
+      const m=matchup(toV(weekRaw(A[1],r.s,r.e,val).t),toV(weekRaw(B[1],r.s,r.e,val).t));
+      g.push([a,b,+m.win.toFixed(3),m.ps.map(p=>+p.toFixed(3))]);
+    }
+    return g.length?{at:IMP.at,late:dayOf(IMP.at)>r.s,g}:null;
+  }finally{Object.assign(state,keep);}
+}
+// 所有週的預測紀錄。每週只留第一次的（最接近開打前）：資料裡的 PRED、這台電腦的 lp-pred，再加上這份資料的本週預測
+let PRED_ALL=null;
+function predAll(){
+  if(PRED_ALL)return PRED_ALL;
+  const all={},add=o=>{if(!okPred(o))return;for(const k in o)if(!all[k]||Date.parse(o[k].at)<Date.parse(all[k].at))all[k]=o[k];};
+  add(IMP&&IMP.PRED);
+  try{add(JSON.parse(localStorage.getItem("lp-pred")||"null"));}catch(e){}
+  if(WEEKLY&&!all[WEEKLY.cur]){const p=predWeek();if(p)all[WEEKLY.cur]=p;}
+  try{localStorage.setItem("lp-pred",JSON.stringify(all));}catch(e){}
+  return PRED_ALL=all;
+}
+// 回測：有預測、也有實際成績的週，看模型猜中幾場（勝率 > 50% 的那隊有沒有贏；平手不算）、幾個項目，
+// 以及 Brier 分數＝(預測勝率 − 實際結果)² 的平均：越小越準，每場都猜 50% 是 0.25
+function backtest(){
+  const P=predAll(),me=TID[ME],out=[];if(!WEEKLY)return out;
+  WEEKLY.weeks.forEach(x=>{
+    const r=P[x.w];if(!r)return;
+    let hit=0,n=0,ch=0,cn=0,br=0,mine=null;
+    r.g.forEach(([a,b,p,cps])=>{
+      const g=x.g.find(y=>(y[0]===a&&y[2]===b)||(y[0]===b&&y[2]===a));if(!g)return;
+      const va=g[0]===a?g[1]:g[3],vb=g[0]===a?g[3]:g[1];let wa=0,wb=0;
+      CAT_K.forEach((k,i)=>{if(va[k]==null||vb[k]==null||va[k]===vb[k])return;const aw=k==="to"?va[k]<vb[k]:va[k]>vb[k];if(aw)wa++;else wb++;cn++;if((cps[i]>.5)===aw)ch++;});
+      if(a===me||b===me)mine=a===me?{opp:b,p,w:wa,l:wb}:{opp:a,p:1-p,w:wb,l:wa};
+      if(wa===wb)return;
+      n++;const aw=wa>wb;if((p>.5)===aw)hit++;br+=(p-(aw?1:0))**2;
+    });
+    if(n||mine)out.push({w:x.w,at:r.at,late:r.late,hit,n,ch,cn,brier:n?br/n:null,mine});
+  });
+  return out;
 }
 
 const CATS=[
@@ -1413,9 +1578,34 @@ function renderMe(rows){
     <div class="ms-card line"><span class="k">職業鑑定 · Lv.${Math.round(r.win*98)+1}</span><p>${tc.cls.i} ${tc.title}</p><p class="s">${tc.cls.d}</p></div>`;
 }
 
+// 模型檢查：勝率起伏的設定（經驗值 → 用真實每週成績校正）和每週預測的回測
+function renderCheck(){
+  const P=predAll(),cur=WEEKLY&&P[WEEKLY.cur],bt=backtest();
+  const sdTxt=(c,cv,sd)=>c.pct?(sd&&sd[c.k]!=null?`±${f3(sd[c.k])}`:"—"):(cv&&cv[c.k]!=null?`±${Math.round(cv[c.k]*100)}%`:"—");
+  const row=(l,cv,sd)=>`<tr><td class="name">${l}</td>${CATS.map(c=>`<td>${sdTxt(c,cv,sd)}</td>`).join("")}</tr>`;
+  const calNote=CAL?`已用 ${CAL.weeks} 週聯盟真實成績校正。週數少時偏向經驗值（經驗值當成 ${CAL_N0} 筆資料一起平均），週數越多越相信真實資料。`
+    :WEEKLY?`真實成績還不夠（至少要 2 週打完的成績，現在 ${WEEKLY.weeks.length} 週），先用經驗值。`:"從 Yahoo 更新資料後才會抓每週成績，目前用經驗值。";
+  const predNote=!WEEKLY?"":cur?`第 ${WEEKLY.cur} 週的預測已經記下來（${fmtAt(cur.at)} 的資料${cur.late?"，記錄時這週已經開打":""}），這週打完、下次更新資料後就會出現在下面。`
+    :"這份資料對不上本週的賽程，沒辦法記錄本週預測。";
+  const nm=id=>{const n=Object.keys(TID).find(k=>TID[k]===id);return n?esc(n):`第 ${id} 隊`};
+  const btRows=bt.map(x=>`<tr><td class="name">第 ${x.w} 週${x.late?"<span class=\"pos\">開打後才記錄</span>":""}</td><td>${x.n?`${x.hit}／${x.n}`:"—"}</td><td>${x.cn?`${x.ch}／${x.cn}`:"—"}</td><td>${x.brier==null?"—":x.brier.toFixed(2)}</td>
+    <td>${x.mine?`對 ${nm(x.mine.opp)}：預測勝率 ${pctTxt(x.mine.p)} → 實際 ${x.mine.w}:${x.mine.l}`:"—"}</td></tr>`).join("");
+  const tot=bt.reduce((a,x)=>({hit:a.hit+x.hit,n:a.n+x.n}),{hit:0,n:0});
+  document.getElementById("check").innerHTML=`
+    <p class="note">${calNote}</p>
+    <div class="scroll"><table><thead><tr><th class="name">每週起伏</th>${CATS.map(c=>`<th>${c.l}</th>`).join("")}</tr></thead><tbody>
+      ${row("經驗值",CV0,PCT_SD0)}${CAL?row("真實資料估計",CAL.est,CAL.est):""}${row("現在用的",CV,PCT_SD)}</tbody></table></div>
+    <p class="note">計數項是「一隊每週的總數大約上下跳動幾 %」，命中率是「大約上下跳動多少」。起伏越大，實力差一點點的對戰越接近五五波。</p>
+    ${predNote?`<p class="note">${predNote}</p>`:""}
+    ${bt.length?`<p class="note">回測：總共猜中 <b>${tot.hit}／${tot.n}</b> 場（${tot.n?pctTxt(tot.hit/tot.n):"—"}）。</p>
+    <div class="scroll"><table><thead><tr><th class="name">週次</th><th>猜中場數</th><th>猜中項目</th><th>Brier</th><th>你的對戰</th></tr></thead><tbody>${btRows}</tbody></table></div>
+    <p class="note">猜中＝預測勝率超過 50% 的那隊真的贏了（平手不算）。Brier＝(預測勝率 − 實際結果)² 的平均，越小越準；每場都猜 50% 是 0.25。週次是 Yahoo 的週次。</p>`
+    :`<p class="note">${WEEKLY?"還沒有可以比對的週：要先記下某一週的預測，那週打完後再更新一次資料。":"每週第一次從 Yahoo 更新資料時，會記下模型對這週 8 場對戰的預測；那週打完、再更新一次後，就會在這裡比對猜中幾場。"}</p>`}`;
+}
+
 function render(){
   TREND=trendFn();
-  const rows=compute();rankAll(rows,true);renderMe(rows);renderVS(rows);renderTrade(rows);renderFA(rows);renderToday();renderStreamInfo(rows);renderScout();renderLeague(rows);renderClass(rows);renderTeams(rows);renderDex();
+  const rows=compute();rankAll(rows,true);renderMe(rows);renderVS(rows);renderTrade(rows);renderFA(rows);renderToday();renderStreamInfo(rows);renderScout();renderLeague(rows);renderCheck();renderClass(rows);renderTeams(rows);renderDex();
   const set=(id,on)=>document.getElementById(id).setAttribute("aria-pressed",on);
   set("src-pr",state.src==="pr");set("src-ls",state.src==="ls");set("src-cur",state.src==="cur");set("src-mix",state.src==="mix");set("src-l14",state.src==="l14");set("inj-on",state.inj);set("inj-off",!state.inj);set("gp-on",state.gp);set("gp-off",!state.gp);set("mode-9",!state.punt);set("mode-p",state.punt);
 }
@@ -1945,7 +2135,7 @@ async function streamSearch(){
 }
 
 // ---------- 快速選單：右下角 MENU 按鈕，點了跳到各區塊 ----------
-const NAV=[["me-sum","我的隊伍"],["h-vs","對戰預測"],["h-today","每日先發"],["h-trade","交易分析"],["h-fa","FA 分析／串流"],["h-scout","球探報告"],["h-league","聯盟排名"],["h-class","職業鑑定"],["h-teams","各隊球員"],["h-dex","球員卡圖鑑"]];
+const NAV=[["me-sum","我的隊伍"],["h-vs","對戰預測"],["h-today","每日先發"],["h-trade","交易分析"],["h-fa","FA 分析／串流"],["h-scout","球探報告"],["h-league","聯盟排名"],["h-check","模型檢查"],["h-class","職業鑑定"],["h-teams","各隊球員"],["h-dex","球員卡圖鑑"]];
 function navGo(id){
   const el=document.getElementById(id),bar=document.querySelector(".controls");if(!el)return;
   const off=(bar?bar.getBoundingClientRect().height:0)+12;

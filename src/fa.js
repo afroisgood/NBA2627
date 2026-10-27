@@ -5,12 +5,12 @@ const fam={add:"",drop:null};
 const myActive=()=>DATA.find(t=>t[0]===ME)[1].filter(p=>p[1]!=="IL");
 const faPos=p=>((p[2]||"").split(" - ")[1]||"").split(",").map(x=>x.trim()).filter(Boolean);
 
-function simulatePickup(add,drop){
+function simulatePickup(add,drop,fast){
   const data=DATA.map(t=>[t[0],t[1].slice()]);
   const me=data.find(t=>t[0]===ME)[1];
   if(drop){const i=me.findIndex(p=>p[0]===drop);if(i>=0)me.splice(i,1);}
   me.push([add,"BN",...FA[add].slice(2)]);
-  const rows=compute(data);rankAll(rows);
+  const rows=compute(data,fast);rankAll(rows);
   return rows.find(r=>r.name===ME);
 }
 function catMoves(b0,b1){
@@ -42,7 +42,7 @@ function renderFA(rows){
   const cats=visCats();
   const extra=[P[1]==="W"?`⚠ ${esc(fam.add)} 在 waiver 上，要等 waiver 處理完才拿得到，也可能被別隊搶走。`:"",P[3]==="O"?`⚠ ${esc(fam.add)} 目前缺陣（O）。`:P[3]==="Q"?`⚠ ${esc(fam.add)} 出賽存疑（Q）。`:"",
     weekLine(wk,rows,b1,P,D),
-    `位置：撿進 ${esc(fam.add)}（${esc(P[2]||"—")}）${D?`，丟掉 ${esc(D[0])}（${esc(D[2]||"—")}）`:""}。${wk?"本週預測已依位置排先發；":""}名次變化是看全季每場平均，不檢查先發位置。`].filter(Boolean).map(x=>`<p class="note">${x}</p>`).join("");
+    `位置：撿進 ${esc(fam.add)}（${esc(P[2]||"—")}）${D?`，丟掉 ${esc(D[0])}（${esc(D[2]||"—")}）`:""}。${b0.wk?"名次變化跟聯盟表一樣，看剩下整季平均每週的預測（照賽程排先發位置）。":`${wk?"本週預測已依位置排先發；":""}名次變化是看全季每場平均，不檢查先發位置。`}`].filter(Boolean).map(x=>`<p class="note">${x}</p>`).join("");
   out.innerHTML=`<div class="tm-verdict"><b>RESULT</b>${verdict}</div>
   <div class="tm-grid">
     <div class="tm-card"><span class="k">你的名次（${state.punt?"不算 AST":"9 項"}）</span><span class="v">${b0.ovr} → ${b1.ovr} ${moveTxt(b0.ovr,b1.ovr)}</span><span class="s">平均名次 ${f1(b0.avgUse)} → ${f1(b1.avgUse)}</span></div>
@@ -50,7 +50,7 @@ function renderFA(rows){
     <div class="tm-card"><span class="k">異動</span><span class="v" style="font-size:16px">＋${esc(fam.add)}</span><span class="s">${D?"－"+esc(D[0]):"不丟人（用掉 1 個空位）"}</span></div>
   </div>${extra}
   <div class="scroll"><table><thead><tr><th class="name">${esc(ME)}</th>${cats.map(c=>`<th>${c.l}</th>`).join("")}</tr></thead><tbody>
-    <tr><td class="name">每場數據</td>${cats.map(c=>`<td><div class="cell"><span>${fmt(c,b1.v[c.k])}</span><span class="pos">原 ${fmt(c,b0.v[c.k])}</span></div></td>`).join("")}</tr>
+    <tr><td class="name">${vUnit(b0)}數據</td>${cats.map(c=>`<td><div class="cell"><span>${fmt(c,b1.v[c.k])}</span><span class="pos">原 ${fmt(c,b0.v[c.k])}</span></div></td>`).join("")}</tr>
     <tr><td class="name">名次</td>${cats.map(c=>{const a=b0.r[c.k],b=b1.r[c.k];return `<td class="${tier(b)}">${b}<span class="delta">${a===b?"–":moveTxt(a,b)}</span></td>`}).join("")}</tr>
   </tbody></table></div>`;
 }
@@ -68,26 +68,28 @@ function weekLine(wk,rows,b1,P,D){
 async function autoPickup(){
   const st=document.getElementById("fa-status"),out=document.getElementById("fa-out");
   const noW=document.getElementById("fa-nowaiver").checked,noO=document.getElementById("fa-noout").checked,pos=document.getElementById("fa-pos").value;
-  const base=compute();rankAll(base);const b0=base.find(r=>r.name===ME);
+  // 第一階段：每場平均快速初篩所有組合；第二階段：前 SCOUT_REFINE 個用整季每週預測重算（跟聯盟表一致）
+  const fb=compute(DATA,true);rankAll(fb);const f0=fb.find(r=>r.name===ME);
   const val=vfunc(),act=myActive(),open=ROSTER-act.length;
   const cands=faList().filter(x=>!(noW&&x.p[1]==="W")&&!(noO&&x.p[3]==="O")&&(!pos||faPos(x.p).includes(pos)));
   if(!cands.length){st.textContent="沒有符合篩選條件的 FA。";out.innerHTML="";return;}
   const drops=(open>0?[null]:[]).concat(act);
-  const best=[];let done=0;
+  const pre=[];let done=0;
   for(const x of cands){
-    let top=null;
-    for(const d of drops){
-      const b1=simulatePickup(x.p[0],d&&d[0]),my=b0.avgUse-b1.avgUse;
-      if(my<=0.05)continue;
-      const gain=x.v-(d?val(d)||0:0);
-      if(!top||my>top.my||(my===top.my&&gain>top.gain))top={p:x.p,d,b1,my,gain};
-    }
-    if(top)best.push(top);
-    if(++done%10===0){st.textContent=`搜尋中… ${Math.round(done/cands.length*100)}%`;await new Promise(r=>setTimeout(r,0));}
+    for(const d of drops)pre.push({x,d,my:f0.avgUse-simulatePickup(x.p[0],d&&d[0],true).avgUse,gain:x.v-(d?val(d)||0:0)});
+    if(++done%10===0){st.textContent=`初篩中… ${Math.round(done/cands.length*100)}%`;await new Promise(r=>setTimeout(r,0));}
   }
+  pre.sort((a,b)=>b.my-a.my||b.gain-a.gain);
+  const base=compute();rankAll(base);const b0=base.find(r=>r.name===ME),cand=pre.slice(0,SCOUT_REFINE),byP=new Map();
+  for(let i=0;i<cand.length;i++){
+    const {x,d,gain}=cand[i],b1=simulatePickup(x.p[0],d&&d[0]),my=b0.avgUse-b1.avgUse,top=byP.get(x.p[0]);
+    if(my>0.05&&(!top||my>top.my||(my===top.my&&gain>top.gain)))byP.set(x.p[0],{p:x.p,d,b1,my,gain});
+    if(i%5===0){st.textContent=`精算前 ${cand.length} 個組合… ${i}／${cand.length}`;await new Promise(r=>setTimeout(r,0));}
+  }
+  const best=[...byP.values()];
   best.sort((a,b)=>b.my-a.my||a.b1.ovr-b.b1.ovr||b.gain-a.gain);
   const top=best.slice(0,10);
-  st.textContent=top.length?`搜尋了 ${cands.length} 位 FA，有 ${best.length} 位能讓你進步，顯示前 ${top.length} 位（每位 FA 只列最好的丟人選擇，依平均名次進步排序）。`:`搜尋了 ${cands.length} 位 FA，沒有能讓你名次進步的撿人組合。`;
+  st.textContent=top.length?`搜尋了 ${cands.length} 位 FA（初篩後精算前 ${cand.length} 個組合），有 ${best.length} 位能讓你進步，顯示前 ${top.length} 位（每位 FA 只列最好的丟人選擇，依平均名次進步排序）。`:`搜尋了 ${cands.length} 位 FA（初篩後精算前 ${cand.length} 個組合），沒有能讓你名次進步的撿人組合。`;
   out.innerHTML=top.map((x,i)=>{const mv=catMoves(b0,x.b1),up=movesTxt(mv,1),dn=movesTxt(mv,-1);
     return `<div class="as-row"><span class="n">${i+1}</span><span class="d">＋${esc(x.p[0])} ／ ${x.d?"－"+esc(x.d[0]):"不丟人"}<small>你的名次 ${b0.ovr}→${x.b1.ovr}（平均 ${sgn(x.my)}）· 進步：${up||"—"}${dn?` · 退步：${dn}`:""} · 價值 ${sgn(x.gain)}${x.p[1]==="W"?" · waiver":""}${x.p[3]?" · "+esc(x.p[3]):""}</small></span><button class="pxbtn" type="button" data-i="${i}">套用</button></div>`}).join("");
   out.querySelectorAll("button").forEach(b=>b.onclick=()=>{const x=top[+b.dataset.i];fam.add=x.p[0];fam.drop=x.d?x.d[0]:"";render();document.getElementById("h-fa").scrollIntoView({behavior:"smooth"});});

@@ -38,15 +38,20 @@ const f1=x=>x.toFixed(1), f3=x=>x.toFixed(3).replace(/^0/,"");
 const SI=()=>({pr:4,ls:5,cur:6,mix:7,l14:8})[state.src];
 const active=p=>p[1]!=="IL";
 
-function compute(data=DATA){
-  const si=SI();
+// 球隊數據 v：有賽程時是「整季平均每週」的預測（seasonWeek：照賽程每天排 10 人先發、板凳補位、含 IL 球員），
+// 名次、H2H 勝率、交易和撿人模擬都看它；沒有賽程時是每場平均加總。pg＝每場平均加總（不含 IL，VS「每場平均」用）
+// fast＝只算每場平均（很快），自動找交易、自動推薦撿人先用它初篩
+function compute(data=DATA,fast){
+  const si=SI(),val=!fast&&WEEKS.length?playerValues():null;
   return data.map(team=>{
     const t={fgm:0,fga:0,ftm:0,fta:0,tpm:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0};let n=0,miss=0;
     team[1].forEach(p=>{if(!active(p))return;const s=p[si];if(!s){miss++;return;}n++;const w=gpW(p);for(const k in t)t[k]+=s[IDX[k]]*w;});
-    const v={fg:t.fga?t.fgm/t.fga:0,ft:t.fta?t.ftm/t.fta:0,tpm:t.tpm,pts:t.pts,reb:t.reb,ast:t.ast,stl:t.stl,blk:t.blk,to:t.to};
-    return {name:team[0],ps:team[1],v,n,miss};
+    const pg={fg:t.fga?t.fgm/t.fga:0,ft:t.fta?t.ftm/t.fta:0,tpm:t.tpm,pts:t.pts,reb:t.reb,ast:t.ast,stl:t.stl,blk:t.blk,to:t.to};
+    return {name:team[0],ps:team[1],v:val?seasonWeek(team[1],val):pg,pg,wk:!!val,n,miss};
   });
 }
+// 球隊數據的單位：「平均每週」或「每場」
+const vUnit=r=>r.wk?"平均每週":"每場";
 // full＝也算 H2H 勝率（只有畫面顯示需要；交易、撿人模擬不用，省時間）
 function rankAll(rows,full){
   CATS.forEach(c=>{[...rows].sort((a,b)=>c.low?a.v[c.k]-b.v[c.k]:b.v[c.k]-a.v[c.k]).forEach((r,i)=>{(r.r=r.r||{})[c.k]=i+1})});
@@ -94,7 +99,7 @@ function renderLeague(rows){
   document.getElementById("league").innerHTML=h+"</tbody>";
   const missT=rows.reduce((a,r)=>a+r.miss,0);
   document.getElementById("league-note").textContent=
-    "數字是全隊（不含 IL）每場數據加總"+(state.inj?"（傷兵狀態只代表最近幾場，不影響這裡的整季數據，只算進 VS 本週、每日先發、串流）":"")+(state.gp?"，每人再乘上出賽率（預測出賽場數 ÷ 整季場數）":"")+"。♛ 前 3 名、☠ 第 14–16 名；格子越深名次越前（1–4、5–8、9–12、13–16 四階）。點欄位標題可排序。H2H 勝率＝跟其他 15 隊各對戰一次、9 項贏 5 項以上的平均機率（放棄助攻也是 9 項都比）；有賽程時用「整季平均每週」的預測（每天排 10 人先發、有人缺陣時板凳補上）。"
+    (rows[0]&&rows[0].wk?"數字是剩下整季「平均每週」的預測總數：照賽程每天排 10 人先發、有人缺陣時板凳補上；IL 球員也算（他們缺陣的場次已經算在預測場數和出賽率裡）"+(state.inj?"；傷兵狀態只算更新後幾天":""):"數字是全隊（不含 IL）每場數據加總"+(state.inj?"（傷兵狀態只代表最近幾場，不影響這裡的整季數據，只算進 VS 本週、每日先發、串流）":""))+(state.gp?"，每人再乘上出賽率（預測出賽場數 ÷ 整季場數）":"")+"。♛ 前 3 名、☠ 第 14–16 名；格子越深名次越前（1–4、5–8、9–12、13–16 四階）。點欄位標題可排序。H2H 勝率＝用同樣的數字，跟其他 15 隊各對戰一次、9 項贏 5 項以上的平均機率（放棄助攻也是 9 項都比）。"
     +(!["pr","mix"].includes(state.src)&&missT?(w=>` ${w}版有 ${missT} 位球員沒有${w}數據，不計入加總。`)({ls:"上季",cur:"本季",l14:"近 14 天"}[state.src]):"");
   document.querySelectorAll("#league th.sortable").forEach(el=>{
     const go=()=>{const k=el.dataset.k;state.sort=state.sort.k===k?{k,dir:-state.sort.dir}:{k,dir:1};render();};
@@ -114,7 +119,7 @@ function renderVS(rows){
   ws.innerHTML=`<option value="pg">每場平均（不看賽程）</option>`+WEEKS.map(x=>`<option value="${x.key}">第 ${x.i} 週 ${md(x.s)}–${md(x.e)}</option>`).join("");
   ws.value=wk?wk.key:"pg";ws.disabled=!WEEKS.length;
   ws.onchange=()=>{state.week=ws.value;save();render();};
-  let va=A.v,vb=B.v,info=SCHED?"":"從 Yahoo 更新過資料後，可以選週次，依每隊這週的出賽場數和每天的先發名額預測。";
+  let va=A.pg,vb=B.pg,info=SCHED?"":"從 Yahoo 更新過資料後，可以選週次，依每隊這週的出賽場數和每天的先發名額預測。";
   if(wk){const val=playerValues(),lv=!!(liveOf(ME,wk)&&liveOf(B.name,wk)),ta=weekLive(A.ps,lv?ME:null,wk,val),tb=weekLive(B.ps,lv?B.name:null,wk,val);va=ta.v;vb=tb.v;
     const sb=x=>`先發約 ${Math.round(x.starts)} 場次${x.benched>=.5?`（另有約 ${Math.round(x.benched)} 場次排不進先發）`:""}`;
     info=`第 ${wk.i} 週（${md(wk.s)}–${md(wk.e)}）預測總數：${esc(ME)} ${sb(ta)}；${esc(B.name)} ${sb(tb)}。${lv?liveTxt(ta.live,wk):""}每天最多 10 人上場，依位置排出最好的陣容${state.inj?`，更新資料後 ${O_DAYS} 天內缺陣（O）不算、${Q_DAYS} 天內出賽存疑（Q）打 75 折`:""}${state.gp?"，再乘上出賽率":""}；有人缺陣時由板凳補上。`;}
@@ -185,7 +190,8 @@ function renderTeams(rows){
     return `<tr class="${out?"out":""}"><td class="name"><span class="slot">${esc(p[1])}</span><span class="pname">${esc(p[0])}</span>${badge}${hotBadge(p)}${p[2]?`<span class="pos" style="padding-left:36px">${esc(p[2])}</span>`:""}</td><td>${hpBar(val(s))}</td><td>${s?s[0]:'<span class="dash">—</span>'}</td>${wk?`<td>${gamesIn(p,wk)}</td>`:""}${keep.map(c=>`<td>${c}</td>`).join("")}</tr>`;
   }).join("");
   const cats=visCats();
-  const tot=`<tr class="total"><td class="name">球隊每場加總（${r.n} 人）</td><td></td><td></td>${wk?"<td></td>":""}${cats.map(c=>`<td>${fmt(c,r.v[c.k])}</td>`).join("")}</tr>
+  const tot=`<tr class="total"><td class="name">球隊每場加總（${r.n} 人）</td><td></td><td></td>${wk?"<td></td>":""}${cats.map(c=>`<td>${fmt(c,r.pg[c.k])}</td>`).join("")}</tr>
+    ${r.wk?`<tr class="total"><td class="name">平均每週預測（含 IL）</td><td></td><td></td>${wk?"<td></td>":""}${cats.map(c=>`<td>${fmt(c,r.v[c.k])}</td>`).join("")}</tr>`:""}
     <tr class="ranks"><td class="name" style="color:var(--mid)">16 隊排名</td><td></td><td></td>${wk?"<td></td>":""}${cats.map(c=>`<td class="${tier(r.r[c.k])}">${rk(r.r[c.k])}</td>`).join("")}</tr>`;
   document.getElementById("team").innerHTML=`<article class="team" style="display:flex;flex-direction:column;gap:8px">
     <div class="team-head"><h3>${emblem(r.name,28)}${esc(r.name)}${r.name===ME?'<span class="tag">1P</span>':""}</h3><span class="summary">${state.punt?"不算 AST":"9 項綜合"}第 ${r.ovr}</span></div>

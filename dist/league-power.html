@@ -1041,7 +1041,9 @@ function initImport(){
 // 更新資料後 Q_DAYS 天內 Q 打 75 折、O_DAYS 天內 O 不算；整季的名次和 H2H 勝率不看傷兵（長期缺陣已經算在出賽率和預測場數裡）
 // 「全部照算」時都算 1
 const Q_RATE=0.75,Q_DAYS=3,O_DAYS=7;
-const statusDay=()=>IMP&&IMP.at?dayOf(IMP.at):todayDay();
+// 資料載入後 IMP 不會變，只算一次（時區換算很慢，weekRaw 每人每天都會用到）
+let STATUS_DAY=null;
+const statusDay=()=>STATUS_DAY??(STATUS_DAY=IMP&&IMP.at?dayOf(IMP.at):todayDay());
 const injOn=(p,d)=>{if(!state.inj)return 1;const k=d-statusDay();return p[3]==="O"?(k<O_DAYS?0:1):p[3]==="Q"?(k<Q_DAYS?Q_RATE:1):1};
 // 出賽率：預測出賽場數 ÷ 全聯盟最多的預測場數（季前大約 82；開季後預測只算剩下的比賽，會跟著變少）
 // 沒有預測就用上季場數 ÷ 82；容易受傷、輪休的球員打折；「不考慮」時都算 1
@@ -1051,14 +1053,22 @@ const gpRate=p=>{const r=p[4]?p[4][0]/gpFull():p[5]?p[5][0]/82:1;return Math.min
 // 整季加總用的權重＝出賽率
 const gpW=p=>state.gp?gpRate(p):1;
 
-// 預測＋本季混合（存在 index 7）：本季打 g 場時，本季佔 g/(g+K)、預測佔 K/(g+K)
-const MIX_K=20;
+// 預測＋本季混合（存在 index 7）：本季打 g 場時，本季佔 g/(g+K)、預測佔 K/(g+K)，每一項的 K 不一樣：
+// 出手數、得分、籃板、助攻、失誤幾場就看得出角色（K 小）；三分、阻攻、抄截起伏比較大；命中率要很多場才可信（K 大）
+// 命中率另外混：先混出手數，再乘上混出來的命中率得到命中數
+const MIX_K={fga:12,fta:12,pts:12,reb:12,ast:12,to:12,tpm:20,blk:20,stl:25,fg:40,ft:60};
+const MIX_I={fga:2,fta:4,tpm:5,pts:6,reb:7,ast:8,stl:9,blk:10,to:11};
 function addMix(p){
   const pr=p[4],cu=p[6];
   if(!cu){p[7]=pr||null;return;}
   if(!pr){p[7]=cu;return;}
-  const a=cu[0]/(cu[0]+MIX_K);
-  p[7]=pr.map((x,i)=>i===0?x:+(x*(1-a)+cu[i]*a).toFixed(2));
+  const g=cu[0],mix=(a,b,k)=>a+(b-a)*g/(g+k),r=pr.slice();
+  for(const k in MIX_I)r[MIX_I[k]]=mix(pr[MIX_I[k]],cu[MIX_I[k]],MIX_K[k]);
+  // 本季沒出手就沿用預測的命中率；預測沒出手就用本季的
+  const pct=(m,a,k)=>!cu[a]?(pr[a]?pr[m]/pr[a]:0):!pr[a]?cu[m]/cu[a]:mix(pr[m]/pr[a],cu[m]/cu[a],k);
+  r[1]=r[2]*pct(1,2,MIX_K.fg);
+  r[3]=r[4]*pct(3,4,MIX_K.ft);
+  p[7]=r.map((x,i)=>i===0?x:+x.toFixed(2));
 }
 
 // 最近 14 天場均放在 index 8（資料來源「近 14 天」）
@@ -1081,10 +1091,9 @@ function matchup(va,vb){
   return {ps,exp:ps.reduce((a,b)=>a+b,0),win:dist.slice(5).reduce((a,b)=>a+b,0)};
 }
 // 每隊對其他 15 隊的平均勝率、平均贏幾項，並排名
-// 有賽程時用「整季平均每週」的預測（每天排先發、板凳補位）；沒有賽程就用每場平均加總
+// 用的是 compute() 算出來的球隊數據 v：有賽程時是「整季平均每週」（每天排先發、板凳補位），沒有賽程就是每場平均加總
 function h2hAll(rows){
-  if(WEEKS.length){const val=playerValues();rows.forEach(r=>r.hv=seasonWeek(r.ps,val));}else rows.forEach(r=>r.hv=r.v);
-  rows.forEach(r=>{let w=0,e=0;rows.forEach(o=>{if(o===r)return;const m=matchup(r.hv,o.hv);w+=m.win;e+=m.exp;});r.win=w/(rows.length-1);r.expCats=e/(rows.length-1);});
+  rows.forEach(r=>{let w=0,e=0;rows.forEach(o=>{if(o===r)return;const m=matchup(r.v,o.v);w+=m.win;e+=m.exp;});r.win=w/(rows.length-1);r.expCats=e/(rows.length-1);});
   [...rows].sort((a,b)=>b.win-a.win).forEach((r,i)=>r.winRk=i+1);
 }
 const pctTxt=x=>`${Math.round(x*100)}%`;
@@ -1145,9 +1154,10 @@ function startProbs(players,avail){
 const toV=t=>({fg:t.fga?t.fgm/t.fga:0,ft:t.fta?t.ftm/t.fta:0,tpm:t.tpm,pts:t.pts,reb:t.reb,ast:t.ast,stl:t.stl,blk:t.blk,to:t.to});
 const addRaw=(a,b)=>{const t={};for(const k in a.t)t[k]=a.t[k]+b.t[k];return {t,starts:a.starts+b.starts,benched:a.benched+b.benched}};
 // 一隊在第 s～e 天的預測總數（期望值）：每天依位置排先發，缺陣（近期傷兵、出賽率）時由板凳補上
-function weekRaw(ps,s,e,val){
+// il＝也算 IL 球員（整季預測用：他們回來後會上場，缺陣的場次已經算在預測場數和出賽率裡）
+function weekRaw(ps,s,e,val,il){
   const si=SI(),t={fgm:0,fga:0,ftm:0,fta:0,tpm:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0};let starts=0,benched=0;
-  const pool=ps.filter(p=>active(p)&&p[si]).map(p=>({p,v:val(p[si])??-99,a:gpW(p),g:GAMES[nbaTeam(p)]})).sort((a,b)=>b.v-a.v);
+  const pool=ps.filter(p=>(il||active(p))&&p[si]).map(p=>({p,v:val(p[si])??-99,a:gpW(p),g:GAMES[nbaTeam(p)]})).sort((a,b)=>b.v-a.v);
   for(let d=s;d<=e;d++){
     const today=pool.filter(x=>x.g&&x.g.has(d)).map(x=>({...x,a:x.a*injOn(x.p,d)})).filter(x=>x.a>0);if(!today.length)continue;
     const pr=startProbs(today.map(x=>x.p),today.map(x=>x.a));
@@ -1188,13 +1198,16 @@ function weekLive(ps,name,w,val){
   const r=addRaw(liveRaw(ps,L,w,val),restRaw(ps,L.cut,w.e,val));
   return {v:toV(r.t),starts:r.starts,benched:r.benched,live:L};
 }
-// 整季（從本週到最後一週）平均每週的預測，H2H 勝率用；同一份名單、同樣設定只算一次
-const seasonCache=new WeakMap();
+// 整季（從本週到最後一週）平均每週的預測：聯盟表的名次、H2H 勝率、交易和撿人模擬都用它。IL 球員也算（見 weekRaw）
+// 同樣的球員、數據和設定只算一次（交易模擬每次只有一兩隊會變，其他隊直接用算過的）
+const seasonCache=new Map();
 function seasonWeek(ps,val){
-  const key=`${state.src}|${state.inj}|${state.gp}|${state.punt}`,c=seasonCache.get(ps);if(c&&c.key===key)return c.v;
-  const cw=curWeek(),i0=WEEKS.indexOf(cw),ws=WEEKS.slice(i0<0?0:i0),r=weekRaw(ps,ws[0].s,ws[ws.length-1].e,val);
+  const si=SI(),cw=curWeek(),key=`${cw.key}|${state.src}|${state.inj}|${state.gp}|${state.punt}|`+ps.map(p=>`${p[0]}/${p[1]}/${p[3]}/${gpW(p)}/${p[si]||""}`).join("|");
+  const c=seasonCache.get(key);if(c)return c;
+  const i0=WEEKS.indexOf(cw),ws=WEEKS.slice(i0<0?0:i0),r=weekRaw(ps,ws[0].s,ws[ws.length-1].e,val,true);
   const v=toV(r.t);for(const k in v)if(!["fg","ft"].includes(k))v[k]/=ws.length;
-  seasonCache.set(ps,{key,v});return v;
+  if(seasonCache.size>5000)seasonCache.clear();
+  seasonCache.set(key,v);return v;
 }
 
 const CATS=[
@@ -1236,15 +1249,20 @@ const f1=x=>x.toFixed(1), f3=x=>x.toFixed(3).replace(/^0/,"");
 const SI=()=>({pr:4,ls:5,cur:6,mix:7,l14:8})[state.src];
 const active=p=>p[1]!=="IL";
 
-function compute(data=DATA){
-  const si=SI();
+// 球隊數據 v：有賽程時是「整季平均每週」的預測（seasonWeek：照賽程每天排 10 人先發、板凳補位、含 IL 球員），
+// 名次、H2H 勝率、交易和撿人模擬都看它；沒有賽程時是每場平均加總。pg＝每場平均加總（不含 IL，VS「每場平均」用）
+// fast＝只算每場平均（很快），自動找交易、自動推薦撿人先用它初篩
+function compute(data=DATA,fast){
+  const si=SI(),val=!fast&&WEEKS.length?playerValues():null;
   return data.map(team=>{
     const t={fgm:0,fga:0,ftm:0,fta:0,tpm:0,pts:0,reb:0,ast:0,stl:0,blk:0,to:0};let n=0,miss=0;
     team[1].forEach(p=>{if(!active(p))return;const s=p[si];if(!s){miss++;return;}n++;const w=gpW(p);for(const k in t)t[k]+=s[IDX[k]]*w;});
-    const v={fg:t.fga?t.fgm/t.fga:0,ft:t.fta?t.ftm/t.fta:0,tpm:t.tpm,pts:t.pts,reb:t.reb,ast:t.ast,stl:t.stl,blk:t.blk,to:t.to};
-    return {name:team[0],ps:team[1],v,n,miss};
+    const pg={fg:t.fga?t.fgm/t.fga:0,ft:t.fta?t.ftm/t.fta:0,tpm:t.tpm,pts:t.pts,reb:t.reb,ast:t.ast,stl:t.stl,blk:t.blk,to:t.to};
+    return {name:team[0],ps:team[1],v:val?seasonWeek(team[1],val):pg,pg,wk:!!val,n,miss};
   });
 }
+// 球隊數據的單位：「平均每週」或「每場」
+const vUnit=r=>r.wk?"平均每週":"每場";
 // full＝也算 H2H 勝率（只有畫面顯示需要；交易、撿人模擬不用，省時間）
 function rankAll(rows,full){
   CATS.forEach(c=>{[...rows].sort((a,b)=>c.low?a.v[c.k]-b.v[c.k]:b.v[c.k]-a.v[c.k]).forEach((r,i)=>{(r.r=r.r||{})[c.k]=i+1})});
@@ -1292,7 +1310,7 @@ function renderLeague(rows){
   document.getElementById("league").innerHTML=h+"</tbody>";
   const missT=rows.reduce((a,r)=>a+r.miss,0);
   document.getElementById("league-note").textContent=
-    "數字是全隊（不含 IL）每場數據加總"+(state.inj?"（傷兵狀態只代表最近幾場，不影響這裡的整季數據，只算進 VS 本週、每日先發、串流）":"")+(state.gp?"，每人再乘上出賽率（預測出賽場數 ÷ 整季場數）":"")+"。♛ 前 3 名、☠ 第 14–16 名；格子越深名次越前（1–4、5–8、9–12、13–16 四階）。點欄位標題可排序。H2H 勝率＝跟其他 15 隊各對戰一次、9 項贏 5 項以上的平均機率（放棄助攻也是 9 項都比）；有賽程時用「整季平均每週」的預測（每天排 10 人先發、有人缺陣時板凳補上）。"
+    (rows[0]&&rows[0].wk?"數字是剩下整季「平均每週」的預測總數：照賽程每天排 10 人先發、有人缺陣時板凳補上；IL 球員也算（他們缺陣的場次已經算在預測場數和出賽率裡）"+(state.inj?"；傷兵狀態只算更新後幾天":""):"數字是全隊（不含 IL）每場數據加總"+(state.inj?"（傷兵狀態只代表最近幾場，不影響這裡的整季數據，只算進 VS 本週、每日先發、串流）":""))+(state.gp?"，每人再乘上出賽率（預測出賽場數 ÷ 整季場數）":"")+"。♛ 前 3 名、☠ 第 14–16 名；格子越深名次越前（1–4、5–8、9–12、13–16 四階）。點欄位標題可排序。H2H 勝率＝用同樣的數字，跟其他 15 隊各對戰一次、9 項贏 5 項以上的平均機率（放棄助攻也是 9 項都比）。"
     +(!["pr","mix"].includes(state.src)&&missT?(w=>` ${w}版有 ${missT} 位球員沒有${w}數據，不計入加總。`)({ls:"上季",cur:"本季",l14:"近 14 天"}[state.src]):"");
   document.querySelectorAll("#league th.sortable").forEach(el=>{
     const go=()=>{const k=el.dataset.k;state.sort=state.sort.k===k?{k,dir:-state.sort.dir}:{k,dir:1};render();};
@@ -1312,7 +1330,7 @@ function renderVS(rows){
   ws.innerHTML=`<option value="pg">每場平均（不看賽程）</option>`+WEEKS.map(x=>`<option value="${x.key}">第 ${x.i} 週 ${md(x.s)}–${md(x.e)}</option>`).join("");
   ws.value=wk?wk.key:"pg";ws.disabled=!WEEKS.length;
   ws.onchange=()=>{state.week=ws.value;save();render();};
-  let va=A.v,vb=B.v,info=SCHED?"":"從 Yahoo 更新過資料後，可以選週次，依每隊這週的出賽場數和每天的先發名額預測。";
+  let va=A.pg,vb=B.pg,info=SCHED?"":"從 Yahoo 更新過資料後，可以選週次，依每隊這週的出賽場數和每天的先發名額預測。";
   if(wk){const val=playerValues(),lv=!!(liveOf(ME,wk)&&liveOf(B.name,wk)),ta=weekLive(A.ps,lv?ME:null,wk,val),tb=weekLive(B.ps,lv?B.name:null,wk,val);va=ta.v;vb=tb.v;
     const sb=x=>`先發約 ${Math.round(x.starts)} 場次${x.benched>=.5?`（另有約 ${Math.round(x.benched)} 場次排不進先發）`:""}`;
     info=`第 ${wk.i} 週（${md(wk.s)}–${md(wk.e)}）預測總數：${esc(ME)} ${sb(ta)}；${esc(B.name)} ${sb(tb)}。${lv?liveTxt(ta.live,wk):""}每天最多 10 人上場，依位置排出最好的陣容${state.inj?`，更新資料後 ${O_DAYS} 天內缺陣（O）不算、${Q_DAYS} 天內出賽存疑（Q）打 75 折`:""}${state.gp?"，再乘上出賽率":""}；有人缺陣時由板凳補上。`;}
@@ -1383,7 +1401,8 @@ function renderTeams(rows){
     return `<tr class="${out?"out":""}"><td class="name"><span class="slot">${esc(p[1])}</span><span class="pname">${esc(p[0])}</span>${badge}${hotBadge(p)}${p[2]?`<span class="pos" style="padding-left:36px">${esc(p[2])}</span>`:""}</td><td>${hpBar(val(s))}</td><td>${s?s[0]:'<span class="dash">—</span>'}</td>${wk?`<td>${gamesIn(p,wk)}</td>`:""}${keep.map(c=>`<td>${c}</td>`).join("")}</tr>`;
   }).join("");
   const cats=visCats();
-  const tot=`<tr class="total"><td class="name">球隊每場加總（${r.n} 人）</td><td></td><td></td>${wk?"<td></td>":""}${cats.map(c=>`<td>${fmt(c,r.v[c.k])}</td>`).join("")}</tr>
+  const tot=`<tr class="total"><td class="name">球隊每場加總（${r.n} 人）</td><td></td><td></td>${wk?"<td></td>":""}${cats.map(c=>`<td>${fmt(c,r.pg[c.k])}</td>`).join("")}</tr>
+    ${r.wk?`<tr class="total"><td class="name">平均每週預測（含 IL）</td><td></td><td></td>${wk?"<td></td>":""}${cats.map(c=>`<td>${fmt(c,r.v[c.k])}</td>`).join("")}</tr>`:""}
     <tr class="ranks"><td class="name" style="color:var(--mid)">16 隊排名</td><td></td><td></td>${wk?"<td></td>":""}${cats.map(c=>`<td class="${tier(r.r[c.k])}">${rk(r.r[c.k])}</td>`).join("")}</tr>`;
   document.getElementById("team").innerHTML=`<article class="team" style="display:flex;flex-direction:column;gap:8px">
     <div class="team-head"><h3>${emblem(r.name,28)}${esc(r.name)}${r.name===ME?'<span class="tag">1P</span>':""}</h3><span class="summary">${state.punt?"不算 AST":"9 項綜合"}第 ${r.ovr}</span></div>
@@ -1455,7 +1474,8 @@ function trimLowest(arr,k,val){const out=[];for(let i=0;i<k;i++){const act=arr.f
 const takeP=(arr,n)=>{const i=arr.findIndex(p=>p[0]===n);return i<0?null:arr.splice(i,1)[0]};
 const actN=a=>a.filter(p=>p[1]!=="IL").length;
 
-function simulate(give,get,opp,fill){
+// fast＝只用每場平均（自動找交易初篩用，見 compute）
+function simulate(give,get,opp,fill,fast){
   const data=DATA.map(t=>[t[0],t[1].slice()]);
   const me=data.find(t=>t[0]===ME)[1],ot=data.find(t=>t[0]===opp)[1];
   const g1=give.map(n=>takeP(me,n)).filter(Boolean),g2=get.map(n=>takeP(ot,n)).filter(Boolean);
@@ -1465,17 +1485,17 @@ function simulate(give,get,opp,fill){
   if(diff<0)dropped=trimLowest(me,-diff,val);
   if(diff>0&&fill&&FA[fill]){me.push(FA[fill]);added.push(fill);}
   if(diff>0)trimLowest(ot,diff,val);
-  const rows=compute(data);rankAll(rows);
+  const rows=compute(data,fast);rankAll(rows);
   return {rows,dropped,added};
 }
 // baseline for 2-for-1 comparisons: just pick up the FA (drop my lowest-value active player), no trade
-function baseWithFill(fill){
+function baseWithFill(fill,fast){
   const data=DATA.map(t=>[t[0],t[1].slice()]);const me=data.find(t=>t[0]===ME)[1];const val=vfunc();
   const act=me.filter(p=>p[1]!=="IL").sort((a,b)=>(val(a)??-99)-(val(b)??-99));me.splice(me.indexOf(act[0]),1);me.push(FA[fill]);
-  const rows=compute(data);rankAll(rows);return {rows,dropped:act[0][0]};
+  const rows=compute(data,fast);rankAll(rows);return {rows,dropped:act[0][0]};
 }
-function judge(give,get,opp,fill,base){
-  const sim=simulate(give,get,opp,fill);
+function judge(give,get,opp,fill,base,fast){
+  const sim=simulate(give,get,opp,fill,fast);
   const b0=base.find(r=>r.name===ME),o0=base.find(r=>r.name===opp);
   const b1=sim.rows.find(r=>r.name===ME),o1=sim.rows.find(r=>r.name===opp);
   const val=vfunc();
@@ -1595,32 +1615,40 @@ function renderTx(rows){
   <div class="scroll"><table><thead><tr><th class="name">各項名次（交易後）</th>${cats.map(c=>`<th>${c.l}</th>`).join("")}</tr></thead><tbody>${cRow(ea,A0,A1)}${cRow(eb,B0,B1)}${cRow(esc(ME)+"（你）",M0,M1)}</tbody></table></div>`;
 }
 
+const SCOUT_REFINE=30;   // 自動找交易、自動推薦撿人：初篩後用整季每週預測重算的候選數
 async function autoScout(){
   const sell=document.getElementById("as-sell").value,type=document.getElementById("as-type").value;
   const st=document.getElementById("as-status"),out=document.getElementById("as-out");
   const fa=scoutFill();
   if(type==="2"&&!fa){st.textContent="沒有可以補位的 FA，沒辦法找 2 換 1。";return;}
-  const base=compute();rankAll(base);const base2=fa?baseWithFill(fa).rows:base;
+  // 第一階段：每場平均快速初篩（上千種組合）；第二階段：前 SCOUT_REFINE 名用整季每週預測重算，結果跟聯盟表一致
+  const fb=compute(DATA,true);rankAll(fb);const fb2=fa?baseWithFill(fa,true).rows:fb;
   const mine=DATA.find(t=>t[0]===ME)[1].map(p=>p[0]);
   const gives=[];
   if(type!=="2")(sell?[sell]:mine).forEach(n=>gives.push([n]));
   if(type!=="1"&&fa)for(let i=0;i<mine.length;i++)for(let j=i+1;j<mine.length;j++){const g=[mine[i],mine[j]];if(!sell||g.includes(sell))gives.push(g);}
   const targets=[];DATA.forEach(t=>{if(t[0]!==ME)t[1].forEach(p=>{if(p[1]!=="IL")targets.push([t[0],p[0]])})});
-  const res=[];let done=0;const total=gives.length*targets.length;
+  const pre=[],res=[];let done=0;const total=gives.length*targets.length;
   for(const g of gives){
     for(const [team,n] of targets){
       const fair=pkg(g)/Math.max(pkg([n]),1);done++;
       if(fair<0.95||fair>1.6)continue;
-      const sp=actCount(ME,g)-actCount(team,[n])>0;const J=judge(g,[n],team,sp?fa:"",sp?base2:base);
-      if(J.o0.ovr-J.o1.ovr<-1)continue;
-      if(J.myAvg<=0.05)continue;
-      res.push({g,team,n,J});
+      const sp=actCount(ME,g)-actCount(team,[n])>0;const J=judge(g,[n],team,sp?fa:"",sp?fb2:fb,true);
+      if(J.o0.ovr-J.o1.ovr<-2)continue;
+      pre.push({g,team,n,sp,J});
     }
-    st.textContent=`搜尋中… ${Math.round(done/total*100)}%`;await new Promise(r=>setTimeout(r,0));
+    st.textContent=`初篩中… ${Math.round(done/total*100)}%`;await new Promise(r=>setTimeout(r,0));
+  }
+  pre.sort((a,b)=>b.J.myAvg-a.J.myAvg||b.J.vGain-a.J.vGain);
+  const base=compute();rankAll(base);const base2=fa?baseWithFill(fa).rows:base,cand=pre.slice(0,SCOUT_REFINE);
+  for(let i=0;i<cand.length;i++){
+    const x=cand[i],J=judge(x.g,[x.n],x.team,x.sp?fa:"",x.sp?base2:base);
+    if(J.o0.ovr-J.o1.ovr>=-1&&J.myAvg>0.05)res.push({g:x.g,team:x.team,n:x.n,J});
+    if(i%5===0){st.textContent=`精算前 ${cand.length} 個候選… ${i}／${cand.length}`;await new Promise(r=>setTimeout(r,0));}
   }
   res.sort((a,b)=>b.J.myAvg-a.J.myAvg||b.J.vGain-a.J.vGain);
   const top=res.slice(0,8);
-  st.textContent=top.length?`找到 ${res.length} 個可行方案，顯示前 ${top.length} 個（依你的平均名次提升排序；2 換 1 空位補 ${esc(fa)}，是跟「不交易、只撿 ${esc(fa)}」比較）。`:"找不到符合條件的交易。可以換一位要賣的球員，或改成「兩種都找」。";
+  st.textContent=top.length?`初篩 ${pre.length} 個組合、精算前 ${Math.min(pre.length,SCOUT_REFINE)} 個，有 ${res.length} 個可行，顯示前 ${top.length} 個（依你的平均名次提升排序；2 換 1 空位補 ${esc(fa)}，是跟「不交易、只撿 ${esc(fa)}」比較）。`:"找不到符合條件的交易。可以換一位要賣的球員，或改成「兩種都找」。";
   out.innerHTML=top.map((x,i)=>`<div class="as-row"><span class="n">${i+1}</span><span class="d">${x.g.map(esc).join(" ＋ ")} → ${esc(x.n)}<small>${esc(x.team)} · 你的名次 ${x.J.b0.ovr}→${x.J.b1.ovr}（平均 ${sgn(x.J.myAvg)}）· 價值 ${sgn(x.J.vGain)} · 公平度 ${Math.round(x.J.fair*100)}% · 成交 ${x.J.acc}</small></span><button class="pxbtn" type="button" data-i="${i}">套用</button></div>`).join("");
   out.querySelectorAll("button").forEach(b=>b.onclick=()=>{const x=top[+b.dataset.i];tm.give=[...x.g];tm.get=[x.n];tm.opp=x.team;tm.fill=actCount(ME,x.g)-actCount(x.team,[x.n])>0?fa:"";render();document.getElementById("h-trade").scrollIntoView({behavior:"smooth"});});
 }
@@ -2014,12 +2042,12 @@ const fam={add:"",drop:null};
 const myActive=()=>DATA.find(t=>t[0]===ME)[1].filter(p=>p[1]!=="IL");
 const faPos=p=>((p[2]||"").split(" - ")[1]||"").split(",").map(x=>x.trim()).filter(Boolean);
 
-function simulatePickup(add,drop){
+function simulatePickup(add,drop,fast){
   const data=DATA.map(t=>[t[0],t[1].slice()]);
   const me=data.find(t=>t[0]===ME)[1];
   if(drop){const i=me.findIndex(p=>p[0]===drop);if(i>=0)me.splice(i,1);}
   me.push([add,"BN",...FA[add].slice(2)]);
-  const rows=compute(data);rankAll(rows);
+  const rows=compute(data,fast);rankAll(rows);
   return rows.find(r=>r.name===ME);
 }
 function catMoves(b0,b1){
@@ -2051,7 +2079,7 @@ function renderFA(rows){
   const cats=visCats();
   const extra=[P[1]==="W"?`⚠ ${esc(fam.add)} 在 waiver 上，要等 waiver 處理完才拿得到，也可能被別隊搶走。`:"",P[3]==="O"?`⚠ ${esc(fam.add)} 目前缺陣（O）。`:P[3]==="Q"?`⚠ ${esc(fam.add)} 出賽存疑（Q）。`:"",
     weekLine(wk,rows,b1,P,D),
-    `位置：撿進 ${esc(fam.add)}（${esc(P[2]||"—")}）${D?`，丟掉 ${esc(D[0])}（${esc(D[2]||"—")}）`:""}。${wk?"本週預測已依位置排先發；":""}名次變化是看全季每場平均，不檢查先發位置。`].filter(Boolean).map(x=>`<p class="note">${x}</p>`).join("");
+    `位置：撿進 ${esc(fam.add)}（${esc(P[2]||"—")}）${D?`，丟掉 ${esc(D[0])}（${esc(D[2]||"—")}）`:""}。${b0.wk?"名次變化跟聯盟表一樣，看剩下整季平均每週的預測（照賽程排先發位置）。":`${wk?"本週預測已依位置排先發；":""}名次變化是看全季每場平均，不檢查先發位置。`}`].filter(Boolean).map(x=>`<p class="note">${x}</p>`).join("");
   out.innerHTML=`<div class="tm-verdict"><b>RESULT</b>${verdict}</div>
   <div class="tm-grid">
     <div class="tm-card"><span class="k">你的名次（${state.punt?"不算 AST":"9 項"}）</span><span class="v">${b0.ovr} → ${b1.ovr} ${moveTxt(b0.ovr,b1.ovr)}</span><span class="s">平均名次 ${f1(b0.avgUse)} → ${f1(b1.avgUse)}</span></div>
@@ -2059,7 +2087,7 @@ function renderFA(rows){
     <div class="tm-card"><span class="k">異動</span><span class="v" style="font-size:16px">＋${esc(fam.add)}</span><span class="s">${D?"－"+esc(D[0]):"不丟人（用掉 1 個空位）"}</span></div>
   </div>${extra}
   <div class="scroll"><table><thead><tr><th class="name">${esc(ME)}</th>${cats.map(c=>`<th>${c.l}</th>`).join("")}</tr></thead><tbody>
-    <tr><td class="name">每場數據</td>${cats.map(c=>`<td><div class="cell"><span>${fmt(c,b1.v[c.k])}</span><span class="pos">原 ${fmt(c,b0.v[c.k])}</span></div></td>`).join("")}</tr>
+    <tr><td class="name">${vUnit(b0)}數據</td>${cats.map(c=>`<td><div class="cell"><span>${fmt(c,b1.v[c.k])}</span><span class="pos">原 ${fmt(c,b0.v[c.k])}</span></div></td>`).join("")}</tr>
     <tr><td class="name">名次</td>${cats.map(c=>{const a=b0.r[c.k],b=b1.r[c.k];return `<td class="${tier(b)}">${b}<span class="delta">${a===b?"–":moveTxt(a,b)}</span></td>`}).join("")}</tr>
   </tbody></table></div>`;
 }
@@ -2077,26 +2105,28 @@ function weekLine(wk,rows,b1,P,D){
 async function autoPickup(){
   const st=document.getElementById("fa-status"),out=document.getElementById("fa-out");
   const noW=document.getElementById("fa-nowaiver").checked,noO=document.getElementById("fa-noout").checked,pos=document.getElementById("fa-pos").value;
-  const base=compute();rankAll(base);const b0=base.find(r=>r.name===ME);
+  // 第一階段：每場平均快速初篩所有組合；第二階段：前 SCOUT_REFINE 個用整季每週預測重算（跟聯盟表一致）
+  const fb=compute(DATA,true);rankAll(fb);const f0=fb.find(r=>r.name===ME);
   const val=vfunc(),act=myActive(),open=ROSTER-act.length;
   const cands=faList().filter(x=>!(noW&&x.p[1]==="W")&&!(noO&&x.p[3]==="O")&&(!pos||faPos(x.p).includes(pos)));
   if(!cands.length){st.textContent="沒有符合篩選條件的 FA。";out.innerHTML="";return;}
   const drops=(open>0?[null]:[]).concat(act);
-  const best=[];let done=0;
+  const pre=[];let done=0;
   for(const x of cands){
-    let top=null;
-    for(const d of drops){
-      const b1=simulatePickup(x.p[0],d&&d[0]),my=b0.avgUse-b1.avgUse;
-      if(my<=0.05)continue;
-      const gain=x.v-(d?val(d)||0:0);
-      if(!top||my>top.my||(my===top.my&&gain>top.gain))top={p:x.p,d,b1,my,gain};
-    }
-    if(top)best.push(top);
-    if(++done%10===0){st.textContent=`搜尋中… ${Math.round(done/cands.length*100)}%`;await new Promise(r=>setTimeout(r,0));}
+    for(const d of drops)pre.push({x,d,my:f0.avgUse-simulatePickup(x.p[0],d&&d[0],true).avgUse,gain:x.v-(d?val(d)||0:0)});
+    if(++done%10===0){st.textContent=`初篩中… ${Math.round(done/cands.length*100)}%`;await new Promise(r=>setTimeout(r,0));}
   }
+  pre.sort((a,b)=>b.my-a.my||b.gain-a.gain);
+  const base=compute();rankAll(base);const b0=base.find(r=>r.name===ME),cand=pre.slice(0,SCOUT_REFINE),byP=new Map();
+  for(let i=0;i<cand.length;i++){
+    const {x,d,gain}=cand[i],b1=simulatePickup(x.p[0],d&&d[0]),my=b0.avgUse-b1.avgUse,top=byP.get(x.p[0]);
+    if(my>0.05&&(!top||my>top.my||(my===top.my&&gain>top.gain)))byP.set(x.p[0],{p:x.p,d,b1,my,gain});
+    if(i%5===0){st.textContent=`精算前 ${cand.length} 個組合… ${i}／${cand.length}`;await new Promise(r=>setTimeout(r,0));}
+  }
+  const best=[...byP.values()];
   best.sort((a,b)=>b.my-a.my||a.b1.ovr-b.b1.ovr||b.gain-a.gain);
   const top=best.slice(0,10);
-  st.textContent=top.length?`搜尋了 ${cands.length} 位 FA，有 ${best.length} 位能讓你進步，顯示前 ${top.length} 位（每位 FA 只列最好的丟人選擇，依平均名次進步排序）。`:`搜尋了 ${cands.length} 位 FA，沒有能讓你名次進步的撿人組合。`;
+  st.textContent=top.length?`搜尋了 ${cands.length} 位 FA（初篩後精算前 ${cand.length} 個組合），有 ${best.length} 位能讓你進步，顯示前 ${top.length} 位（每位 FA 只列最好的丟人選擇，依平均名次進步排序）。`:`搜尋了 ${cands.length} 位 FA（初篩後精算前 ${cand.length} 個組合），沒有能讓你名次進步的撿人組合。`;
   out.innerHTML=top.map((x,i)=>{const mv=catMoves(b0,x.b1),up=movesTxt(mv,1),dn=movesTxt(mv,-1);
     return `<div class="as-row"><span class="n">${i+1}</span><span class="d">＋${esc(x.p[0])} ／ ${x.d?"－"+esc(x.d[0]):"不丟人"}<small>你的名次 ${b0.ovr}→${x.b1.ovr}（平均 ${sgn(x.my)}）· 進步：${up||"—"}${dn?` · 退步：${dn}`:""} · 價值 ${sgn(x.gain)}${x.p[1]==="W"?" · waiver":""}${x.p[3]?" · "+esc(x.p[3]):""}</small></span><button class="pxbtn" type="button" data-i="${i}">套用</button></div>`}).join("");
   out.querySelectorAll("button").forEach(b=>b.onclick=()=>{const x=top[+b.dataset.i];fam.add=x.p[0];fam.drop=x.d?x.d[0]:"";render();document.getElementById("h-fa").scrollIntoView({behavior:"smooth"});});

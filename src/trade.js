@@ -21,7 +21,8 @@ function trimLowest(arr,k,val){const out=[];for(let i=0;i<k;i++){const act=arr.f
 const takeP=(arr,n)=>{const i=arr.findIndex(p=>p[0]===n);return i<0?null:arr.splice(i,1)[0]};
 const actN=a=>a.filter(p=>p[1]!=="IL").length;
 
-function simulate(give,get,opp,fill){
+// fast＝只用每場平均（自動找交易初篩用，見 compute）
+function simulate(give,get,opp,fill,fast){
   const data=DATA.map(t=>[t[0],t[1].slice()]);
   const me=data.find(t=>t[0]===ME)[1],ot=data.find(t=>t[0]===opp)[1];
   const g1=give.map(n=>takeP(me,n)).filter(Boolean),g2=get.map(n=>takeP(ot,n)).filter(Boolean);
@@ -31,17 +32,17 @@ function simulate(give,get,opp,fill){
   if(diff<0)dropped=trimLowest(me,-diff,val);
   if(diff>0&&fill&&FA[fill]){me.push(FA[fill]);added.push(fill);}
   if(diff>0)trimLowest(ot,diff,val);
-  const rows=compute(data);rankAll(rows);
+  const rows=compute(data,fast);rankAll(rows);
   return {rows,dropped,added};
 }
 // baseline for 2-for-1 comparisons: just pick up the FA (drop my lowest-value active player), no trade
-function baseWithFill(fill){
+function baseWithFill(fill,fast){
   const data=DATA.map(t=>[t[0],t[1].slice()]);const me=data.find(t=>t[0]===ME)[1];const val=vfunc();
   const act=me.filter(p=>p[1]!=="IL").sort((a,b)=>(val(a)??-99)-(val(b)??-99));me.splice(me.indexOf(act[0]),1);me.push(FA[fill]);
-  const rows=compute(data);rankAll(rows);return {rows,dropped:act[0][0]};
+  const rows=compute(data,fast);rankAll(rows);return {rows,dropped:act[0][0]};
 }
-function judge(give,get,opp,fill,base){
-  const sim=simulate(give,get,opp,fill);
+function judge(give,get,opp,fill,base,fast){
+  const sim=simulate(give,get,opp,fill,fast);
   const b0=base.find(r=>r.name===ME),o0=base.find(r=>r.name===opp);
   const b1=sim.rows.find(r=>r.name===ME),o1=sim.rows.find(r=>r.name===opp);
   const val=vfunc();
@@ -161,32 +162,40 @@ function renderTx(rows){
   <div class="scroll"><table><thead><tr><th class="name">各項名次（交易後）</th>${cats.map(c=>`<th>${c.l}</th>`).join("")}</tr></thead><tbody>${cRow(ea,A0,A1)}${cRow(eb,B0,B1)}${cRow(esc(ME)+"（你）",M0,M1)}</tbody></table></div>`;
 }
 
+const SCOUT_REFINE=30;   // 自動找交易、自動推薦撿人：初篩後用整季每週預測重算的候選數
 async function autoScout(){
   const sell=document.getElementById("as-sell").value,type=document.getElementById("as-type").value;
   const st=document.getElementById("as-status"),out=document.getElementById("as-out");
   const fa=scoutFill();
   if(type==="2"&&!fa){st.textContent="沒有可以補位的 FA，沒辦法找 2 換 1。";return;}
-  const base=compute();rankAll(base);const base2=fa?baseWithFill(fa).rows:base;
+  // 第一階段：每場平均快速初篩（上千種組合）；第二階段：前 SCOUT_REFINE 名用整季每週預測重算，結果跟聯盟表一致
+  const fb=compute(DATA,true);rankAll(fb);const fb2=fa?baseWithFill(fa,true).rows:fb;
   const mine=DATA.find(t=>t[0]===ME)[1].map(p=>p[0]);
   const gives=[];
   if(type!=="2")(sell?[sell]:mine).forEach(n=>gives.push([n]));
   if(type!=="1"&&fa)for(let i=0;i<mine.length;i++)for(let j=i+1;j<mine.length;j++){const g=[mine[i],mine[j]];if(!sell||g.includes(sell))gives.push(g);}
   const targets=[];DATA.forEach(t=>{if(t[0]!==ME)t[1].forEach(p=>{if(p[1]!=="IL")targets.push([t[0],p[0]])})});
-  const res=[];let done=0;const total=gives.length*targets.length;
+  const pre=[],res=[];let done=0;const total=gives.length*targets.length;
   for(const g of gives){
     for(const [team,n] of targets){
       const fair=pkg(g)/Math.max(pkg([n]),1);done++;
       if(fair<0.95||fair>1.6)continue;
-      const sp=actCount(ME,g)-actCount(team,[n])>0;const J=judge(g,[n],team,sp?fa:"",sp?base2:base);
-      if(J.o0.ovr-J.o1.ovr<-1)continue;
-      if(J.myAvg<=0.05)continue;
-      res.push({g,team,n,J});
+      const sp=actCount(ME,g)-actCount(team,[n])>0;const J=judge(g,[n],team,sp?fa:"",sp?fb2:fb,true);
+      if(J.o0.ovr-J.o1.ovr<-2)continue;
+      pre.push({g,team,n,sp,J});
     }
-    st.textContent=`搜尋中… ${Math.round(done/total*100)}%`;await new Promise(r=>setTimeout(r,0));
+    st.textContent=`初篩中… ${Math.round(done/total*100)}%`;await new Promise(r=>setTimeout(r,0));
+  }
+  pre.sort((a,b)=>b.J.myAvg-a.J.myAvg||b.J.vGain-a.J.vGain);
+  const base=compute();rankAll(base);const base2=fa?baseWithFill(fa).rows:base,cand=pre.slice(0,SCOUT_REFINE);
+  for(let i=0;i<cand.length;i++){
+    const x=cand[i],J=judge(x.g,[x.n],x.team,x.sp?fa:"",x.sp?base2:base);
+    if(J.o0.ovr-J.o1.ovr>=-1&&J.myAvg>0.05)res.push({g:x.g,team:x.team,n:x.n,J});
+    if(i%5===0){st.textContent=`精算前 ${cand.length} 個候選… ${i}／${cand.length}`;await new Promise(r=>setTimeout(r,0));}
   }
   res.sort((a,b)=>b.J.myAvg-a.J.myAvg||b.J.vGain-a.J.vGain);
   const top=res.slice(0,8);
-  st.textContent=top.length?`找到 ${res.length} 個可行方案，顯示前 ${top.length} 個（依你的平均名次提升排序；2 換 1 空位補 ${esc(fa)}，是跟「不交易、只撿 ${esc(fa)}」比較）。`:"找不到符合條件的交易。可以換一位要賣的球員，或改成「兩種都找」。";
+  st.textContent=top.length?`初篩 ${pre.length} 個組合、精算前 ${Math.min(pre.length,SCOUT_REFINE)} 個，有 ${res.length} 個可行，顯示前 ${top.length} 個（依你的平均名次提升排序；2 換 1 空位補 ${esc(fa)}，是跟「不交易、只撿 ${esc(fa)}」比較）。`:"找不到符合條件的交易。可以換一位要賣的球員，或改成「兩種都找」。";
   out.innerHTML=top.map((x,i)=>`<div class="as-row"><span class="n">${i+1}</span><span class="d">${x.g.map(esc).join(" ＋ ")} → ${esc(x.n)}<small>${esc(x.team)} · 你的名次 ${x.J.b0.ovr}→${x.J.b1.ovr}（平均 ${sgn(x.J.myAvg)}）· 價值 ${sgn(x.J.vGain)} · 公平度 ${Math.round(x.J.fair*100)}% · 成交 ${x.J.acc}</small></span><button class="pxbtn" type="button" data-i="${i}">套用</button></div>`).join("");
   out.querySelectorAll("button").forEach(b=>b.onclick=()=>{const x=top[+b.dataset.i];tm.give=[...x.g];tm.get=[x.n];tm.opp=x.team;tm.fill=actCount(ME,x.g)-actCount(x.team,[x.n])>0?fa:"";render();document.getElementById("h-trade").scrollIntoView({behavior:"smooth"});});
 }

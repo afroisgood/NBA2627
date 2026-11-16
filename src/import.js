@@ -3,6 +3,8 @@
 //   1. 這台電腦：localStorage "lp-data"（按「套用」或從 Yahoo 視窗打開時存的）
 //   2. 網站共用：data/latest.js 裡的 window.SHARED_DATA（「下載網站資料檔」產生，上傳到專案的 data 資料夾）
 const BUILTIN_AT="2026/10/9";
+// 更新程式的版本（tools/yahoo-update.js 的 SCRIPT_V 要一樣）：資料裡的 sv 比較舊＝書籤是舊版，要重新拖一次
+const SCRIPT_V=24;
 let IMP=null,IMP_FROM="";
 // 模型預測紀錄（網頁自己存的，見 model.js predAll）：{Yahoo 週次: {at, late, g:[[隊伍編號, 隊伍編號, 勝率, [9 項贏面]]]}}
 function okPred(o){
@@ -28,15 +30,18 @@ function checkImport(o){
     if(!m||!isStr(m.opp)||!isStr(m.at)||!(m.week==null||isNum(m.week))||!okV(m.me)||!okV(m.op))return "本週對戰資料格式不對。";}
   // 每週成績：weeks＝打完的週（每場 [隊伍編號, 成績, 隊伍編號, 成績]），now＝本週對戰組合
   if(o.WEEKLY!=null){const W=o.WEEKLY,okG=g=>Array.isArray(g)&&g.length===4&&isId(g[0])&&isId(g[2])&&g[1]&&g[3]&&okV(g[1])&&okV(g[3]);
-    if(!isObj(W)||!isId(W.cur)||!Array.isArray(W.weeks)||!W.weeks.every(x=>isObj(x)&&isId(x.w)&&Array.isArray(x.g)&&x.g.every(okG))||!Array.isArray(W.now)||!W.now.every(p=>Array.isArray(p)&&p.length===2&&p.every(isId)))return "每週成績資料格式不對。";}
+    if(!isObj(W)||!isId(W.cur)||!Array.isArray(W.weeks)||!W.weeks.every(x=>isObj(x)&&isId(x.w)&&Array.isArray(x.g)&&x.g.every(okG))||!Array.isArray(W.now)||!W.now.every(p=>Array.isArray(p)&&p.length===2&&p.every(isId)))return "每週成績資料格式不對。";
+    // next＝下週對戰組合（v24）
+    if(W.next!=null&&(!isObj(W.next)||!isId(W.next.w)||!Array.isArray(W.next.g)||!W.next.g.every(p=>Array.isArray(p)&&p.length===2&&p.every(isId))))return "下週對戰組合格式不對。";}
   if(o.TID!=null){if(!isObj(o.TID)||!Object.values(o.TID).every(isId))return "隊伍編號資料格式不對。";}
   if(o.PRED!=null&&!okPred(o.PRED))return "模型預測紀錄格式不對。";
+  if(o.sv!=null&&!isNum(o.sv))return "更新程式版本格式不對。";
   if(o.SCHED!=null){const S=o.SCHED;if(!S||!/^\d{4}-\d{2}-\d{2}$/.test(S.base)||!S.teams||typeof S.teams!=="object"||!Object.values(S.teams).every(a=>Array.isArray(a)&&a.every(d=>Number.isInteger(d)&&d>=0&&d<400)))return "賽程資料格式不對。";}
   if(o.IDS!=null){if(typeof o.IDS!=="object"||Array.isArray(o.IDS)||!Object.values(o.IDS).every(x=>Number.isInteger(x)&&x>0))return "球員編號資料格式不對。";}
   if(o.RECENT!=null){if(typeof o.RECENT!=="object"||Array.isArray(o.RECENT)||!Object.values(o.RECENT).every(r=>r&&typeof r==="object"&&["l7","l14","l30"].every(k=>isStats(r[k]))))return "近期數據格式不對。";}
   if(o.NEWS!=null){const okN=a=>Array.isArray(a)&&a.length<=3&&a.every(x=>x&&isStr(x.d)&&isStr(x.t)&&isStr(x.s)&&x.t.length<=300&&x.s.length<=800);
     if(typeof o.NEWS!=="object"||Array.isArray(o.NEWS)||!Object.values(o.NEWS).every(okN))return "新聞資料格式不對。";}
-  for(const k in o.MKT){const m=o.MKT[k];if(!Array.isArray(m)||m.length!==2||!m.every(isNum))return "排名／持有率資料格式不對。";}
+  for(const k in o.MKT){const m=o.MKT[k];if(!Array.isArray(m)||(m.length!==2&&m.length!==3)||!m.every(isNum))return "排名／持有率資料格式不對。";}
   return "";
 }
 try{
@@ -87,6 +92,9 @@ function initImport(){
   const src=document.getElementById("yahoo-script").textContent.trim();
   document.getElementById("upd-status").textContent=IMP?`資料：${fmtAt(IMP.at)} 從 Yahoo 更新（${IMP_FROM==="shared"?"網站共用":"只在這台電腦"}）`:`資料：${BUILTIN_AT} 內建`;
   if(IMP)document.getElementById("src-pr").textContent="2026-27 預測";
+  // 舊版書籤抓的資料：缺每週成績、下週對戰、全聯盟傷兵新聞等，提醒重新拖一次書籤
+  const old=document.getElementById("upd-old");
+  if(old&&IMP&&(IMP.sv||0)<SCRIPT_V){old.hidden=false;old.textContent=`⚠ 這份資料是用舊版書籤抓的，少了${[!IMP.WEEKLY&&"每週成績和對戰組合",!(IMP.WEEKLY&&IMP.WEEKLY.next)&&"下週對戰",(IMP.sv||0)<24&&"全聯盟傷兵新聞、目前排名"].filter(Boolean).join("、")}。請按「↻ 更新資料」，把書籤重新拖一次到書籤列，再更新。`;}
   if(IMP)document.getElementById("foot-note").textContent=`預測來源：Yahoo（Rotowire）、ESPN，兩家場均取平均。上季數據取自 Yahoo 2025-26 場均，本季數據取自 Yahoo 2026-27 場均；沒有數據的球員以「—」表示且不計入。▲▼ 是跟這次更新前的資料相比的名次變化。名單更新於 ${fmtAt(IMP.at)}。`;
   document.getElementById("upd-open").onclick=()=>{panel.hidden=!panel.hidden;if(!panel.hidden)panel.scrollIntoView({behavior:"smooth",block:"start"});};
   // 書籤：去掉整行註解，避免瀏覽器把書籤網址的換行吃掉時出錯

@@ -7,7 +7,13 @@ DATA.forEach(t=>t[1].forEach(addMix));Object.values(FA).forEach(addMix);
 DATA.forEach(t=>t[1].forEach(addRecent));Object.values(FA).forEach(addRecent);
 const tm={mode:"mine",give:[],get:[],opp:null,fill:""};
 const tx={a:null,b:null,ga:[],gb:[]};   // 其他隊之間的交易：A 隊送出 ga、B 隊送出 gb
-const mval=n=>{const m=MKT[n]||[260,3];return .7*100*Math.exp(-(m[0]-1)/70)+.3*m[1]};
+// 市場價值用的排名：季前排名和 Yahoo 目前排名（MKT 第 3 個數字，新版更新程式才有）混在一起，
+// 本季打越多場越看目前排名（g 場時佔 g/(g+MKT_K)）；還沒打或受傷沒打幾場的人維持季前排名
+const MKT_K=15;
+let CUR_GP=null;
+const curGP=n=>{if(!CUR_GP){CUR_GP=new Map();[...DATA.flatMap(t=>t[1]),...Object.values(FA)].forEach(p=>CUR_GP.set(p[0],p[6]?p[6][0]:0));}return CUR_GP.get(n)||0};
+const mrank=n=>{const m=MKT[n]||[260,3],g=curGP(n);if(!(m[2]>0)||!g)return m[0];const w=g/(g+MKT_K);return Math.exp(Math.log(m[0])*(1-w)+Math.log(m[2])*w)};
+const mval=n=>{const m=MKT[n]||[260,3];return .7*100*Math.exp(-(mrank(n)-1)/70)+.3*m[1]};
 const pkg=list=>list.reduce((a,n)=>a+Math.pow(mval(n),1.4),0);
 const actCount=(team,names)=>names.filter(n=>{const p=DATA.find(t=>t[0]===team)[1].find(p=>p[0]===n);return p&&p[1]!=="IL"}).length;
 const findP=(team,n)=>DATA.find(t=>t[0]===team)[1].find(p=>p[0]===n);
@@ -81,7 +87,7 @@ function itemList(team,sel,elId){
   const val=vfunc(),el=document.getElementById(elId);
   const ps=DATA.find(t=>t[0]===team)[1];
   el.innerHTML=ps.map(p=>{const v=val(p),m=MKT[p[0]]||[260,3],on=sel.includes(p[0]);
-    return `<button type="button" class="tm-item ${p[1]==="IL"?"il":""}" aria-pressed="${on}" data-n="${esc(p[0])}"><span class="bx"></span><span class="nm">${esc(p[0])}${p[1]==="IL"?' <span class="badge b-il">IL</span>':""}</span><span class="meta">價值 ${v==null?"—":(v>0?"+":"")+v.toFixed(1)}<br>排名 ${m[0]} · ${m[1]}%</span></button>`}).join("");
+    return `<button type="button" class="tm-item ${p[1]==="IL"?"il":""}" aria-pressed="${on}" data-n="${esc(p[0])}"><span class="bx"></span><span class="nm">${esc(p[0])}${p[1]==="IL"?' <span class="badge b-il">IL</span>':""}</span><span class="meta">價值 ${v==null?"—":(v>0?"+":"")+v.toFixed(1)}<br>排名 ${m[2]>0?`${m[0]}→${m[2]}`:m[0]} · ${m[1]}%</span></button>`}).join("");
   el.querySelectorAll(".tm-item").forEach(b=>b.onclick=()=>{const n=b.dataset.n,i=sel.indexOf(n);if(i>=0)sel.splice(i,1);else if(sel.length<3)sel.push(n);render();});
 }
 const sgn=x=>(x>0?"+":"")+x.toFixed(1);

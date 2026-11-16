@@ -1,7 +1,7 @@
 # 杰西卡的AI實驗室 戰力表：開發紀錄
 
 > 這份文件給接手的人（或 Claude Code）看，記錄專案目的、檔案結構、資料來源、演算法、開發歷程和待辦事項。
-> 最後更新：2026-10-27（第 23 版：每週成績校正 H2H 勝率、回測模型）
+> 最後更新：2026-11-16（第 24 版：傷兵新聞判斷、項目連動的勝率模擬、目前排名、對戰前瞻週報、驗證混合速度）
 
 ---
 
@@ -36,7 +36,8 @@ fantasy-power-table/
 │   ├── cards.js         ← 隊伍職業鑑定、球員卡圖鑑、FA 抽卡
 │   ├── plan.js          ← 每日先發、本週串流、近期手感、新聞標籤、右下角快速選單
 │   ├── scout.js         ← 球探報告：近期手感（HOT／COLD）、新聞短評
-│   └── fa.js            ← FA 分析器＋自動推薦，最後呼叫 initTrade()、initFA()、initDex()、initPlan()、initScout()、render()、initImport()
+│   ├── report.js        ← 對戰前瞻：本週／下週 8 組對戰的預測卡片，下載成週報圖片（v24）
+│   └── fa.js            ← FA 分析器＋自動推薦，最後呼叫 initTrade()、initFA()、initDex()、initPlan()、initScout()、initReport()、render()、initImport()
 ├── data/
 │   └── latest.js        ← 網站共用資料：window.SHARED_DATA（null＝用內建）；網頁「下載網站資料檔」產生，上傳取代
 ├── tests/
@@ -46,7 +47,9 @@ fantasy-power-table/
 ├── .github/workflows/test.yml ← GitHub 自動測試：重新建置確認網頁檔有跟上，再跑 npm test
 ├── tools/
 │   ├── fetch-snippets.js← 在已登入 Yahoo 的瀏覽器 console 抓資料用的程式片段（舊，手動整理用）
-│   └── yahoo-update.js  ← 一鍵更新程式（書籤／console），build 時嵌進網頁
+│   ├── yahoo-update.js  ← 一鍵更新程式（書籤／console），build 時嵌進網頁
+│   └── check-mix.js     ← 用兩份資料檔驗證「預測＋本季」的混合速度 MIX_K（v24，5.9）
+├── reports/             ← 手動做的週報圖片（2026-11-16 第 5 週：掌機版、藍白版、報紙版）
 └── dist/
     ├── league-power.html          ← 完整獨立網頁，直接用瀏覽器打開
     └── league-power.artifact.html ← 發布到 claude.ai Artifact 用
@@ -54,7 +57,7 @@ fantasy-power-table/
 
 建置：`python3 build.py`；測試：`npm test`（不用安裝任何套件，Node 22 以上）。兩個完整網頁會先用 `<script src>` 載入 `data/latest.js`（根目錄用 `data/latest.js`、dist 用 `../data/latest.js`），Artifact 版不載入
 
-**JS 載入順序很重要**：data.js → market.js → import.js → model.js → app.js → trade.js → cards.js → plan.js → scout.js → fa.js。model.js 載入時就會讀 `IMP.SCHED`，所以要在 import.js 後面；它用到的 state、SI、CATS 等都是呼叫時才讀。import.js 必須在 app.js 前面（app.js 一載入就會用到 ME、IMP、hasCur）。trade.js、cards.js、plan.js、scout.js、fa.js 裡有 `const`／`let`（tm、FA、dx、TREND、fam 等），所以 `initTrade(); initFA(); initDex(); initPlan(); initScout(); render(); initImport();` 必須放在 fa.js 最後，不能放在前面的檔案，否則會遇到 TDZ 錯誤。
+**JS 載入順序很重要**：data.js → market.js → import.js → model.js → app.js → trade.js → cards.js → plan.js → scout.js → report.js → fa.js。model.js 載入時就會讀 `IMP.SCHED`，所以要在 import.js 後面；它用到的 state、SI、CATS 等都是呼叫時才讀。import.js 必須在 app.js 前面（app.js 一載入就會用到 ME、IMP、hasCur）。trade.js、cards.js、plan.js、scout.js、fa.js 裡有 `const`／`let`（tm、FA、dx、TREND、fam 等），所以 `initTrade(); initFA(); initDex(); initPlan(); initScout(); initReport(); render(); initImport();` 必須放在 fa.js 最後，不能放在前面的檔案，否則會遇到 TDZ 錯誤。
 
 ---
 
@@ -86,21 +89,21 @@ const DATA = [
 const MKT = { "球員名": [季前排名, 持有率%], ... };
 ```
 
-沒有資料的球員預設 `[260, 3]` 或 `[260, 5]`。
+沒有資料的球員預設 `[260, 3]` 或 `[260, 5]`。v24 起匯入的資料可以有第 3 個數字＝Yahoo 目前排名（`c[7]`），交易公平度用（5.3）。
 
 ### 匯入資料（localStorage `lp-data`，或網站共用 `data/latest.js`）
 
 `tools/yahoo-update.js` 產生、`src/import.js` 讀取。兩個來源都有效時用 `at` 比較新的那份（`IMP_FROM` 是 `"local"` 或 `"shared"`），標題下方會寫「只在這台電腦」或「網站共用」：
 
 ```js
-{ v: 1, at: "ISO 時間", ME: "自己隊名", DATA: [...同上...], MKT: {...同上...},
+{ v: 1, sv: 更新程式版本（v24 起；沒有＝舊版書籤）, at: "ISO 時間", ME: "自己隊名", DATA: [...同上...], MKT: {...同上...},
   FA: [ ["球員名", "FA" 或 "W", "NBA球隊 - 位置", "狀態", proj, last, cur], ... ],   // 可撿的球員，W＝在 waiver 上
   SCHED: { base: "2026-10-01", teams: { "LAL": [19, 21, ...], ... } },   // 每隊比賽日（美東），距離 base 的天數；可能是 null
   MATCH: { at, week, opp: "對手隊名", me: {fg,ft,tpm,pts,reb,ast,stl,blk,to, fgm?,fga?,ftm?,fta?}|null, op: {...}|null },   // Yahoo 本週對戰；還沒開打時 me/op 是 null
   IDS: { "球員名": ESPN球員編號, ... },   // 球員卡照片頭像用（v16 起；舊資料沒有）
   RECENT: { "球員名": { l7, l14, l30 }, ... },   // 最近 7／14／30 天場均（數據陣列或 null；v18 起）
   NEWS: { "球員名": [ { d: "ISO 時間或空字串", t: "標題", s: "內文" }, ... ], ... },   // 新聞短評，最多 3 則（v18 起）
-  WEEKLY: { cur: Yahoo本週週次, weeks: [ { w: 週次, g: [ [隊伍編號, {9項...}, 隊伍編號, {9項...}], ...8 場 ] }, ... ], now: [ [隊伍編號, 隊伍編號], ... ] }|null,   // 打完的每週成績＋本週對戰組合（v23）
+  WEEKLY: { cur: Yahoo本週週次, weeks: [ { w: 週次, g: [ [隊伍編號, {9項...}, 隊伍編號, {9項...}], ...8 場 ] }, ... ], now: [ [隊伍編號, 隊伍編號], ... ], next?: { w: 週次, g: [ [隊伍編號, 隊伍編號], ... ] } }|null,   // 打完的每週成績＋本週對戰組合（v23）＋下週對戰組合（v24）
   TID: { 隊名: Yahoo隊伍編號, ... },   // v23
   PRED: { 週次: { at, late, g: [ [隊伍編號, 隊伍編號, 勝率, [9項贏面]], ... ] }, ... },   // 模型每週的預測紀錄，網頁自己存的（v23，5.25）
   PREV: { pr: {隊名: [9項名次, 不算AST名次]}, ls: {...}, cur: {...} } }   // PREV 是套用時網頁自己算的
@@ -128,6 +131,7 @@ Yahoo 聯盟頁面需要登入，所以資料是在**已登入 Yahoo 的瀏覽�
 6. 抓 ESPN 整季賽程：`/seasons/2027?view=proTeamSchedules_wl`，`settings.proTeams[].proGamesByScoringPeriod` 裡每場的 `date`（毫秒）換成美東日期。ESPN 縮寫對到 Yahoo：GS→GSW、NO→NOP、NY→NYK、SA→SAS、UTAH→UTA、WSH→WAS；抓到少於 28 隊就不用
 7. 抓 Yahoo 本週對戰：依序試 `/nba/1031/matchup?mid1=13`、`/nba/1031/13/matchup`。找表頭有 FG%、PTS、TO 的表格，欄位名稱對照 `CAT_HEAD`（3PTM／3PM、ST／STL），每列用隊伍連結 `/nba/1031/<id>` 認出是哪一隊；7 項以上有數字才算有比分。週次（`weekOf()`）：先找被選中的選單項目（`option[selected]` 等）裡的 `Week N`，找不到才用頁面文字裡第一個。**還沒在真的 Yahoo 頁面測過**
 7-1. 抓每週成績（v23，`WEEKLY`，5.25）：Yahoo 本週週次 `MATCH.week` 抓到才做。第 1 週到上一週，每週用 `/nba/1031/matchup?week=N&mid1=<隊伍編號>` 依序抓（看過的對手跳過，一週 8 頁），解析跟本週對戰共用 `parseRows()`；本週只記對戰組合（`now`）。打完的週存在 **Yahoo 網站的 localStorage**（`lp-weekly-1031`），下次只抓新的週；8 場都有 7 項以上數字才算完整。不同週抓到一模一樣的成績（`week=` 參數沒作用）就整個不用。失敗只略過。另外存 `TID`（隊名 → Yahoo 隊伍編號）。**還沒在真的 Yahoo 頁面測過**
+7-2. v24：`WEEKLY.next`＝下週對戰組合（`week=本週+1`，一樣 8 頁；抓不到或跟本週一模一樣就不放）；`MKT` 多存目前排名；新聞多抓**全聯盟標 O／Q 的球員**（判斷只缺一場還是長期，5.8）；JSON 多一個 `sv`（`SCRIPT_V`，跟 src/import.js 的一樣，測試會檢查）。網頁看到 `sv` 比較舊就在標題下顯示「舊版書籤」提醒（`#upd-old`）。**下週對戰頁的格式還沒在真的 Yahoo 上確認過**（本機假 Yahoo 測過）
 8. 右下角視窗按「▶ 打開戰力表」→ 開 `league-power.html#import=<JSON>`，網頁確認後套用；或「複製結果」貼到網頁的框框
 
 書籤是網頁把 `#yahoo-script`（build 時嵌入的 tools/yahoo-update.js）去掉整行註解後做成 `javascript:` 網址。**程式裡不能有行尾 `//` 註解**，也不能有 `</script`（build.py 會檢查後者）。
@@ -194,7 +198,8 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 ### 5.3 市場價值（交易公平度）
 
 ```
-排名分 = 100 × exp(−(季前排名 − 1) / 70)
+排名分 = 100 × exp(−(排名 − 1) / 70)      ← v24：排名＝季前排名和 Yahoo 目前排名的幾何混合（`mrank()`）：
+                                          本季打 g 場時目前排名佔 g/(g+15)（`MKT_K`）；沒出賽或沒有目前排名就用季前排名
 市場價值 = 0.7 × 排名分 + 0.3 × 持有率
 打包價值 = Σ 市場價值^1.4      ← 讓單一好球員比多個普通球員值錢
 公平度（對方角度）= 你送出的打包價值 / 你換回的打包價值
@@ -250,12 +255,13 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 - `compute()`（聯盟表、交易、撿人、職業）**不看傷兵狀態**，只乘出賽率（`gpW()`）。原因：Yahoo 的 O／Q 是單場狀態，季前賽很多主力只是輪休（rest）也被標 Q；長期缺陣已經反映在預測場數和出賽率
 - v20 起因：10/16 的資料「石」13 人裡 7 人標 Q（新聞幾乎都是季前賽輪休），舊算法把 Q 套到整季，名次從第 4 掉到第 14、H2H 勝率 55% → 29%；改完後第 5、50%。用一致的新算法比，10/11 是 49%、10/16 是 50%，實際上沒變（舊算法 10/11 的 55% 是因為別隊 Q 更多被扣更多）
 - 球員價值（z 分數）不受影響
+- **v24 新聞判斷缺陣多久**（`outUntil()`、`INJ_ONE`、`INJ_LONG`）：起因是 11/16 的資料 Embiid、Kyrie 標 O，新聞是「ruled out for Sunday's game」（背靠背輪休一場），舊算法整整 7 天不算，第 5 週對戰勝率從 16% 被算成 1%。現在看球員最新一則新聞（要有日期、而且是更新資料前 `NEWS_FRESH`＝4 天內）：寫明只缺某一場（out／ruled out／won't play…＋ tonight 或星期幾）就只扣到那一天；提到 surgery、indefinitely、幾週、timetable、re-evaluated 等長期字眼，或沒有新聞，就照原本 7 天。VS 說明和對戰前瞻會列出「只缺一場照常算」的人。更新程式因此多抓全聯盟標 O／Q 球員的新聞（舊資料只有自己隊伍和 FA 有新聞）
 
 ### 5.9 預測＋本季混合（v11，`addMix()`，資料來源 `mix`，index 7）
 
-- 本季打了 g 場：本季權重 g/(g+K)、預測權重 K/(g+K)。v22 起**每項的 K 不一樣**（`MIX_K`）：出手數（FGA、FTA）、PTS、REB、AST、TO 是 12（角色、上場時間幾場就看得出來）；3PM、BLK 20；STL 25；FG% 40；FT% 60（命中率要很多場才可信）。例：打 10 場時得分本季佔 45%、FG% 只佔 20%
+- 本季打了 g 場：本季權重 g/(g+K)、預測權重 K/(g+K)。v22 起**每項的 K 不一樣**（`MIX_K`）：出手數（FGA、FTA）、PTS、REB、AST、TO 是 12（角色、上場時間幾場就看得出來）；3PM、BLK 20；STL 25；FG% 40；FT% 60（命中率要很多場才可信）。這是 v22 的值，**v24 改過**（見下面）。例（v24）：打 10 場時得分本季佔 63%、FG% 只佔 22%
 - 命中率另外混：先混出手數，再乘上混出來的命中率得到命中數；本季沒出手就沿用預測的命中率
-- K 是經驗值，還沒用聯盟資料驗證（見第 10 節第二批）
+- v24 用聯盟資料驗證過（`tools/check-mix.js`）：拿 10/27 的資料（平均已打 3.1 場）預測之後三週（平均 8.5 場），跟 11/16 的實際比，311 位球員。誤差最小的 K：FGA 2、PTS／REB／3PM 4、AST 6、FTA 10、TO 12、BLK 16、STL 20、FG% 40、FT% 100 以上。只有一段時間的樣本，所以沒有改到底：FGA／PTS／REB／AST 12 → 6、3PM 20 → 8、FTA 12 → 10、BLK 20 → 16、STL 25 → 20、FG% 40 → 35、FT% 60 → 100。之後資料更多可以再跑一次
 - 只有預測或只有本季時就用那一個；GP 用預測的 GP
 - 只有匯入的資料有本季數據時，控制列才出現「預測＋本季」
 - v21：開季後第一次有本季數據時，資料來源從「預測」自動換成「預測＋本季」（`state.curSeen` 記住換過，之後使用者改回預測就不再動）
@@ -264,7 +270,8 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 
 - 每項當成常態分布：計數項的標準差＝數值 × 變異係數 `CV`（3PM .16、PTS .09、REB .09、AST .11、STL .20、BLK .25、TO .13），FG% .013、FT% .025（`PCT_SD`）。這些是經驗估計，不是從聯盟資料算出來的
 - 贏面＝Φ(差距 ／ √(雙方標準差平方和))，TO 反過來
-- 對戰勝率＝9 項贏 5 項以上的機率（用逐項機率算分布）；**放棄助攻也是 9 項都比**，所以勝率不受模式影響
+- 對戰勝率＝9 項贏 5 項以上的機率；**放棄助攻也是 9 項都比**，所以勝率不受模式影響
+- **v24 項目連動**（`COR0`、`simDraws()`、`matchup()`）：以前把 9 項當成互相獨立，但實際上會一起動（這週得分多，三分、助攻、失誤通常也多）。現在單項贏面照舊，「贏 5 項以上」改用模擬：`COR0` 是 9 項之間的相關係數（經驗值，例：得分–三分 .55、助攻–失誤 .50、得分–失誤 .45），失誤的方向反過來（少才是贏）；Cholesky 分解後用固定種子產生 `SIM_N`＝1000 組、正負成對的亂數（所以每次結果一樣、實力相同剛好 50%、雙方勝率加起來剛好 1）。每次 `matchup()` 約 18000 次比較，聯盟表 240 場對戰約 30 毫秒。有 2 週以上的聯盟成績時 `calibrate()` 也會校正相關係數（`COR_N0`＝60，偏向經驗值；5.25）。影響：五五波附近差不多，一面倒的對戰勝率往 50% 靠一點（例：16% → 19%）
 - 聯盟表的「H2H 勝率」＝對其他 15 隊的平均，旁邊是平均贏幾項和勝率排名；可以點欄位排序
 
 ### 5.11 每週預測（v11，`weekTotals()`、`lineup()`）
@@ -416,6 +423,20 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 - 畫面：聯盟排名下面的 MODEL CHECK 區塊（快速選單「模型檢查」），列出經驗值／真實資料估計／現在用的起伏，和每週回測
 - 本機測試：Playwright 假 Yahoo（對戰頁依 `week`、`mid1` 回不同成績），確認第一次抓所有打完的週、第二次只抓新的一週
 
+### 5.26 對戰前瞻（v24，`previewWeek()`，src/model.js；src/report.js）
+
+- 起因：2026-11-16 使用者要「下週對戰周報圖片」，參考圖是 8 組對戰各一張卡（主力照片、優勢項目）。當天手動做了三張（`reports/`），之後做成網頁功能
+- `previewWeek("now"|"next")`：用 `WEEKLY.now`／`WEEKLY.next` 的對戰組合和那一週的賽程（`yWeekDays()`），固定設定（跟預測紀錄一樣：預測＋本季、扣傷兵、考慮出賽率、9 項），算每組的 9 項贏面和勝率；每隊另外回傳先發場次、主力（那週有比賽而且能上場、價值最高的人）、整週不能打的人（out）、新聞判斷只缺一場的人（rest）。`predWeek()` 改成包它一層，所以預測紀錄和對戰前瞻是同一份數字
+- 畫面（`renderReport()`，快速選單「對戰前瞻」）：本週／下週切換（沒有 `WEEKLY.next` 時只有本週）；卡片有自動標題（`pvHead()`：一面倒寫「大幅領先／靠○○突圍」，否則寫雙方各拚哪兩項）、勝率、贏面 60% 以上的項目、40–60% 的關鍵項目、先發場次、傷停。隊名超過 8 個字只留第一個空白或標點之前（`pvShort()`）
+- 下載圖片（`drawReport()`）：用 canvas 自己畫（1480 寬、兩欄），顏色讀 `:root` 的 token，照片用球員卡的 LCD 點陣（`PHOTO`，沒有就用名字圖案）；畫之前用 `document.fonts.load()` 把會用到的中文字載進來（Google Fonts 的中文字型分段下載，canvas 不會自己觸發）
+- 沒有對戰組合的資料（舊版書籤）會顯示提示。11/16 那份 `data/latest.js` 是舊版書籤抓的，Claude 手動補了 `TID`（隊伍順序＝編號）和 `WEEKLY.now`（第 5 週 8 組，照使用者給的圖），`at` 加 1 秒讓它比使用者瀏覽器裡的同一份新
+
+### 5.27 2026-11-16 確認的事
+
+- ESPN 大頭照可以跨網站讀取像素（開發環境加了 `a.espncdn.com` 後，Playwright 透過代理實測 16 張都成功），5.18 的疑慮解除
+- 開發用的雲端環境「NBA2627」只多開放 `a.espncdn.com`
+- 假 Yahoo 測試（Playwright 攔截 yahoo.com，回傳假的名單、列表、對戰頁、球員小卡）跑完整支更新程式：`sv`、下週 8 組、目前排名、別隊傷兵新聞都有抓到，`checkImport()` 通過
+
 ---
 
 ## 6. 介面功能（第 10 版）
@@ -437,6 +458,7 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 | TRADE MACHINE | 手動交易分析：最多 3 換 3、補 FA、公平度量表、成交機率、雙方各項名次變化 |
 | TRADE MACHINE（其他隊） | 分析兩支別隊之間的交易：誰贏、兩隊和你的名次／勝率變化、公平度 |
 | AUTO SCOUT | 自動找交易 |
+| WEEKLY PREVIEW | 對戰前瞻：本週／下週 8 組對戰卡片、下載週報圖片（`renderReport()`，5.26） |
 | DAILY LINEUP | 每日先發建議（`renderToday()`） |
 | STREAMING | FA 分析器下方的本週串流（`streamSearch()`） |
 | MENU | 右下角快速選單 |
@@ -457,6 +479,7 @@ Header: X-Fantasy-Filter: {"players":{"limit":700,"sortDraftRanks":{"sortPriorit
 
 | 版本 | 內容 |
 |---|---|
+| v24 | 傷兵看新聞判斷只缺一場還是長期；H2H 勝率改用模擬、算進項目之間的連動；交易公平度混入 Yahoo 目前排名；對戰前瞻（8 組對戰卡片＋下載週報圖片）、更新程式多抓下週對戰組合；偵測舊版書籤並提醒；用兩份資料驗證並調整「預測＋本季」的混合速度 |
 | v1 | 第一版戰力表：16 隊九項場均、球隊加總與排名；可切換預測／上季、石含或不含 waiver 申請 |
 | v2 | 10/9 waiver 處理後更新名單（9 位新球員重抓三家預測）；Oubre、Merrill 申請成功，移除名單切換 |
 | v3 | 石完成交易：送出 Şengün＋Fox 給「大小小丑與他的歡樂同伴們」，換回 Kyrie Irving＋Tyler Herro；坂木改隊名 |
@@ -498,7 +521,7 @@ Artifact 網址：https://claude.ai/artifact/S6yNHmWyFfDDAvJ3guEij2
 
 1. **內建資料是靜態快照**。網頁內更新的資料先存在使用者自己的瀏覽器；要讓網站本身更新，用「下載網站資料檔」上傳到 `data/latest.js`
 2. 有賽程時聯盟表的名次和 H2H 勝率都算賽程、先發名額和板凳補位（v22）；內建資料沒有賽程，名次退回每場平均加總，要從 Yahoo 更新過才有。主力長期受傷時實際上會放 IL、另外撿 FA 補，這個「撿人補位」沒有算進去
-3. 季前排名開季後會失效，要換成 Yahoo「目前排名」（`c[7]`）
+3. ~~季前排名開季後會失效~~（v24：混入 Yahoo 目前排名，5.3；要用新版書籤更新過才有）
 4. 成交機率只是參考，沒辦法算到對方的個人喜好
 5. 上季實際數據模式下，新秀和上季缺賽的球員沒有數據（例如 Kyrie），會低估這些隊伍
 6. 內建資料的 FA 只有 Thybulle、Isaiah Joe 兩人（寫死在 trade.js）；從 Yahoo 更新後才有完整 FA 清單（季前排名前 400 名裡沒被持有的球員）
@@ -516,4 +539,5 @@ Artifact 網址：https://claude.ai/artifact/S6yNHmWyFfDDAvJ3guEij2
 5. ~~名次算法加權出賽場次~~（v14 完成，控制列 GP）
 6. **加測試**：用固定資料驗證 `compute()`、`rankAll()`、`judge()` 的結果
 7. ~~預測模型第二批~~（v23 完成：每週成績、校正起伏、回測，5.25）。待確認：使用者在真的 Yahoo 上跑過，`week=` 參數和週次判斷是否正確。之後可以做：用實際成績檢查 `MIX_K` 的設定
-8. 2026-10-27 討論時提到、但這次沒動的：H2H 把 9 項當成互不相關（得分、三分、命中率其實會一起動），可以改成模擬；交易公平度還在用季前排名（9.3）
+8. ~~H2H 把 9 項當成互不相關、交易公平度還在用季前排名~~（v24 完成）
+9. v24 之後可以做：`COR0`（項目連動）目前是經驗值，等新版書籤抓到幾週成績後看校正結果；傷兵新聞的關鍵字（`INJ_ONE`、`INJ_LONG`）遇到判斷錯的新聞再補；`check-mix.js` 等資料多一點再跑一次；對戰前瞻的下載圖片可以加其他風格（藍白版、報紙版，樣本在 `reports/`）

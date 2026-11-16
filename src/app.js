@@ -122,7 +122,7 @@ function renderVS(rows){
   let va=A.pg,vb=B.pg,info=SCHED?"":"從 Yahoo 更新過資料後，可以選週次，依每隊這週的出賽場數和每天的先發名額預測。";
   if(wk){const val=playerValues(),lv=!!(liveOf(ME,wk)&&liveOf(B.name,wk)),ta=weekLive(A.ps,lv?ME:null,wk,val),tb=weekLive(B.ps,lv?B.name:null,wk,val);va=ta.v;vb=tb.v;
     const sb=x=>`先發約 ${Math.round(x.starts)} 場次${x.benched>=.5?`（另有約 ${Math.round(x.benched)} 場次排不進先發）`:""}`;
-    info=`第 ${wk.i} 週（${md(wk.s)}–${md(wk.e)}）預測總數：${esc(ME)} ${sb(ta)}；${esc(B.name)} ${sb(tb)}。${lv?liveTxt(ta.live,wk):""}每天最多 10 人上場，依位置排出最好的陣容${state.inj?`，更新資料後 ${O_DAYS} 天內缺陣（O）不算、${Q_DAYS} 天內出賽存疑（Q）打 75 折`:""}${state.gp?"，再乘上出賽率":""}；有人缺陣時由板凳補上。`;}
+    info=`第 ${wk.i} 週（${md(wk.s)}–${md(wk.e)}）預測總數：${esc(ME)} ${sb(ta)}；${esc(B.name)} ${sb(tb)}。${lv?liveTxt(ta.live,wk):""}每天最多 10 人上場，依位置排出最好的陣容${state.inj?`，更新資料後 ${O_DAYS} 天內缺陣（O）不算、${Q_DAYS} 天內出賽存疑（Q）打 75 折`:""}${state.gp?"，再乘上出賽率":""}；有人缺陣時由板凳補上。${restTxt([...A.ps,...B.ps])}`;}
   document.getElementById("vs-info").innerHTML=info;
   document.getElementById("vs-live").innerHTML=liveScore(B.name,mt);
   const M=matchup(va,vb);
@@ -143,6 +143,8 @@ function renderVS(rows){
   sel.onchange=()=>{state.opp=sel.value;save();render();};
 }
 
+// 新聞判斷只缺一場的人（標 O，但不會整週扣掉）
+const restTxt=ps=>{const a=restList(ps.filter(active));return a.length?`新聞判斷只缺一場、之後照常算：${a.map(p=>`${esc(p[0])}（缺到 ${md(outUntil(p))}）`).join("、")}。`:""};
 // 已經打完的比賽用實際比分的說明
 function liveTxt(L,wk){
   const c=L.cut,done=c.b-1>=wk.s?`${md(wk.s)}${c.b-1>wk.s?"–"+md(c.b-1):""} 打完的比賽`:"",part=c.f>0&&c.b<=wk.e?`${md(c.b)} 更新時已經打的部分`:"";
@@ -211,6 +213,8 @@ function renderMe(rows){
     <div class="ms-card line"><span class="k">職業鑑定 · Lv.${Math.round(r.win*98)+1}</span><p>${tc.cls.i} ${tc.title}</p><p class="s">${tc.cls.d}</p></div>`;
 }
 
+// 連動最強的幾組項目（0＝無關、1＝完全一起動）
+const corTxt=()=>{const a=[];COR_K.forEach((k,i)=>COR_K.forEach((q,j)=>{if(j>i)a.push([CATS[i].l,CATS[j].l,COR[i][j]]);}));return a.sort((x,y)=>Math.abs(y[2])-Math.abs(x[2])).slice(0,5).map(x=>`${x[0]}–${x[1]} ${x[2].toFixed(2)}`).join("、")};
 // 模型檢查：勝率起伏的設定（經驗值 → 用真實每週成績校正）和每週預測的回測
 function renderCheck(){
   const P=predAll(),cur=WEEKLY&&P[WEEKLY.cur],bt=backtest();
@@ -229,6 +233,7 @@ function renderCheck(){
     <div class="scroll"><table><thead><tr><th class="name">每週起伏</th>${CATS.map(c=>`<th>${c.l}</th>`).join("")}</tr></thead><tbody>
       ${row("經驗值",CV0,PCT_SD0)}${CAL?row("真實資料估計",CAL.est,CAL.est):""}${row("現在用的",CV,PCT_SD)}</tbody></table></div>
     <p class="note">計數項是「一隊每週的總數大約上下跳動幾 %」，命中率是「大約上下跳動多少」。起伏越大，實力差一點點的對戰越接近五五波。</p>
+    <p class="note">項目之間的連動（勝率用模擬算，會一起好、一起壞的項目不當成獨立）：${corTxt()}。${CAL&&CAL.corN?`已用 ${CAL.weeks} 週聯盟成績校正（一樣偏向經驗值）。`:"目前是經驗值，有 2 週以上的聯盟成績後會自動校正。"}</p>
     ${predNote?`<p class="note">${predNote}</p>`:""}
     ${bt.length?`<p class="note">回測：總共猜中 <b>${tot.hit}／${tot.n}</b> 場（${tot.n?pctTxt(tot.hit/tot.n):"—"}）。</p>
     <div class="scroll"><table><thead><tr><th class="name">週次</th><th>猜中場數</th><th>猜中項目</th><th>Brier</th><th>你的對戰</th></tr></thead><tbody>${btRows}</tbody></table></div>
@@ -238,7 +243,7 @@ function renderCheck(){
 
 function render(){
   TREND=trendFn();
-  const rows=compute();rankAll(rows,true);renderMe(rows);renderVS(rows);renderTrade(rows);renderFA(rows);renderToday();renderStreamInfo(rows);renderScout();renderLeague(rows);renderCheck();renderClass(rows);renderTeams(rows);renderDex();
+  const rows=compute();rankAll(rows,true);renderMe(rows);renderVS(rows);renderReport();renderTrade(rows);renderFA(rows);renderToday();renderStreamInfo(rows);renderScout();renderLeague(rows);renderCheck();renderClass(rows);renderTeams(rows);renderDex();
   const set=(id,on)=>document.getElementById(id).setAttribute("aria-pressed",on);
   set("src-pr",state.src==="pr");set("src-ls",state.src==="ls");set("src-cur",state.src==="cur");set("src-mix",state.src==="mix");set("src-l14",state.src==="l14");set("inj-on",state.inj);set("inj-off",!state.inj);set("gp-on",state.gp);set("gp-off",!state.gp);set("mode-9",!state.punt);set("mode-p",state.punt);
 }

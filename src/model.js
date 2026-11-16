@@ -7,7 +7,32 @@ const Q_RATE=0.75,Q_DAYS=3,O_DAYS=7;
 // 資料載入後 IMP 不會變，只算一次（時區換算很慢，weekRaw 每人每天都會用到）
 let STATUS_DAY=null;
 const statusDay=()=>STATUS_DAY??(STATUS_DAY=IMP&&IMP.at?dayOf(IMP.at):todayDay());
-const injOn=(p,d)=>{if(!state.inj)return 1;const k=d-statusDay();return p[3]==="O"?(k<O_DAYS?0:1):p[3]==="Q"?(k<Q_DAYS?Q_RATE:1):1};
+// 缺陣（O）多久：看最新一則新聞。寫明「只缺某一場」（ruled out for Sunday's game、輪休、背靠背休一場）就只扣到那一天；
+// 提到手術、幾週、沒有時間表等長期缺陣，或沒有新聞、新聞太舊（超過 NEWS_FRESH 天），就照原本的 O_DAYS 天
+const NEWS_FRESH=4;
+const INJ_LONG=/(indefinitely|surgery|week-to-week|re-?evaluated|timetable|at least|multiple (games|weeks)|extended (absence|period)|rest of the season|season-ending|\b(a|one|two|three|four|five|six|several|couple|few|\d+)( of)?( to \w+|-\w+)? (weeks?|months?)\b|next (two|three|four|five|six|several|\d+) games)/i;
+const INJ_ONE=/\b(ruled out|out|not play|won't play|sit out|sit|miss|rest|unavailable|sidelined)\b[^.]{0,60}?\b(tonight|today|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i;
+const WDAYS=["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+const OUT_UNTIL=new Map();
+// 回傳缺陣到第幾天（含）；null＝判斷不出來
+function outUntil(p){
+  const n=p[0];if(OUT_UNTIL.has(n))return OUT_UNTIL.get(n);
+  let r=null;
+  const x=(NEWS[n]||[]).filter(a=>a.d&&!isNaN(Date.parse(a.d))).sort((a,b)=>Date.parse(b.d)-Date.parse(a.d))[0];
+  if(x){
+    const nd=dayOf(x.d),txt=`${x.t} ${x.s}`,m=!INJ_LONG.test(txt)&&(x.t.match(INJ_ONE)||x.s.match(INJ_ONE));
+    if(m&&statusDay()-nd>=0&&statusDay()-nd<=NEWS_FRESH){
+      const w=WDAYS.indexOf(m[2].toLowerCase()),k=w<0?0:(w-dayDate(nd).getUTCDay()+7)%7;
+      if(k<=3)r=nd+k;
+    }
+  }
+  OUT_UNTIL.set(n,r);return r;
+}
+const injOn=(p,d)=>{if(!state.inj)return 1;const k=d-statusDay();
+  if(p[3]==="O"){const u=outUntil(p);return u!=null?(d<=u?0:1):k<O_DAYS?0:1;}
+  return p[3]==="Q"?(k<Q_DAYS?Q_RATE:1):1};
+// 名單裡新聞判斷「只缺一場」的人（畫面上說明用）
+const restList=ps=>ps.filter(p=>p[3]==="O"&&outUntil(p)!=null);
 // 出賽率：預測出賽場數 ÷ 全聯盟最多的預測場數（季前大約 82；開季後預測只算剩下的比賽，會跟著變少）
 // 沒有預測就用上季場數 ÷ 82；容易受傷、輪休的球員打折；「不考慮」時都算 1
 let GP_FULL=0;
@@ -17,9 +42,11 @@ const gpRate=p=>{const r=p[4]?p[4][0]/gpFull():p[5]?p[5][0]/82:1;return Math.min
 const gpW=p=>state.gp?gpRate(p):1;
 
 // 預測＋本季混合（存在 index 7）：本季打 g 場時，本季佔 g/(g+K)、預測佔 K/(g+K)，每一項的 K 不一樣：
-// 出手數、得分、籃板、助攻、失誤幾場就看得出角色（K 小）；三分、阻攻、抄截起伏比較大；命中率要很多場才可信（K 大）
+// 出手數、得分、籃板、助攻幾場就看得出角色（K 小）；阻攻、抄截起伏比較大；命中率要很多場才可信（K 大）
 // 命中率另外混：先混出手數，再乘上混出來的命中率得到命中數
-const MIX_K={fga:12,fta:12,pts:12,reb:12,ast:12,to:12,tpm:20,blk:20,stl:25,fg:40,ft:60};
+// 2026-11 用聯盟資料驗證過（tools/check-mix.js：拿 10/27 的資料預測之後三週，跟 11/16 的實際比）：
+// 「量」的項目比原本設的更快反映本季（12 → 6）、罰球命中率更慢（60 → 100）
+const MIX_K={fga:6,fta:10,pts:6,reb:6,ast:6,to:12,tpm:8,blk:16,stl:20,fg:35,ft:100};
 const MIX_I={fga:2,fta:4,tpm:5,pts:6,reb:7,ast:8,stl:9,blk:10,to:11};
 function addMix(p){
   const pr=p[4],cu=p[6];
@@ -48,11 +75,64 @@ function catProb(c,a,b){
   if(!sd)return a===b?.5:(c.low?a<b:a>b)?1:0;
   return normCdf((c.low?b-a:a-b)/sd);
 }
+// 項目之間會一起動（這週得分多，三分、助攻、失誤通常也多；命中率好得分也高），不是 9 個獨立的硬幣。
+// COR0 是經驗值（一隊一週的成績跟平常比，兩個項目一起偏高的程度）；有夠多週的聯盟成績時 calibrate() 會校正
+const COR_K=["fg","ft","tpm","pts","reb","ast","stl","blk","to"];
+const COR0=(()=>{
+  const m=COR_K.map((a,i)=>COR_K.map((b,j)=>i===j?1:0));
+  const set=(a,b,r)=>{const i=COR_K.indexOf(a),j=COR_K.indexOf(b);m[i][j]=m[j][i]=r};
+  [["pts","tpm",.55],["pts","fg",.35],["pts","ft",.15],["pts","reb",.35],["pts","ast",.45],["pts","stl",.2],["pts","blk",.15],["pts","to",.45],
+   ["tpm","fg",.1],["tpm","ft",.1],["tpm","reb",.1],["tpm","ast",.3],["tpm","stl",.15],["tpm","to",.25],
+   ["reb","ast",.2],["reb","stl",.15],["reb","blk",.3],["reb","to",.3],["reb","fg",.15],
+   ["ast","stl",.2],["ast","blk",.05],["ast","to",.5],["ast","fg",.15],
+   ["stl","blk",.1],["stl","to",.2],["blk","to",.15],["blk","fg",.1],["fg","ft",.05]].forEach(x=>set(...x));
+  return m;
+})();
+let COR=COR0.map(r=>r.slice());
+// 模擬用的亂數：固定種子（每次結果一樣）、成對正負（實力一樣時剛好 50%、雙方勝率加起來剛好 1）
+const SIM_N=1000;
+let SIM=null;
+function cholesky(m){
+  const n=m.length,L=m.map(()=>Array(n).fill(0));
+  for(let i=0;i<n;i++)for(let j=0;j<=i;j++){let x=m[i][j];for(let k=0;k<j;k++)x-=L[i][k]*L[j][k];
+    if(i===j){if(x<=1e-9)return null;L[i][i]=Math.sqrt(x);}else L[i][j]=x/L[j][j];}
+  return L;
+}
+function simDraws(){
+  if(SIM)return SIM;
+  // 「贏面」的方向：失誤少才是贏，所以失誤跟其他項目的關係要反過來
+  const ti=COR_K.indexOf("to"),adv=COR.map((r,i)=>r.map((x,j)=>i!==j&&(i===ti||j===ti)?-x:x));
+  const L=cholesky(adv)||cholesky(COR_K.map((a,i)=>COR_K.map((b,j)=>i===j?1:0)));
+  let seed=20261116;const rnd=()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return ((t^t>>>14)>>>0)/4294967296};
+  const z=new Float64Array(SIM_N*9),g=Array(9);
+  for(let n=0;n<SIM_N;n++){
+    for(let i=0;i<9;i++)g[i]=Math.sqrt(-2*Math.log(1-rnd()))*Math.cos(2*Math.PI*rnd());
+    for(let i=0;i<9;i++){let x=0;for(let k=0;k<=i;k++)x+=L[i][k]*g[k];z[n*9+i]=x;}
+  }
+  return SIM=z;
+}
+// 常態分布的反函數（Acklam 近似）：贏面 → 領先幾個標準差
+function normInv(p){
+  if(p<=0)return -Infinity;if(p>=1)return Infinity;
+  const a=[-39.69683028665376,220.9460984245205,-275.9285104469687,138.357751867269,-30.66479806614716,2.506628277459239],
+    b=[-54.47609879822406,161.5858368580409,-155.6989798598866,66.80131188771972,-13.28068155288572],
+    c=[-.007784894002430293,-.3223964580411365,-2.400758277161838,-2.549732539343734,4.374664141464968,2.938163982698783],
+    d=[.007784695709041462,.3224671290700398,2.445134137142996,3.754408661907416];
+  if(p<.02425){const q=Math.sqrt(-2*Math.log(p));return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);}
+  if(p>1-.02425)return -normInv(1-p);
+  const q=p-.5,r=q*q;return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q/(((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
+}
 // 一場對戰：9 項贏面、預期贏幾項、贏過一半（≥5 項）的機率；放棄助攻也還是 9 項都比
+// 單項贏面照原本的算；「贏 5 項以上」用模擬算，把項目之間的連動算進去
 function matchup(va,vb){
-  const ps=CATS.map(c=>catProb(c,va[c.k],vb[c.k]));
-  let dist=[1];ps.forEach(p=>{const n=Array(dist.length+1).fill(0);dist.forEach((x,i)=>{n[i]+=x*(1-p);n[i+1]+=x*p});dist=n;});
-  return {ps,exp:ps.reduce((a,b)=>a+b,0),win:dist.slice(5).reduce((a,b)=>a+b,0)};
+  const ps=CATS.map(c=>catProb(c,va[c.k],vb[c.k])),t=ps.map(normInv),z=simDraws();
+  let w=0;
+  for(let n=0;n<SIM_N;n++){
+    let a=0,b=0;const o=n*9;
+    for(let i=0;i<9;i++){const x=z[o+i];if(x<t[i])a++;if(-x<t[i])b++;}
+    if(a>=5)w++;if(b>=5)w++;
+  }
+  return {ps,exp:ps.reduce((a,b)=>a+b,0),win:w/(2*SIM_N)};
 }
 // 每隊對其他 15 隊的平均勝率、平均贏幾項，並排名
 // 用的是 compute() 算出來的球隊數據 v：有賽程時是「整季平均每週」（每天排先發、板凳補位），沒有賽程就是每場平均加總
@@ -180,7 +260,7 @@ const TID=IMP&&IMP.TID?IMP.TID:{};
 const CAT_K=["fg","ft","tpm","pts","reb","ast","stl","blk","to"];   // 跟 CATS 同樣順序
 // 校正：每隊每週的成績先跟那週的聯盟平均比（計數項用比例、命中率用差距），消掉「這週比較長、大家都多打幾場」的影響；
 // 同一隊在不同週之間跳動多大，就是每週的起伏。週數少時偏向經驗值：經驗值當成 CAL_N0 筆資料一起平均
-const CAL_N0=30;
+const CAL_N0=30,COR_N0=60;
 function calibrate(weeks){
   if(!weeks||weeks.length<2)return null;
   const by={};CAT_K.forEach(k=>by[k]={});
@@ -201,10 +281,22 @@ function calibrate(weeks){
     (pct?sd:cv)[k]=Math.sqrt((CAL_N0*p0*p0+ss)/(CAL_N0+dof));
     n=Math.max(n,dof);
   });
-  return {weeks:weeks.length,n,cv,sd,est};
+  // 項目之間的連動：同一隊每週 9 項的跳動兩兩相乘；一樣偏向經驗值（經驗值當成 COR_N0 筆資料）
+  const vec={};
+  weeks.forEach(x=>{
+    const rows=x.g.flatMap(g=>[[g[0],g[1]],[g[2],g[3]]]).filter(r=>CAT_K.every(k=>r[1][k]!=null));if(rows.length<2)return;
+    const m={};CAT_K.forEach(k=>m[k]=rows.reduce((a,r)=>a+r[1][k],0)/rows.length);
+    if(CAT_K.some(k=>k!=="fg"&&k!=="ft"&&!m[k]))return;
+    rows.forEach(([id,v])=>(vec[id]=vec[id]||[]).push(CAT_K.map(k=>k==="fg"||k==="ft"?v[k]-m[k]:v[k]/m[k])));
+  });
+  const S=CAT_K.map(()=>CAT_K.map(()=>0));let cd=0;
+  Object.values(vec).forEach(a=>{if(a.length<2)return;const mu=CAT_K.map((k,i)=>a.reduce((t,r)=>t+r[i],0)/a.length);
+    a.forEach(r=>{for(let i=0;i<9;i++)for(let j=0;j<9;j++)S[i][j]+=(r[i]-mu[i])*(r[j]-mu[j]);});cd+=a.length-1;});
+  const cor=COR0.map((r,i)=>r.map((r0,j)=>{if(i===j)return 1;const d=Math.sqrt(S[i][i]*S[j][j]);return d>0?(COR_N0*r0+cd*S[i][j]/d)/(COR_N0+cd):r0;}));
+  return {weeks:weeks.length,n,cv,sd,est,cor,corN:cd};
 }
 const CAL=calibrate(WEEKLY&&WEEKLY.weeks);
-if(CAL){Object.assign(CV,CAL.cv);Object.assign(PCT_SD,CAL.sd);}
+if(CAL){Object.assign(CV,CAL.cv);Object.assign(PCT_SD,CAL.sd);if(CAL.corN){COR=CAL.cor;SIM=null;}}
 
 // Yahoo 的週次 → 賽程的天數。Yahoo 第 1 週可能比較長，用抓資料那天算出差幾週（off）：
 // Yahoo 第 y 週＝WEEKS 第 y+off 週；Yahoo 第 1 週＝WEEKS 第 1～1+off 週。對不起來（off 不在 0～3）就不用
@@ -219,18 +311,33 @@ const teamById=id=>{const n=Object.keys(TID).find(k=>TID[k]===id);return n?DATA.
 // 本週的預測：每組對戰用這週的賽程、每天排先發算雙方總數，記下勝率和 9 項贏面。
 // 用固定的設定（有本季數據用預測＋本季、扣傷兵、考慮出賽率、9 項），不受畫面上的選擇影響
 function predWeek(){
-  if(!WEEKLY||!WEEKLY.now.length)return null;
-  const r=yWeekDays(WEEKLY.cur);if(!r)return null;
+  const pv=previewWeek("now");
+  return pv?{at:IMP.at,late:dayOf(IMP.at)>pv.s,g:pv.g.map(x=>[x.a,x.b,+x.m.win.toFixed(3),x.m.ps.map(p=>+p.toFixed(3))])}:null;
+}
+// 對戰前瞻：本週（"now"）或下週（"next"）每組對戰的預測。每隊另外列出主力（這週有比賽、價值最高的人）、
+// 先發場次、整週都不能打的人（out）和新聞判斷只缺一場的人（rest）
+const hasNext=()=>!!(WEEKLY&&WEEKLY.next&&WEEKLY.next.g&&WEEKLY.next.g.length&&yWeekDays(WEEKLY.next.w));
+function previewWeek(which){
+  if(!WEEKLY)return null;
+  const next=which==="next",pairs=next?(WEEKLY.next||{}).g:WEEKLY.now,y=next?(WEEKLY.next||{}).w:WEEKLY.cur;
+  if(!pairs||!pairs.length)return null;
+  const r=yWeekDays(y);if(!r)return null;
   const keep={src:state.src,inj:state.inj,gp:state.gp,punt:state.punt};
   Object.assign(state,{src:hasCur()?"mix":"pr",inj:true,gp:true,punt:false});
   try{
-    const val=playerValues(),g=[];
-    for(const [a,b] of WEEKLY.now){
+    const val=playerValues(),si=SI(),g=[];
+    const side=t=>{
+      const raw=weekRaw(t[1],r.s,r.e,val),playDays=p=>{const gs=GAMES[nbaTeam(p)];let n=0;if(gs)for(let d=r.s;d<=r.e;d++)if(gs.has(d)&&injOn(p,d)>0)n++;return n};
+      const act=t[1].filter(p=>active(p)&&p[si]).map(p=>({p,v:val(p[si])??-99,n:playDays(p)})).sort((x,y)=>y.v-x.v),star=act.find(x=>x.n>0);
+      return {name:t[0],v:toV(raw.t),starts:raw.starts,star:star?{n:star.p[0],g:star.n,s:star.p[si]}:null,
+        out:act.filter(x=>x.p[3]==="O"&&!x.n&&gamesIn(x.p,r)>0).map(x=>x.p[0]),rest:restList(t[1].filter(active)).map(p=>p[0])};
+    };
+    for(const [a,b] of pairs){
       const A=teamById(a),B=teamById(b);if(!A||!B)continue;
-      const m=matchup(toV(weekRaw(A[1],r.s,r.e,val).t),toV(weekRaw(B[1],r.s,r.e,val).t));
-      g.push([a,b,+m.win.toFixed(3),m.ps.map(p=>+p.toFixed(3))]);
+      const sa=side(A),sb=side(B);
+      g.push({a,b,A:sa,B:sb,m:matchup(sa.v,sb.v)});
     }
-    return g.length?{at:IMP.at,late:dayOf(IMP.at)>r.s,g}:null;
+    return g.length?{y,s:r.s,e:r.e,next,g}:null;
   }finally{Object.assign(state,keep);}
 }
 // 所有週的預測紀錄。每週只留第一次的（最接近開打前）：資料裡的 PRED、這台電腦的 lp-pred，再加上這份資料的本週預測

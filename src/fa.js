@@ -106,5 +106,6 @@ initFA();
 initDex();
 initPlan();
 initScout();
+initReport();
 render();
 initImport();

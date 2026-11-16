@@ -2,10 +2,12 @@
 // 用法一：戰力表網頁的「更新資料」書籤（建議）。用法二：F12 → Console，整段貼上後按 Enter。
 // 抓的內容：16 隊名單、Yahoo 本季剩餘預測、ESPN 預測、2025-26 上季數據、2026-27 本季數據、季前排名、持有率，
 // 以及季前排名前 400 名裡所有沒被持有的球員（FA／waiver）、ESPN 的整季 NBA 賽程、Yahoo 本週對戰（對手和目前比分）、
-// 最近 7／14／30 天數據、自己隊伍和 FA 前 50 名的新聞短評。
+// 最近 7／14／30 天數據、新聞短評（自己隊伍、全聯盟標 O／Q 的球員、FA 前 50 名）、每週成績和本週／下週對戰組合。
 // 跑完會出現視窗，按「打開戰力表」就會帶著新資料打開網頁。
 (async () => {
   const LEAGUE = 1031, TEAMS = 16, MY_TEAM_ID = 13, MAX_PAGES = 32, FA_PAGES = 16, NEWS_FA = 50;
+  // 版本：跟 src/import.js 的 SCRIPT_V 一樣；網頁用它判斷資料是不是舊版書籤抓的
+  const SCRIPT_V = 24;
   const SEASON_LAST = 'S_S_2025', SEASON_CUR = 'S_S_2026', ESPN_YEAR = 2027;
   const SITE = 'https://afroisgood.github.io/NBA2627/league-power.html';
   if (!/fantasysports\.yahoo\.com$/.test(location.host)) {
@@ -122,7 +124,7 @@
           const c = [...tr.querySelectorAll('td')].map(td => td.textContent.replace(/\s+/g, ' ').trim());
           const gp = num(c[5]);
           const oa = [...tr.querySelectorAll('a[href]')].map(x => (x.getAttribute('href') || '').match(new RegExp('/nba/' + LEAGUE + '/(\\d+)/?$'))).find(Boolean);
-          const rec = { pre: num(c[6]) || 260, ros: parseFloat(c[8]) || 0, own: c[4] || '', ownId: oa ? +oa[1] : 0, ...rowInfo(tr), s: null };
+          const rec = { pre: num(c[6]) || 260, cur: num(c[7]) || 0, ros: parseFloat(c[8]) || 0, own: c[4] || '', ownId: oa ? +oa[1] : 0, ...rowInfo(tr), s: null };
           if (oa) teamLink[rec.ownId] = teamLink[rec.ownId] || [...tr.querySelectorAll('a[href]')].find(x => (x.getAttribute('href') || '').match(new RegExp('/nba/' + LEAGUE + '/' + rec.ownId + '/?$'))).textContent.trim();
           if (gp && c[10] && c[10].includes('/') && c[12] && c[12].includes('/')) {
             const [fgm, fga] = c[10].split('/').map(num), [ftm, fta] = c[12].split('/').map(num);
@@ -287,6 +289,15 @@
         if (sig.size < weeks.length) throw new Error('不同週抓到一模一樣的成績，週次參數可能沒有作用');
         try { localStorage.setItem(CK, JSON.stringify(cache)); } catch (e) { }
         WEEKLY = { cur: yw, weeks, now };
+        // 下週的對戰組合（對戰前瞻用）；抓不到、或抓到跟本週一模一樣（週次參數沒作用）就不放
+        try {
+          say('抓下週對戰組合…');
+          const nx = (await weekGames(yw + 1)).map(x => [x[0], x[2]]);
+          const sigOf = g => JSON.stringify(g.map(x => [Math.min(x[0], x[1]), Math.max(x[0], x[1])]).sort((a, b) => a[0] - b[0]));
+          if (nx.length && sigOf(nx) !== sigOf(now)) WEEKLY.next = { w: yw + 1, g: nx };
+        } catch (e) {
+          console.warn('[戰力表更新] 下週對戰組合抓取失敗（略過）：', e);
+        }
       } catch (e) {
         console.warn('[戰力表更新] 每週成績抓取失敗（略過）：', e);
       }
@@ -302,7 +313,8 @@
       const proj = avg(yProj[p.n]?.s, espn[key(p.n)]);
       if (!proj) noProj++;
       const m = yProj[p.n] || yLast[p.n] || yCur[p.n];
-      if (m) MKT[p.n] = [m.pre, m.ros];
+      const curRank = (yCur[p.n] || m || {}).cur || 0;
+      if (m) MKT[p.n] = curRank ? [m.pre, m.ros, curRank] : [m.pre, m.ros];
       return [p.n, p.slot, p.tp, p.st, proj, yLast[p.n]?.s || null, yCur[p.n]?.s || null];
     })]);
     // FA：沒被持有、而且至少有一種數據的球員，依季前排名排序；waiver 上的名單位置記成 W
@@ -326,7 +338,7 @@
       if (r.l7 || r.l14 || r.l30) RECENT[p[0]] = r;
     });
 
-    // 6) 新聞短評：自己隊伍＋FA 前 NEWS_FA 名。先試 ESPN（用 ESPN 編號），抓不到再試 Yahoo 球員小卡
+    // 6) 新聞短評：自己隊伍＋全聯盟標 O／Q 的球員（判斷只缺一場還是長期缺陣用）＋FA 前 NEWS_FA 名。先試 ESPN（用 ESPN 編號），抓不到再試 Yahoo 球員小卡
     const NEWS = {};
     const strip = h => new DOMParser().parseFromString(String(h || ''), 'text/html').body.textContent.replace(/\s+/g, ' ').trim();
     const timed = (url, opt = {}) => { const c = new AbortController(), t = setTimeout(() => c.abort(), 8000); return fetch(url, { ...opt, signal: c.signal }).finally(() => clearTimeout(t)); };
@@ -345,7 +357,8 @@
       return [...new Set(items)].slice(0, 2).map(s => ({ d: '', t: '', s: s.slice(0, 500) }));
     };
     step = '抓新聞';
-    const newsFor = [...me.ps.map(p => p.n), ...FA.slice(0, NEWS_FA).map(p => p[0])];
+    const hurt = rosters.filter(t => t.id !== MY_TEAM_ID).flatMap(t => t.ps.filter(p => p.st).map(p => p.n));
+    const newsFor = [...new Set([...me.ps.map(p => p.n), ...hurt, ...FA.slice(0, NEWS_FA).map(p => p[0])])];
     let newsSrc = { espn: 0, yahoo: 0 };
     say(`抓 ${newsFor.length} 位球員的新聞…`);
     for (let i = 0; i < newsFor.length; i += 6) {
@@ -355,10 +368,10 @@
       }));
     }
 
-    const json = JSON.stringify({ v: 1, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA, SCHED, MATCH, WEEKLY, TID, IDS, RECENT, NEWS });
+    const json = JSON.stringify({ v: 1, sv: SCRIPT_V, at: new Date().toISOString(), ME: me.name, DATA, MKT, FA, SCHED, MATCH, WEEKLY, TID, IDS, RECENT, NEWS });
     window._LP_UPDATE = json;
     const curN = DATA.reduce((a, t) => a + t[1].filter(p => p[6]).length, 0);
-    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到；賽程${SCHED ? '有' : '沒有'}抓到；頭像編號 ${Object.keys(IDS).length} 位；近期數據 ${Object.keys(RECENT).length} 位；新聞 ${Object.keys(NEWS).length}／${newsFor.length} 位（ESPN ${newsSrc.espn}、Yahoo ${newsSrc.yahoo}）；本週對手：${MATCH ? MATCH.opp + (MATCH.me ? '（含目前比分）' : '（還沒有比分）') : '沒有抓到'}；每週成績：${WEEKLY ? `${WEEKLY.weeks.length} 週、本週 ${WEEKLY.now.length} 組對戰` : '沒有抓到'}。${failedTeams.length ? `⚠ ${failedTeams.map(t => t.name).join('、')} 的頁面 Yahoo 打不開，名單改用球員列表推算（${failedTeams.map(t => t.ps.length).join('、')} 人；看不到先發位置和 IL）。` : ''}`);
+    say(`✅ 完成！${DATA.length} 隊、${want.size} 位球員、FA ${FA.length} 位；沒有預測 ${noProj} 位、有本季數據 ${curN} 位；ESPN 預測${Object.keys(espn).length ? '有' : '沒有'}抓到；賽程${SCHED ? '有' : '沒有'}抓到；頭像編號 ${Object.keys(IDS).length} 位；近期數據 ${Object.keys(RECENT).length} 位；新聞 ${Object.keys(NEWS).length}／${newsFor.length} 位（ESPN ${newsSrc.espn}、Yahoo ${newsSrc.yahoo}）；本週對手：${MATCH ? MATCH.opp + (MATCH.me ? '（含目前比分）' : '（還沒有比分）') : '沒有抓到'}；每週成績：${WEEKLY ? `${WEEKLY.weeks.length} 週、本週 ${WEEKLY.now.length} 組對戰、下週 ${WEEKLY.next ? WEEKLY.next.g.length + ' 組' : '沒有抓到'}` : '沒有抓到'}。${failedTeams.length ? `⚠ ${failedTeams.map(t => t.name).join('、')} 的頁面 Yahoo 打不開，名單改用球員列表推算（${failedTeams.map(t => t.ps.length).join('、')} 人；看不到先發位置和 IL）。` : ''}`);
     btns.innerHTML = '';
     button('▶ 打開戰力表', () => window.open(SITE + '#import=' + encodeURIComponent(json), '_blank'));
     button('複製結果', async () => {

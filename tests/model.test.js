@@ -100,18 +100,18 @@ test("matchup：贏面雙方加起來是 1；實力一樣勝率 50%；全面壓�
   assert.ok(res.abExp > 6 && res.abExp < 8);
 });
 
-test("addMix：每項各自決定多快相信本季（得分 g/(g+12)、FG% g/(g+40)）；只有一種數據就用那一種", () => {
+test("addMix：每項各自決定多快相信本季（得分 g/(g+6)、FG% g/(g+35)）；只有一種數據就用那一種", () => {
   const { run } = load();
   const out = run(`(()=>{
     const pr=[70,5,10,2,2.5,1,20,5,3,1,0.5,1.5], cu=[10,6,10,2,2.5,1,30,5,3,2,0.5,1.5], cu0=[10,6,10,0,0,1,30,5,3,1,0.5,1.5];
     const a=["x","BN","LAL - PG","",pr,null,cu], b=["y","BN","LAL - PG","",pr,null,null], c=["z","BN","LAL - PG","",null,null,cu], d=["w","BN","","",null,null,null], e=["v","BN","","",pr,null,cu0];
     [a,b,c,d,e].forEach(addMix);return [a[7],b[7],c[7],d[7],e[7]];})()`);
-  near(out[0][6], 20 + 10 * 10 / 22, 0.01);
-  near(out[0][9], 1 + 1 * 10 / 35, 0.01, "抄截 K=25，比得分慢");
+  near(out[0][6], 20 + 10 * 10 / 16, 0.01);
+  near(out[0][9], 1 + 1 * 10 / 30, 0.01, "抄截 K=20，比得分慢");
   near(out[0][2], 10, 1e-9);
-  near(out[0][1], 10 * (0.5 + 0.1 * 10 / 50), 0.01, "FG% 50% → 60%，打 10 場只往本季移 1/5");
+  near(out[0][1], 10 * (0.5 + 0.1 * 10 / 45), 0.01, "FG% 50% → 60%，打 10 場只往本季移 10/45");
   assert.equal(out[0][0], 70, "GP 用預測的");
-  near(out[4][4], 2.5 - 2.5 * 10 / 22, 0.01, "本季沒罰球：罰球數往 0 移");
+  near(out[4][4], 2.5 - 2.5 * 10 / 20, 0.01, "本季沒罰球：罰球數往 0 移（K=10）");
   near(out[4][3] / out[4][4], 0.8, 0.01, "本季沒罰球：FT% 沿用預測");
   assert.deepEqual(out[1], [70, 5, 10, 2, 2.5, 1, 20, 5, 3, 1, 0.5, 1.5]);
   assert.equal(out[2][6], 30);
@@ -558,4 +558,137 @@ test("回測：每週第一次更新時記下 8 場對戰的預測；那週打�
   assert.deepEqual(Object.keys(all).sort(), ["1", "2"], "第 1 週的預測沿用，第 2 週記新的");
   assert.equal(all[1].at, pred[1].at);
   assert.equal(all[2].late, true, "美東 10/27 才記錄，第 2 週（10/26 起）已經開打");
+});
+
+// ---------- v24：傷兵新聞、項目連動、目前排名、對戰前瞻 ----------
+
+test("傷兵新聞：寫明只缺某一場就只扣到那天；長期缺陣、沒新聞、新聞太舊照原本 7 天", () => {
+  const tmp = load();
+  const NEWS = {
+    A1: [{ d: "2026-10-18T22:00:00Z", t: "A1 (rest) has been ruled out for Sunday's game against the Pacers.", s: "He will sit out the front end of the back-to-back." }],
+    A2: [{ d: "2026-10-19T15:00:00Z", t: "A2 (knee) has been ruled out for Monday's game.", s: "He underwent surgery and has no timetable for a return." }],
+    B1: [{ d: "2026-10-19T15:00:00Z", t: "B1 won't play tonight due to load management.", s: "" }],
+    B2: [{ d: "2026-10-10T15:00:00Z", t: "B2 has been ruled out for Saturday's game.", s: "" }],
+    C1: [{ d: "", t: "C1 is out Monday.", s: "" }],
+  };
+  const imp = importFixture(tmp.run, { at: "2026-10-19T16:00:00Z", NEWS });   // 美東 10/19（週一）＝第 18 天；10/18 是週日＝第 17 天
+  const { run } = load({ local: { "lp-data": JSON.stringify(imp) } });
+  const o = n => P(n, "BN", "LAL - PG", "O", null);
+  const until = n => run(`outUntil(${JSON.stringify(o(n))})`);
+  assert.equal(until("A1"), 17, "週日那場：新聞是美東 10/18（週日）發的 → 缺到第 17 天");
+  assert.equal(until("A2"), null, "有提到手術、沒有時間表 → 長期");
+  assert.equal(until("B1"), 18, "tonight＝新聞當天");
+  assert.equal(until("B2"), null, "新聞超過 4 天，太舊");
+  assert.equal(until("C1"), null, "沒有日期的新聞不用");
+  assert.equal(until("nobody"), null);
+  const w = (n, d) => run(`injOn(${JSON.stringify(o(n))},${d})`);
+  assert.equal(w("A1", 18), 1, "只缺週日，週一起照常");
+  assert.equal(w("B1", 18), 0); assert.equal(w("B1", 19), 1);
+  assert.equal(w("A2", 24), 0); assert.equal(w("A2", 25), 1);
+  assert.deepEqual(run(`restList([${JSON.stringify(o("A1"))},${JSON.stringify(o("A2"))},${JSON.stringify(P("A1", "BN", "LAL - PG", "", null))}]).map(p=>p[0])`), ["A1"]);
+});
+
+test("H2H 勝率的項目連動：連動矩陣可用、失誤方向相反；連動讓強隊勝率比獨立假設低一點", () => {
+  const { run } = load();
+  const r = run(`(()=>{
+    const ti=COR_K.indexOf("to"),adv=COR.map((r,i)=>r.map((x,j)=>i!==j&&(i===ti||j===ti)?-x:x));
+    const z=simDraws(),col=k=>{const i=COR_K.indexOf(k),a=[];for(let n=0;n<SIM_N;n++)a.push(z[n*9+i]);return a};
+    const cor=(a,b)=>{const n=a.length,ma=a.reduce((x,y)=>x+y,0)/n,mb=b.reduce((x,y)=>x+y,0)/n;let s=0,sa=0,sb=0;a.forEach((x,i)=>{s+=(x-ma)*(b[i]-mb);sa+=(x-ma)**2;sb+=(b[i]-mb)**2});return s/Math.sqrt(sa*sb)};
+    // 每項都小贏（贏面 60%）：獨立時贏 5 項以上的機率
+    const t=Array(9).fill(normInv(.6));let w=0;
+    for(let n=0;n<SIM_N;n++){let a=0,b=0;for(let i=0;i<9;i++){if(z[n*9+i]<t[i])a++;if(-z[n*9+i]<t[i])b++;}if(a>=5)w++;if(b>=5)w++;}
+    let dist=[1];Array(9).fill(.6).forEach(p=>{const m=Array(dist.length+1).fill(0);dist.forEach((x,i)=>{m[i]+=x*(1-p);m[i+1]+=x*p});dist=m;});
+    return {pd:!!cholesky(adv),sym:COR.every((r,i)=>r.every((x,j)=>x===COR[j][i]&&(i!==j||x===1))),ptsTpm:cor(col("pts"),col("tpm")),ptsTo:cor(col("pts"),col("to")),fgFt:cor(col("fg"),col("ft")),
+      sim:w/(2*SIM_N),indep:dist.slice(5).reduce((a,b)=>a+b,0),inv:[normInv(.5),normInv(.975)]};})()`);
+  assert.ok(r.pd && r.sym);
+  near(r.ptsTpm, 0.55, 0.08);
+  near(r.ptsTo, -0.45, 0.08, "得分多的那週失誤也多 → 贏得分和贏失誤是反向");
+  near(r.fgFt, 0.05, 0.08);
+  near(r.inv[0], 0, 1e-9); near(r.inv[1], 1.96, 1e-3);
+  assert.ok(r.sim > 0.5 && r.sim < r.indep + 0.03, `模擬 ${r.sim}、獨立 ${r.indep}`);
+});
+
+test("校正項目連動：兩個項目每週一起跳，連動往真實資料移；偏向經驗值", () => {
+  const { run } = load();
+  // 1 號隊第 2 週得分、三分一起多，2 號隊一起少
+  const weeks = [
+    { w: 1, g: [[1, wv(), 2, wv()], [3, wv(), 4, wv()]] },
+    { w: 2, g: [[1, wv({ pts: 110, tpm: 11 }), 2, wv({ pts: 90, tpm: 9 })], [3, wv(), 4, wv()]] },
+  ];
+  const c = run(`calibrate(${JSON.stringify(weeks)})`);
+  assert.equal(c.corN, 4);
+  const i = 3, j = 2;   // pts、tpm
+  near(c.cor[i][j], (60 * 0.55 + 4 * 1) / 64, 1e-9);
+  near(c.cor[j][i], c.cor[i][j], 1e-12);
+  near(c.cor[i][i], 1, 1e-12);
+  near(c.cor[4][5], 0.2, 1e-9, "籃板、助攻都沒動，看不出連動 → 維持經驗值");
+  near(c.cor[3][4], 0.35, 1e-9, "籃板沒動 → 得分–籃板也維持經驗值");
+});
+
+test("checkImport：下週對戰、目前排名、更新程式版本", () => {
+  const { run } = load();
+  const good = importFixture(run);
+  const check = o => run(`checkImport(${JSON.stringify(o)})`);
+  const W = { cur: 2, weeks: [], now: [[1, 2]] };
+  assert.equal(check({ ...good, sv: 24, WEEKLY: { ...W, next: { w: 3, g: [[1, 3], [2, 4]] } }, MKT: { A1: [10, 90, 25], B1: [50, 40] } }), "");
+  assert.notEqual(check({ ...good, WEEKLY: { ...W, next: { w: 3, g: [[1]] } } }), "");
+  assert.notEqual(check({ ...good, WEEKLY: { ...W, next: [[1, 2]] } }), "");
+  assert.notEqual(check({ ...good, MKT: { A1: [10, 90, 25, 1] } }), "");
+  assert.notEqual(check({ ...good, sv: "24" }), "");
+  // 網頁和更新程式的版本要一樣
+  const upd = fs.readFileSync(path.join(ROOT, "tools", "yahoo-update.js"), "utf8");
+  assert.equal(+upd.match(/const SCRIPT_V = (\d+);/)[1], run("SCRIPT_V"));
+  assert.ok(/sv: SCRIPT_V/.test(upd));
+});
+
+test("市場價值：本季打越多場越看 Yahoo 目前排名；沒出賽或沒有目前排名就用季前排名", () => {
+  const { run } = load();
+  fixtureLeague(run);
+  const r = run(`(()=>{
+    MKT.A1=[10,50,100];MKT.A2=[10,50,100];MKT.A3=[10,50];MKT.B1=[10,50,100];
+    DATA[0][1][0][6]=[15,5,10,2,2.5,1,13,5,3,1,0.5,1.5];   // A1 打 15 場
+    DATA[1][1][0][6]=[5,5,10,2,2.5,1,13,5,3,1,0.5,1.5];    // B1 打 5 場
+    CUR_GP=null;
+    return {a1:mrank("A1"),a2:mrank("A2"),a3:mrank("A3"),b1:mrank("B1"),v1:mval("A1"),v2:mval("A2")};})()`);
+  near(r.a1, Math.sqrt(10 * 100), 1e-6, "打 15 場：季前和目前各半（取幾何平均）");
+  assert.equal(r.a2, 10, "本季還沒出賽 → 季前排名");
+  assert.equal(r.a3, 10, "沒有目前排名 → 季前排名");
+  near(r.b1, Math.exp(Math.log(10) * 0.75 + Math.log(100) * 0.25), 1e-6);
+  assert.ok(r.v1 < r.v2, "排名掉了，市場價值跟著降");
+});
+
+test("對戰前瞻：本週／下週每組對戰的勝率、主力、傷停；標題和短隊名", () => {
+  const tmp = load();
+  const NEWS = { C1: [{ d: "2026-10-09T22:00:00Z", t: "C1 has been ruled out for Friday's game.", s: "" }] };
+  const imp = importFixture(tmp.run, { NEWS, TID: { A: 1, B: 2, C: 3, D: 4 }, WEEKLY: { cur: 1, weeks: [], now: [[1, 2], [3, 4]], next: { w: 2, g: [[1, 3], [2, 4]] } } });
+  imp.DATA[1][1][0][3] = "O";   // B1（LAL）沒有新聞 → 7 天內不算，但第 1 週的比賽在第 19 天以後 → 照常
+  imp.DATA[2][1][0][3] = "O";   // C1：新聞只缺 10/9 那場
+  const { run } = load({ local: { "lp-data": JSON.stringify(imp) } });
+  assert.equal(run("hasNext()"), true);
+  const now = run(`previewWeek("now")`), next = run(`previewWeek("next")`);
+  assert.equal(now.y, 1); assert.equal(now.next, false); assert.equal(now.g.length, 2);
+  assert.deepEqual([now.g[0].a, now.g[0].b, now.g[1].a, now.g[1].b], [1, 2, 3, 4]);
+  assert.equal(now.g[0].A.name, "A");
+  assert.ok(now.g[0].m.win > 0.5, "A 比 B 強");
+  assert.equal(now.g[0].A.star.n, "A1"); assert.equal(now.g[0].A.star.g, 3, "A1（LAL）這週 3 場");
+  assert.deepEqual(now.g[1].A.rest, ["C1"], "C1 只缺一場，列在 rest、不算傷停");
+  assert.deepEqual(now.g[1].A.out, []);
+  assert.equal(next.y, 2); assert.equal(next.next, true);
+  assert.deepEqual(next.g.map(x => [x.a, x.b]), [[1, 3], [2, 4]]);
+  // 預測紀錄跟對戰前瞻是同一份數字
+  const pred = run("predWeek()");
+  near(pred.g[0][2], +now.g[0].m.win.toFixed(3), 1e-9);
+  // 標題、短隊名
+  assert.equal(run(`pvShort("高移肉 想念booker 的第一天")`), "高移肉");
+  assert.equal(run(`pvShort("坂木老大：好運連連")`), "坂木老大");
+  assert.equal(run(`pvShort("人型自走打字機")`), "人型自走打字機");
+  assert.equal(run(`pvShort("CrocoCroco")`), "CrocoCroco");
+  const head = run(`pvHead(previewWeek("now").g[0])`);
+  assert.ok(/^A /.test(head) && /B /.test(head), head);
+  // 沒有下週對戰組合時退回本週
+  const imp2 = JSON.parse(JSON.stringify(imp)); delete imp2.WEEKLY.next;
+  const b = load({ local: { "lp-data": JSON.stringify(imp2) } });
+  assert.equal(b.run("hasNext()"), false);
+  assert.equal(b.run(`previewWeek("next")`), null);
+  assert.equal(b.run(`(pv.which="next",pvData().y)`), 1);
 });

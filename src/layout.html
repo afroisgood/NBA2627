@@ -182,6 +182,7 @@ select{font-family:var(--f-txt);font-size:16px;min-height:40px;background:var(--
 /* data update panel */
 .upd-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-top:6px}
 .upd-bar #upd-status{font-size:14px;color:var(--mid)}
+.upd-old{border:3px solid var(--ink);padding:8px 12px;color:var(--ink);font-weight:700}
 .upd ol{margin:0;padding-left:1.6em;display:flex;flex-direction:column;gap:10px;max-width:84ch}
 .upd li::marker{font-family:var(--f-pix);font-size:10px}
 .upd a{color:var(--ink)}
@@ -292,7 +293,31 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
 .sc-news details p{margin:4px 0 0;font-size:13px;color:var(--ink)}
 .sc-none{margin:0;font-size:13px;color:var(--mid)}
 .sc-try{align-self:flex-start;font-size:13px;min-height:36px;padding:4px 10px}
+/* weekly preview */
+.pv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,430px),1fr));gap:12px}
+.pv-card{border:3px solid var(--ink);padding:10px 12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.pv-card.mine{border-width:6px;border-style:double}
+.pv-card p{margin:0}
+.pv-h{font-size:16px;align-items:flex-start;line-height:1.45}
+.pv-no{flex:none;font-family:var(--f-pix);font-size:10px;background:var(--ink);color:var(--lcd);padding:4px 6px;margin-top:2px}
+.pv-vs{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center}
+.pv-tm{display:flex;align-items:center;gap:8px;min-width:0}
+.pv-tm.b{flex-direction:row-reverse;text-align:right}
+.pv-tx{display:flex;flex-direction:column;min-width:0}
+.pv-nm{font-weight:900;font-size:15px;overflow-wrap:anywhere;line-height:1.35}
+.pv-st{font-size:13px;font-weight:700}
+.pv-mid{display:flex;flex-direction:column;align-items:center;text-align:center}
+.pv-mid b{font-family:var(--f-dot);font-weight:400;font-size:28px;line-height:1.1;white-space:nowrap}
+.pv-chips{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pv-chips>div{display:flex;flex-wrap:wrap;gap:4px;align-content:flex-start}
+.pv-chips>.r{justify-content:flex-end}
+.pv-chip{font-size:13px;font-weight:700;background:var(--ink);color:var(--lcd);padding:1px 6px;border:2px solid var(--ink);white-space:nowrap}
+.pv-chip.b{background:var(--lcd-3);color:var(--ink)}
+.pv-key{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 12px;background:var(--lcd-2);padding:4px 8px;font-size:14px}
+.pv-key span{color:var(--mid);font-size:13px}
 @media (max-width:560px){
+  .pv-tm{flex-direction:column;align-items:flex-start}
+  .pv-tm.b{flex-direction:column;align-items:flex-end}
   .vs-row{grid-template-columns:44px 1fr 40px 1fr 44px;font-size:13px;gap:5px}
   .hp-track{width:64px}
 }
@@ -310,6 +335,7 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
     <h1>杰西卡的AI實驗室 戰力表</h1>
     <p class="sub">每位球員的九項場均數據，加總成球隊每場數據，再排出 16 隊各項名次。FG% 和 FT% 用總命中 ÷ 總出手計算；失誤越少名次越前。IL 球員不計入球隊數據。</p>
     <div class="upd-bar"><span id="upd-status"></span><button class="pxbtn" id="upd-open" type="button">↻ 更新資料</button></div>
+    <p class="note upd-old" id="upd-old" hidden></p>
   </header>
 
   <section class="me-sum" id="me-sum" aria-label="我的隊伍摘要"></section>
@@ -390,6 +416,21 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
     <p class="note">「贏面」和「勝率」是把每項數據一週的正常起伏算進去後的估計：差距越大，贏面越接近 100%。勝率＝9 項贏 5 項以上的機率。選了週次會依那週每隊的出賽場數、每天最多 10 人先發來預測；選「每場平均」則只比每場數據。</p>
   </section>
 
+  <section aria-labelledby="h-prev">
+    <h2 id="h-prev"><span class="en">WEEKLY PREVIEW</span>對戰前瞻</h2>
+    <div class="tm-opts">
+      <div class="seg" role="group" aria-label="週次">
+        <button class="menu-btn" id="pv-now" type="button" aria-pressed="false">本週</button>
+        <button class="menu-btn" id="pv-next" type="button" aria-pressed="true">下週</button>
+      </div>
+      <button class="pxbtn" id="pv-dl" type="button">▼ 下載週報圖片</button>
+      <span class="note" id="pv-msg" aria-live="polite"></span>
+    </div>
+    <p class="note" id="pv-info"></p>
+    <div class="pv-grid" id="pv-out"></div>
+    <p class="note">每組對戰用那一週的賽程、每天排 10 人先發來預測，設定固定（有本季數據用「預測＋本季」、扣傷兵、考慮出賽率），不受上方按鈕影響。色塊是該隊贏面 60% 以上的項目（左隊實心、右隊外框）；「關鍵項目」是 40–60% 的五五波。照片是各隊那週有比賽、價值最高的球員。</p>
+  </section>
+
   <section aria-labelledby="h-today">
     <h2 id="h-today"><span class="en">DAILY LINEUP</span>每日先發</h2>
     <div class="tm">
@@ -460,7 +501,7 @@ input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
     </div>
     <p class="note">分析聯盟裡其他兩隊之間的交易（例如有人談好、或你想預測的交易）：看誰變強、誰帳面賺，以及對你的名次有什麼影響。收到人比較多的那隊，會自動釋出隊上價值最低的球員。</p>
     </div>
-    <p class="note">市場價值 = 季前排名分數 × 70% ＋ Yahoo 持有率 × 30%；多人打包時，單一好球員權重較高（避免 2 個普通球員就換到明星）。數據價值會依預測出賽場次打折。名次模擬沿用聯盟表的算法（各項名次平均）。</p>
+    <p class="note">市場價值 = 排名分數 × 70% ＋ Yahoo 持有率 × 30%。排名是季前排名和 Yahoo 目前排名混合：本季打越多場越看目前排名（打 15 場時各半），還沒出賽的人維持季前排名；球員旁邊的「排名 12→30」是季前 → 目前。多人打包時，單一好球員權重較高（避免 2 個普通球員就換到明星）。數據價值會依預測出賽場次打折。名次模擬沿用聯盟表的算法（各項名次平均）。</p>
   </section>
 
   <section aria-labelledby="h-fa">
